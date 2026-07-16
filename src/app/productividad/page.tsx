@@ -30,7 +30,7 @@ export default function ProductividadPage() {
     if (!raw) return null;
     const rawF = filtRaw(raw.raw, filters);
     const det = filtDet(raw.det, filters);
-    const mActual = filters.mes === 'ALL' ? mesList[mesList.length - 1] : filters.mes;
+    const mActual = filters.mes.length ? [...filters.mes].sort().at(-1)! : mesList[mesList.length - 1];
     const mAnt = mesAnterior(mActual, mesList);
 
     const filtBase = (r: { _Proyecto?: string; _Zona?: string; _ZonaDet?: string }) =>
