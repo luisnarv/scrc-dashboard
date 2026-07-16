@@ -27,7 +27,7 @@ export default function ResumenPage() {
     if (!raw) return null;
     const rawF = filtRaw(raw.raw, filters);
     const cosF = filtCos(raw.costos, filters);
-    const mActual = filters.mes === 'ALL' ? mesList[mesList.length - 1] : filters.mes;
+    const mActual = filters.mes.length ? [...filters.mes].sort().at(-1)! : mesList[mesList.length - 1];
     const mAnt = mesAnterior(mActual, mesList);
 
     const pOTC = otcAgg(cosF);
@@ -120,7 +120,7 @@ export default function ResumenPage() {
     );
 
     // Narrativa
-    const periodoLabel = filters.mes !== 'ALL' ? filters.mes : 'periodo seleccionado';
+    const periodoLabel = filters.mes.length ? filters.mes.join(', ') : 'periodo seleccionado';
     const narrativa = `En ${periodoLabel}, el proyecto registra ingresos de ${fmtCOP(pOTC.ingresos)}, costos de ${fmtCOP(pOTC.costos)} y utilidad de ${fmtCOP(pOTC.utilidad)} (margen ${fmtPct(pOTC.margen)}). La producción valorizada SIPREM alcanzó ${fmtCOP(pSIP.prod)}${cump !== null ? ` con un cumplimiento del ${fmtPct(cump)}` : ''} y ${fmtN(pSIP.tecnicos)} técnicos activos.`;
 
     // Drivers
