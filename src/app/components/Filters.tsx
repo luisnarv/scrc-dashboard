@@ -4,6 +4,13 @@ import { useDashboard } from './DashboardProvider';
 export default function Filters() {
   const { filters, setFilters, proyList, zonaList, mesList, fechaList } = useDashboard();
 
+  const toggleMes = (m: string) => {
+    const next = filters.mes.includes(m)
+      ? filters.mes.filter(x => x !== m)
+      : [...filters.mes, m];
+    setFilters({ mes: next, fecha: 'ALL' });
+  };
+
   return (
     <div className="filtros">
       <label>Proyecto</label>
@@ -25,13 +32,54 @@ export default function Filters() {
       </select>
 
       <label>Mes</label>
-      <select
-        value={filters.mes}
-        onChange={e => setFilters({ mes: e.target.value, fecha: 'ALL' })}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '4px 10px',
+          alignItems: 'center',
+          maxWidth: 620,
+        }}
       >
-        <option value="ALL">Todos</option>
-        {mesList.map(m => <option key={m} value={m}>{m}</option>)}
-      </select>
+        <button
+          type="button"
+          onClick={() => setFilters({ mes: [], fecha: 'ALL' })}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '3px 8px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            border: '1px solid var(--border)',
+            background: filters.mes.length === 0 ? 'var(--text)' : '#fff',
+            color: filters.mes.length === 0 ? '#fff' : 'var(--muted)',
+            fontFamily: 'inherit',
+          }}
+        >
+          Todos
+        </button>
+        {mesList.map(m => {
+          const on = filters.mes.includes(m);
+          return (
+            <label
+              key={m}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 11,
+                fontWeight: 600,
+                color: on ? 'var(--text)' : 'var(--muted)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input type="checkbox" checked={on} onChange={() => toggleMes(m)} />
+              {m}
+            </label>
+          );
+        })}
+      </div>
 
       <label>Fecha</label>
       <select
@@ -42,7 +90,9 @@ export default function Filters() {
         {fechaList.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
 
-      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--muted)' }}>Filtros globales</span>
+      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--muted)' }}>
+        Filtros globales{filters.mes.length ? ` · ${filters.mes.length} mes(es)` : ''}
+      </span>
     </div>
   );
 }

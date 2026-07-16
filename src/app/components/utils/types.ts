@@ -5,14 +5,21 @@ export interface RawRecord {
   Cedula?: string;
   Nombre?: string;
   Tipo_Cuadrilla?: string;
+  Tipo_Brigada_Operaciones?: string;
   Visitas?: number | string;
   Efectivas?: number | string;
   Fallidas?: number | string;
   Perdidas?: number | string;
   Ingresos?: number | string;
+  Valor_Real?: number | string;
+  Ingresos_Gerencia?: number | string;
+  Ingresos_Productividad?: number | string;
+  Ingresos_Disponibilidad?: number | string;
   Meta_Facturacion?: number | string;
+  Costo_Operativo?: number | string;
   Municipio?: string;
   Supervisor?: string;
+  Contratista?: string;
   // normalized
   _Proyecto?: string;
   _Zona?: string;
@@ -33,6 +40,7 @@ export interface CostoRecord {
   Proveedor?: string;
   NombreActivo?: string;
   Descripcion?: string;
+  EsIngreso?: boolean | string;
   _Proyecto?: string;
   _Zona?: string;
   _ZonaDet?: string;
@@ -43,7 +51,9 @@ export interface EmpleadoRecord {
   Empleado?: string;
   Proyecto?: string;
   Zona?: string;
+  Mes?: string;
   EnBrigadas?: string;
+  CedulaBrigada?: string;
   Valor_Total?: number | string;
   [key: string]: unknown;
 }
@@ -77,7 +87,8 @@ export interface RawData {
 export interface Filters {
   proy: string;
   zona: string;
-  mes: string;
+  /** Meses seleccionados (multi-selección). Array vacío = todos los meses. */
+  mes: string[];
   fecha: string;
 }
 

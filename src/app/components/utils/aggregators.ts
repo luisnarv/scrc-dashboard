@@ -14,8 +14,14 @@ export function otcAggMes(rows: CostoRecord[], mes: string): OtcAgg {
   return otcAgg(rows.filter(r => r.Mes === mes));
 }
 
+/** Agrega OTC sobre un conjunto de meses (para ventanas / acumulados). */
+export function otcAggMeses(rows: CostoRecord[], meses: string[]): OtcAgg {
+  const set = new Set(meses);
+  return otcAgg(rows.filter(r => set.has(String(r.Mes || ''))));
+}
+
 export function mesAnterior(m: string | undefined, mesList: string[]): string | null {
-  if (!m || m === 'ALL') return null;
+  if (!m) return null;
   const i = mesList.indexOf(m);
   return i > 0 ? mesList[i - 1] : null;
 }

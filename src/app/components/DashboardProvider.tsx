@@ -19,7 +19,7 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue>({
   raw: null,
-  filters: { proy: 'ALL', zona: 'ALL', mes: 'ALL', fecha: 'ALL' },
+  filters: { proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' },
   setFilters: () => {},
   mesList: [],
   proyList: [],
@@ -69,7 +69,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [raw, setRaw] = useState<RawData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: 'ALL', fecha: 'ALL' });
+  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' });
   const [mesList, setMesList] = useState<string[]>([]);
   const [proyList, setProyList] = useState<string[]>([]);
   const [zonaList, setZonaList] = useState<string[]>([]);
@@ -145,12 +145,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const meses = [...new Set([...mR, ...mC])].sort();
       setMesList(meses);
 
-      // Default to last month
+      // Default: último mes preseleccionado (como casilla marcada)
       const mesDef = meses[meses.length - 1];
-      const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef || 'ALL', fecha: 'ALL' };
+      const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef ? [mesDef] : [], fecha: 'ALL' };
       setFiltersState(newFilters);
 
-      // Fechas for default month
+      // Fechas para el mes por defecto
       const fechas = [...new Set(
         rawRecords.filter(r => !mesDef || String(r.Fecha || '').startsWith(mesDef)).map(r => r.Fecha)
       )].filter((x): x is string => !!x).sort();
@@ -163,7 +163,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Update zona and fecha lists whenever filters or raw changes
+  // Actualiza zona list cuando cambia proyecto o raw
   useEffect(() => {
     if (!raw) return;
     const { raw: rawRecords, costos } = raw;
@@ -177,11 +177,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setZonaList(zonas);
   }, [raw, filters.proy]);
 
+  // Actualiza fecha list según los meses seleccionados ([] = todos)
   useEffect(() => {
     if (!raw) return;
+    const sel = filters.mes;
     const fechas = [...new Set(
       raw.raw
-        .filter(r => filters.mes === 'ALL' || String(r.Fecha || '').startsWith(filters.mes))
+        .filter(r => sel.length === 0 || sel.includes(String(r.Fecha || '').slice(0, 7)))
         .map(r => r.Fecha)
     )].filter((x): x is string => !!x).sort();
     setFechaList(fechas);
