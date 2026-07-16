@@ -1,8 +1,20 @@
 'use client';
+import { useState, useRef, useEffect } from 'react';
 import { useDashboard } from './DashboardProvider';
 
 export default function Filters() {
   const { filters, setFilters, proyList, zonaList, mesList, fechaList } = useDashboard();
+  const [mesOpen, setMesOpen] = useState(false);
+  const mesRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar el desplegable al hacer clic fuera
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (mesRef.current && !mesRef.current.contains(e.target as Node)) setMesOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
 
   const toggleMes = (m: string) => {
     const next = filters.mes.includes(m)
@@ -10,6 +22,36 @@ export default function Filters() {
       : [...filters.mes, m];
     setFilters({ mes: next, fecha: 'ALL' });
   };
+
+  const mesLabel =
+    filters.mes.length === 0
+      ? 'Todos'
+      : filters.mes.length === 1
+      ? filters.mes[0]
+      : `${filters.mes.length} meses`;
+
+  const ctrl: React.CSSProperties = {
+    padding: '5px 8px',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    fontSize: 12,
+    background: '#fff',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+  };
+
+  const row = (on: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 6px',
+    fontSize: 12,
+    borderRadius: 4,
+    cursor: 'pointer',
+    userSelect: 'none',
+    fontWeight: on ? 600 : 400,
+    color: on ? 'var(--text)' : '#333',
+  });
 
   return (
     <div className="filtros">
@@ -32,53 +74,52 @@ export default function Filters() {
       </select>
 
       <label>Mes</label>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '4px 10px',
-          alignItems: 'center',
-          maxWidth: 620,
-        }}
-      >
+      <div ref={mesRef} style={{ position: 'relative' }}>
         <button
           type="button"
-          onClick={() => setFilters({ mes: [], fecha: 'ALL' })}
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '3px 8px',
-            borderRadius: 6,
-            cursor: 'pointer',
-            border: '1px solid var(--border)',
-            background: filters.mes.length === 0 ? 'var(--text)' : '#fff',
-            color: filters.mes.length === 0 ? '#fff' : 'var(--muted)',
-            fontFamily: 'inherit',
-          }}
+          onClick={() => setMesOpen(o => !o)}
+          style={{ ...ctrl, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 120 }}
         >
-          Todos
+          <span>{mesLabel}</span>
+          <span style={{ fontSize: 9, opacity: 0.55 }}>&#9662;</span>
         </button>
-        {mesList.map(m => {
-          const on = filters.mes.includes(m);
-          return (
-            <label
-              key={m}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 11,
-                fontWeight: 600,
-                color: on ? 'var(--text)' : 'var(--muted)',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              <input type="checkbox" checked={on} onChange={() => toggleMes(m)} />
-              {m}
+        {mesOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              background: '#fff',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              boxShadow: '0 8px 24px rgba(20,30,60,.18)',
+              zIndex: 120,
+              padding: 6,
+              minWidth: 150,
+              maxHeight: 260,
+              overflow: 'auto',
+            }}
+          >
+            <label style={row(filters.mes.length === 0)}>
+              <input
+                type="checkbox"
+                checked={filters.mes.length === 0}
+                onChange={() => setFilters({ mes: [], fecha: 'ALL' })}
+              />
+              Todos
             </label>
-          );
-        })}
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
+            {mesList.map(m => {
+              const on = filters.mes.includes(m);
+              return (
+                <label key={m} style={row(on)}>
+                  <input type="checkbox" checked={on} onChange={() => toggleMes(m)} />
+                  {m}
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <label>Fecha</label>
