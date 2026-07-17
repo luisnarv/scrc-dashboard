@@ -2,351 +2,296 @@
 
 import { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw, filtDet } from '../components/utils/filters';
-import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
-import { mesAnterior } from '../components/utils/aggregators';
-import KpiCard from '../components/KpiCard';
-import ChartCard from '../components/ChartCard';
-import RankList from '../components/RankList';
+import { filtRaw } from '../components/utils/filters';
+import { fmtCOP, fmtPct, fmtN } from '../components/utils/formatters';
 import SortableTable from '../components/SortableTable';
-import ModalAcciones from '../components/ModalAcciones';
 
-const CFG = { ok: '#2E7D32', warn: '#F57C00', err: '#C62828', otc: '#3949AB', sip: '#00897B', neu: '#5d6785' };
+const TEAL = '#00897B';
+const INDIGO = '#3949AB';
+const OK = '#2E7D32';
+const WARN = '#F57C00';
+const ERR = '#C62828';
+const INK = '#141b2d';
+const MUT = '#8a93a6';
 
-const baseOpt = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 10 } } },
-};
+function diasHabilesMes(ym: string): number {
+  const [y, m] = ym.split('-').map(Number);
+  if (!y || !m) return 0;
+  const dim = new Date(y, m, 0).getDate();
+  let c = 0;
+  for (let day = 1; day <= dim; day++) { if (new Date(y, m - 1, day).getDay() !== 0) c++; }
+  return c;
+}
 
-const MIX_COLS = ['#00897B', '#3949AB', '#F57C00', '#7B1FA2', '#00838F', '#5D4037', '#546E7A', '#C0392B'];
+const card: React.CSSProperties = { background: '#fff', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' };
+const secH = (c: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: c, margin: '24px 2px 12px' });
+const dot = (c: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: c });
 
-export default function ProductividadPage() {
+/* Barra de progreso simple con semáforo */
+function ProgBar({ pct, color }: { pct: number; color: string }) {
+  return (
+    <span style={{ display: 'block', height: 10, background: '#eef0f5', borderRadius: 5, overflow: 'hidden' }}>
+      <span style={{ display: 'block', height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 5, transition: 'width .5s' }} />
+    </span>
+  );
+}
+
+function sem(v: number, good: number, warn: number) { return v >= good ? OK : v >= warn ? WARN : ERR; }
+
+export default function OperativaPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalAccion, setModalAccion] = useState<string | undefined>();
+  const [view, setView] = useState<'main' | 'detalle'>('main');
+  const [tab, setTab] = useState<'brigadas' | 'tecnicos'>('brigadas');
 
-  const data = useMemo(() => {
+  const d = useMemo(() => {
     if (!raw) return null;
-    const rawF = filtRaw(raw.raw, filters);
-    const det = filtDet(raw.det, filters);
-    const mActual = filters.mes.length ? [...filters.mes].sort().at(-1)! : mesList[mesList.length - 1];
-    const mAnt = mesAnterior(mActual, mesList);
+    const F = filters;
+    const n = (v: unknown) => Number(v) || 0;
+    const rawF = filtRaw(raw.raw, F);
 
-    const filtBase = (r: { _Proyecto?: string; _Zona?: string; _ZonaDet?: string }) =>
-      (filters.proy === 'ALL' || r._Proyecto === filters.proy) &&
-      (filters.zona === 'ALL' || r._Zona === filters.zona || r._ZonaDet === filters.zona);
+    const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
+    const fallidas = rawF.reduce((s, r) => s + n(r.Fallidas), 0);
+    const perdidas = rawF.reduce((s, r) => s + n(r.Perdidas), 0);
+    const visitas = rawF.reduce((s, r) => s + n(r.Visitas), 0);
+    const asignado = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
+    const brigadasDisp = new Set(rawF.map(r => r.Cedula)).size;
 
-    // KPIs
-    const prod = rawF.reduce((s, r) => s + (Number(r.Ingresos) || 0), 0);
-    const ordenes = rawF.reduce((s, r) => s + (Number(r.Visitas) || 0), 0);
-    const efectivas = rawF.reduce((s, r) => s + (Number(r.Efectivas) || 0), 0);
-    const perdidas = rawF.reduce((s, r) => s + (Number(r.Perdidas) || 0), 0);
-    const tecnicos = new Set(rawF.map(r => r.Cedula)).size;
-    const meta = rawF.reduce((s, r) => s + (Number(r.Meta_Facturacion) || 0), 0);
-    const cump = meta ? prod / meta : null;
-    const efect = ordenes ? efectivas / ordenes : null;
+    // días + promedio diario de brigadas activas
+    const dayCed: Record<string, Set<unknown>> = {};
+    rawF.forEach(r => { const f = String(r.Fecha || ''); (dayCed[f] ??= new Set()).add(r.Cedula); });
+    const dias = Object.keys(dayCed);
+    const diasEjec = dias.length;
+    const brigadasOper = dias.length ? Math.round(dias.reduce((s, f) => s + dayCed[f].size, 0) / dias.length) : 0;
 
-    const rawAnt = raw.raw.filter(r => String(r.Fecha || '').startsWith(mAnt || '##') && filtBase(r));
-    const prodAnt = rawAnt.reduce((s, r) => s + (Number(r.Ingresos) || 0), 0);
-    const ordAnt = rawAnt.reduce((s, r) => s + (Number(r.Visitas) || 0), 0);
-
-    // KPI2 - Brigadas
-    const tipoMap: Record<string, { p: number; o: number; e: number; c: number }> = {};
-    rawF.forEach(r => {
-      const t = String(r.Tipo_Cuadrilla || 'Sin tipo');
-      if (!tipoMap[t]) tipoMap[t] = { p: 0, o: 0, e: 0, c: 0 };
-      tipoMap[t].p += Number(r.Ingresos) || 0;
-      tipoMap[t].o += Number(r.Visitas) || 0;
-      tipoMap[t].e += Number(r.Efectivas) || 0;
-      const m = Number(r.Meta_Facturacion) || 0;
-      tipoMap[t].c += m;
-    });
-    const tipoArr = Object.entries(tipoMap).map(([t, v]) => ({
-      t, p: v.p, o: v.o, ef: v.o ? v.e / v.o * 100 : 0, c: v.c ? v.p / v.c * 100 : 0,
-    })).sort((a, b) => b.p - a.p);
-
-    // Daily series
     const meses12 = mesList.slice(-12);
-    const fechas = [...new Set(rawF.map(r => r.Fecha).filter((f): f is string => !!f))].sort().slice(-30);
+    const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
+    const diasHabiles = selWin.reduce((s, m) => s + diasHabilesMes(m), 0);
 
-    const ordDia = fechas.map(f => {
-      const rr = rawF.filter(r => r.Fecha === f);
-      return {
-        f, ef: rr.reduce((s, r) => s + (Number(r.Efectivas) || 0), 0),
-        fa: rr.reduce((s, r) => s + (Number(r.Fallidas) || 0), 0),
-        pe: rr.reduce((s, r) => s + (Number(r.Perdidas) || 0), 0),
-      };
-    });
+    // Cumplimientos
+    const cEfect = asignado ? efect / asignado : 0;
+    const cDias = diasHabiles ? diasEjec / diasHabiles : 0;
+    const cAsignEjec = asignado ? visitas / asignado : 0;
 
-    const prodDia = fechas.map(f => ({
-      f, v: rawF.filter(r => r.Fecha === f).reduce((s, r) => s + (Number(r.Ingresos) || 0), 0),
-    }));
+    // Estado de la operación
+    const disponibilidad = brigadasDisp ? brigadasOper / brigadasDisp : 0;
+    const totOrd = efect + fallidas + perdidas || 1;
+    const efectividad = visitas ? efect / visitas : 0;
+    const perdRate = perdidas / totOrd;
 
-    const cumpDia = fechas.map(f => {
-      const rr = rawF.filter(r => r.Fecha === f);
-      const p = rr.reduce((s, r) => s + (Number(r.Ingresos) || 0), 0);
-      const m = rr.reduce((s, r) => s + (Number(r.Meta_Facturacion) || 0), 0);
-      return { f, v: m ? p / m * 100 : 0 };
-    });
+    // Estado global + alertas accionables
+    const alertas: string[] = [];
+    if (disponibilidad < 0.85) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
+    if (efectividad < 0.65) alertas.push(`Efectividad en ${fmtPct(efectividad)}`);
+    if (perdRate > 0.08) alertas.push(`Órdenes perdidas en ${fmtPct(perdRate)} del total`);
+    const critico = disponibilidad < 0.75 || efectividad < 0.55 || perdRate > 0.15;
+    const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
-    const efDia = fechas.map(f => {
-      const rr = rawF.filter(r => r.Fecha === f);
-      const o = rr.reduce((s, r) => s + (Number(r.Visitas) || 0), 0);
-      const e = rr.reduce((s, r) => s + (Number(r.Efectivas) || 0), 0);
-      return { f, v: o ? e / o * 100 : 0 };
-    });
-
-    // Pareto acciones
-    const subs: Record<string, { v: number; n: number }> = {};
-    det.forEach(o => {
-      const s = o.Accion || '—';
-      if (!subs[s]) subs[s] = { v: 0, n: 0 };
-      subs[s].v += Number(o.Valor) || 0;
-      subs[s].n += 1;
-    });
-    const subArr = Object.entries(subs).map(([s, v]) => ({ s, v: v.v, n: v.n })).sort((a, b) => b.n - a.n).slice(0, 15);
-    const totSub = subArr.reduce((s, x) => s + x.n, 0);
-    let acum = 0;
-    const acumSub = subArr.map(x => { acum += x.n; return totSub ? acum / totSub * 100 : 0; });
-
-    // Rankings
-    const tecs: Record<string, { n: string; b: string; o: number; e: number; p: number }> = {};
+    // Detalle por cédula (brigada≈técnico en esta data)
+    type C = { nombre: string; brigada: string; zona: string; asign: number; efec: number; fall: number; perd: number; vis: number; ing: number; dias: Set<string>; horas: number[] };
+    const ced: Record<string, C> = {};
     rawF.forEach(r => {
-      const k = String(r.Cedula || '?');
-      if (!tecs[k]) tecs[k] = { n: String(r.Nombre || ''), b: String(r.Tipo_Cuadrilla || ''), o: 0, e: 0, p: 0 };
-      tecs[k].o += Number(r.Visitas) || 0;
-      tecs[k].e += Number(r.Efectivas) || 0;
-      tecs[k].p += Number(r.Ingresos) || 0;
+      const k = String(r.Cedula);
+      const c = (ced[k] ??= { nombre: '', brigada: '', zona: '', asign: 0, efec: 0, fall: 0, perd: 0, vis: 0, ing: 0, dias: new Set(), horas: [] });
+      c.nombre = String(r.Nombre || k);
+      c.brigada = String(r.Tipo_Brigada_Operaciones || '—');
+      c.zona = String(r._Zona || r.Zona || '—');
+      c.asign += n(r.Asignacion); c.efec += n(r.Efectivas); c.fall += n(r.Fallidas);
+      c.perd += n(r.Perdidas); c.vis += n(r.Visitas); c.ing += n(r.Ingresos);
+      c.dias.add(String(r.Fecha || ''));
+      const p = Number(r.Primera_Digitacion), u = Number(r.Ultima_Digitacion);
+      if (isFinite(p) && isFinite(u) && u > p) c.horas.push(u - p);
     });
-    const tecArr = Object.entries(tecs).map(([c, v]) => ({ c, ...v, ef: v.o ? v.e / v.o : 0 })).sort((a, b) => b.p - a.p);
+    const brigadaRows = Object.values(ced).map(c => {
+      const nd = c.dias.size || 1;
+      return { brigada: c.brigada, zona: c.zona, tecnico: c.nombre, asignadas: Math.round(c.asign), ejecutadas: c.efec, fallidas: c.fall, ingreso: c.ing, productividad: c.efec / nd, efectividad: c.vis ? c.efec / c.vis : 0 };
+    });
+    const tecnicoRows = Object.values(ced).map(c => {
+      const nd = c.dias.size || 1;
+      const horas = c.horas.length ? c.horas.reduce((s, h) => s + h, 0) / c.horas.length : 0;
+      return { tecnico: c.nombre, brigada: c.brigada, asignadas: Math.round(c.asign), ejecutadas: c.efec, fallidas: c.fall, horas, productividad: c.efec / nd, efectividad: c.vis ? c.efec / c.vis : 0 };
+    });
 
-    const sups: Record<string, number> = {};
-    rawF.forEach(r => { const s = String(r.Supervisor || '—'); sups[s] = (sups[s] || 0) + (Number(r.Ingresos) || 0); });
-    const supArr = Object.entries(sups).map(([l, value]) => ({ label: l, value })).sort((a, b) => b.value - a.value);
-
-    const muns: Record<string, number> = {};
-    rawF.forEach(r => { const m = String(r.Municipio || '—'); muns[m] = (muns[m] || 0) + (Number(r.Visitas) || 0); });
-    const munArr = Object.entries(muns).map(([l, value]) => ({ label: l, value })).sort((a, b) => b.value - a.value);
-
-    // Drivers
-    const drivers: { tipo: 'pos' | 'neg' | 'info'; label: string; text: string }[] = [];
-    if (tipoArr.length) {
-      const top = tipoArr[0];
-      drivers.push({ tipo: 'pos', label: '🏆 Líder', text: `Brigadas ${top.t} alcanzan cumplimiento del ${top.c.toFixed(0)}%.` });
-    }
-    const munF: Record<string, { p: number; t: number }> = {};
-    rawF.forEach(r => { const m = String(r.Municipio || '—'); if (!munF[m]) munF[m] = { p: 0, t: 0 }; munF[m].p += Number(r.Perdidas) || 0; munF[m].t += Number(r.Visitas) || 0; });
-    const munWorst = Object.entries(munF).filter(x => x[1].t >= 10).map(([m, v]) => ({ m, pct: v.p / v.t })).sort((a, b) => b.pct - a.pct)[0];
-    if (munWorst && munWorst.pct > 0.2) drivers.push({ tipo: 'neg', label: '⚠️ Alerta', text: `Municipio ${munWorst.m} con ${(munWorst.pct * 100).toFixed(0)}% de órdenes perdidas.` });
-    if (subArr.length) { const t = subArr.slice(0, 3).reduce((s, x) => s + x.n, 0); drivers.push({ tipo: 'info', label: '📊 Concentración', text: `Las 3 principales acciones concentran el ${totSub ? (t / totSub * 100).toFixed(0) : 0}% de las órdenes.` }); }
-
-    // Oportunidades
-    const oport: string[] = [];
-    if (tipoArr.some(x => x.c < 80)) oport.push('Cumplimiento: Tipos de brigada por debajo del 80% requieren refuerzo operativo o revisión de meta.');
-    if (munWorst && munWorst.pct > 0.2) oport.push(`Redistribución: Reasignar brigadas hacia municipios con menor tasa de pérdidas; ${munWorst.m} muestra alta tasa de órdenes sin pago.`);
-
-    // Fuentes chart (productividad vs disponibilidad)
-    const fuenteKeys = ['Productividad', 'Disponibilidad'];
-    const fuenteData = fuenteKeys.map(k => rawF.filter(r => String(r.Tipo_Cuadrilla || '').toLowerCase().includes(k.toLowerCase())).reduce((s, r) => s + (Number(r.Ingresos) || 0), 0));
-
-    const tableData = tecArr.map(t => ({
-      n: t.n, c: t.c, b: t.b,
-      o: t.o, e: t.e,
-      ef: Number((t.ef * 100).toFixed(1)),
-      p: t.p,
-    }));
+    const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} … ${selWin[selWin.length - 1]}`) : '—';
 
     return {
-      prod, ordenes, efectivas, perdidas, tecnicos, meta, cump, efect,
-      prodAnt, ordAnt, tipoArr, ordDia, prodDia, cumpDia, efDia,
-      subArr, acumSub, totSub, fuenteData, tecArr, supArr, munArr,
-      drivers, oport, det, tableData, meses12, filtBase,
+      efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasOper, diasEjec, diasHabiles,
+      cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
+      brigadaRows, tecnicoRows, periodoLabel: winLbl,
     };
   }, [raw, filters, mesList]);
 
-  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando datos…</span></div>;
+  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
-  if (!data || !raw) return null;
+  if (!d) return null;
 
-  const { prod, ordenes, efectivas, cump, efect, prodAnt, ordAnt, tipoArr, ordDia, prodDia, cumpDia, efDia, subArr, acumSub, totSub, fuenteData, tecArr, supArr, munArr, drivers, oport, det, tableData } = data;
+  const kLbl: React.CSSProperties = { fontSize: 11, color: MUT, textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: 600 };
+  const kVal: React.CSSProperties = { fontSize: 30, fontWeight: 700, color: INK, marginTop: 6, fontVariantNumeric: 'tabular-nums', lineHeight: 1 };
+  const kSub: React.CSSProperties = { fontSize: 11, color: MUT, marginTop: 4 };
+  const kpi = (label: string, value: string, sub?: string, accent?: string) => (
+    <div style={card}><div style={kLbl}>{label}</div><div style={{ ...kVal, color: accent || INK }}>{value}</div>{sub && <div style={kSub}>{sub}</div>}</div>
+  );
 
-  const fuentesCfg = {
-    type: 'bar' as const,
-    data: { labels: ['Productividad', 'Disponibilidad'], datasets: [{ label: 'Producción', data: fuenteData, backgroundColor: [CFG.sip + 'CC', CFG.otc + 'CC'] }] },
-    options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } } },
+  // ---- Cumplimiento (Meta vs Real con barra) ----
+  const cumplCard = (label: string, meta: number, real: number, fmt: (v: number) => string) => {
+    const pct = meta ? (real / meta) * 100 : 0;
+    const color = sem(pct, 90, 70);
+    return (
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={kLbl}>{label}</span>
+          <span style={{ fontSize: 20, fontWeight: 700, color }}>{pct.toFixed(0)}%</span>
+        </div>
+        <div style={{ margin: '10px 0 8px' }}><ProgBar pct={pct} color={color} /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: MUT }}>
+          <span>Real <b style={{ color: INK }}>{fmt(real)}</b></span>
+          <span>Meta <b style={{ color: INK }}>{fmt(meta)}</b></span>
+        </div>
+      </div>
+    );
   };
 
-  const cumpTipoCfg = {
-    type: 'bar' as const,
-    data: { labels: tipoArr.map(x => x.t.slice(0, 20)), datasets: [{ label: 'Cumplimiento %', data: tipoArr.map(x => x.c), backgroundColor: tipoArr.map(x => x.c >= 90 ? CFG.ok + 'CC' : x.c >= 75 ? CFG.warn + 'CC' : CFG.err + 'CC') }] },
-    options: { ...baseOpt, indexAxis: 'y' as const, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { x: { max: 120, ticks: { callback: (v: unknown) => Number(v).toFixed(0) + '%' } } } },
-  };
+  // ---- DETALLE ----
+  if (view === 'detalle') {
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 14px' }}>
+          <div>
+            <button onClick={() => setView('main')} style={{ background: 'none', border: 'none', color: TEAL, fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>← Volver al resumen</button>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK, marginTop: 4 }}>DETALLE OPERATIVO</div>
+          </div>
+          <div style={{ fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
+        </div>
 
-  const ordDiaCfg = {
-    type: 'bar' as const,
-    data: {
-      labels: ordDia.map(x => x.f),
-      datasets: [
-        { label: 'Efectivas', data: ordDia.map(x => x.ef), backgroundColor: CFG.ok + 'CC' },
-        { label: 'Fallidas', data: ordDia.map(x => x.fa), backgroundColor: CFG.warn + 'CC' },
-        { label: 'Perdidas', data: ordDia.map(x => x.pe), backgroundColor: CFG.err + 'CC' },
-      ],
-    },
-    options: { ...baseOpt, scales: { x: { stacked: true }, y: { stacked: true } } },
-  };
+        <div style={{ display: 'flex', gap: 8, margin: '0 2px 14px' }}>
+          {(['brigadas', 'tecnicos'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${tab === t ? TEAL : '#dfe3ec'}`, background: tab === t ? TEAL : '#fff', color: tab === t ? '#fff' : INK, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              {t === 'brigadas' ? 'Por brigadas' : 'Por técnicos'}
+            </button>
+          ))}
+        </div>
 
-  const prodDiaCfg = {
-    type: 'bar' as const,
-    data: { labels: prodDia.map(x => x.f), datasets: [{ label: 'Producción', data: prodDia.map(x => x.v), backgroundColor: CFG.sip + 'BB' }] },
-    options: { ...baseOpt, scales: { y: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } } },
-  };
+        <div style={card}>
+          {tab === 'brigadas' ? (
+            <SortableTable id="det-brig" data={d.brigadaRows} defaultSort="ingreso" defaultDir="desc"
+              searchPlaceholder="Buscar brigada, técnico o zona…" searchKeys={['brigada', 'tecnico', 'zona']}
+              columns={[
+                { key: 'brigada', label: 'Brigada' },
+                { key: 'zona', label: 'Zona' },
+                { key: 'tecnico', label: 'Técnico responsable' },
+                { key: 'asignadas', label: 'Asignadas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'ejecutadas', label: 'Ejecutadas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'fallidas', label: 'Fallidas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'ingreso', label: 'Ingreso', type: 'num', render: v => fmtCOP(Number(v)) },
+                { key: 'productividad', label: 'Prod. (ef/día)', type: 'num', render: v => Number(v).toFixed(1) },
+                { key: 'efectividad', label: 'Efectividad', type: 'num', render: v => fmtPct(Number(v)) },
+              ]} />
+          ) : (
+            <SortableTable id="det-tec" data={d.tecnicoRows} defaultSort="ejecutadas" defaultDir="desc"
+              searchPlaceholder="Buscar técnico o brigada…" searchKeys={['tecnico', 'brigada']}
+              columns={[
+                { key: 'tecnico', label: 'Técnico' },
+                { key: 'brigada', label: 'Brigada' },
+                { key: 'asignadas', label: 'Asignadas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'ejecutadas', label: 'Ejecutadas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'fallidas', label: 'Fallidas', type: 'num', render: v => fmtN(Number(v)) },
+                { key: 'horas', label: 'Horas/día', type: 'num', render: v => Number(v).toFixed(1) + ' h' },
+                { key: 'productividad', label: 'Prod. (ef/día)', type: 'num', render: v => Number(v).toFixed(1) },
+                { key: 'efectividad', label: 'Efectividad', type: 'num', render: v => fmtPct(Number(v)) },
+              ]} />
+          )}
+        </div>
+      </>
+    );
+  }
 
-  const cumpDiaCfg = {
-    type: 'line' as const,
-    data: { labels: cumpDia.map(x => x.f), datasets: [{ label: 'Cumplimiento %', data: cumpDia.map(x => x.v), borderColor: CFG.warn, backgroundColor: CFG.warn + '22', fill: true, tension: 0.3 }] },
-    options: { ...baseOpt, scales: { y: { ticks: { callback: (v: unknown) => Number(v).toFixed(0) + '%' } } } },
-  };
-
-  const efDiaCfg = {
-    type: 'line' as const,
-    data: { labels: efDia.map(x => x.f), datasets: [{ label: 'Efectividad %', data: efDia.map(x => x.v), borderColor: CFG.ok, backgroundColor: CFG.ok + '22', fill: true, tension: 0.3 }] },
-    options: { ...baseOpt, scales: { y: { ticks: { callback: (v: unknown) => Number(v).toFixed(0) + '%' } } } },
-  };
-
-  const paretoCfg = {
-    type: 'bar' as const,
-    data: {
-      labels: subArr.map(x => x.s.length > 32 ? x.s.slice(0, 30) + '…' : x.s),
-      datasets: [
-        { type: 'bar' as const, label: 'Órdenes', data: subArr.map(x => x.n), backgroundColor: CFG.sip + 'CC', xAxisID: 'x' },
-        { type: 'line' as const, label: '% Acumulado', data: acumSub, borderColor: CFG.warn, tension: 0.2, xAxisID: 'x1' },
-      ],
-    },
-    options: {
-      ...baseOpt,
-      indexAxis: 'y' as const,
-      scales: {
-        x: { ticks: { callback: (v: unknown) => fmtN(Number(v)) }, title: { display: true, text: 'Órdenes' } },
-        x1: { position: 'top' as const, max: 100, ticks: { callback: (v: unknown) => Number(v).toFixed(0) + '%' }, grid: { display: false } },
-      },
-    },
-  };
-
-  const mixCfg = {
-    type: 'doughnut' as const,
-    data: { labels: tipoArr.map(x => x.t), datasets: [{ data: tipoArr.map(x => x.p), backgroundColor: MIX_COLS }] },
-    options: { ...baseOpt, plugins: { ...baseOpt.plugins, tooltip: { callbacks: { label: (c: { label: string; parsed: number }) => c.label + ': ' + fmtCOP(c.parsed) } } } },
-  };
-
-  const prodTipoCfg = {
-    type: 'bar' as const,
-    data: { labels: tipoArr.map(x => x.t.slice(0, 20)), datasets: [{ label: 'Producción', data: tipoArr.map(x => x.p), backgroundColor: MIX_COLS }] },
-    options: { ...baseOpt, indexAxis: 'y' as const, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { x: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } } },
-  };
+  // ---- VISTA PRINCIPAL ----
+  const nivelCfg = {
+    ok: { c: OK, t: 'La operación está en línea', s: 'Sin desviaciones que requieran atención inmediata.' },
+    amber: { c: WARN, t: 'Requiere atención', s: 'Hay indicadores fuera de rango:' },
+    red: { c: ERR, t: 'Desviación crítica', s: 'Indicadores en nivel crítico:' },
+  }[d.nivel];
 
   return (
     <>
-      <div className="section">
-        <h2>⚙️ Productividad <span className="tag-sip">SIPREM</span></h2>
-        <div className="sec-sub">Toda cifra económica se denomina <b>Producción Valorizada / Facturación Estimada</b> · no confundir con ingresos contables</div>
-      </div>
-
-      <div className="section">
-        <h2>Indicadores Nivel 1</h2>
-        <div className="kpi-grid">
-          <KpiCard cls="sip" lbl="Producción Valorizada" val={fmtCOP(prod)} delta={deltaPct(prod, prodAnt)} help="Fact_Ajustada SIPREM." />
-          <KpiCard cls="sip" lbl="Órdenes Totales" val={fmtN(ordenes)} delta={deltaPct(ordenes, ordAnt)} help="Total de visitas/órdenes en el periodo." />
-          <KpiCard cls="sip" lbl="Efectividad %" val={fmtPct(efect)} help="Efectivas / Totales." />
-          <KpiCard cls="sip" lbl="Cumplimiento %" val={fmtPct(cump)} help="Producción / Meta. Meta ≥90%." />
+      {/* Título + acción de detalle */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 12px' }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVA</div>
+          <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
+        <button onClick={() => setView('detalle')}
+          style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)' }}>
+          Ver Detalle Operativo →
+        </button>
       </div>
 
-      <div className="section">
-        <h2>Indicadores Nivel 2 — Composición y Cumplimiento</h2>
-        <div className="grid-2">
-          <ChartCard id="v2-fuentes" title="Producción por fuente" subtitle="Productividad vs Disponibilidad" config={fuentesCfg as never} height="short" />
-          <ChartCard id="v2-cump-tipo" title="Cumplimiento por Tipo de Brigada" config={cumpTipoCfg as never} height="short" />
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>📈 Evolutivos</h2>
-        <div className="grid-2">
-          <ChartCard id="v2-ord-dia" title="Órdenes diarias por estado" config={ordDiaCfg as never} />
-          <ChartCard id="v2-prod-dia" title="Producción Valorizada diaria" config={prodDiaCfg as never} />
-          <ChartCard id="v2-cump-dia" title="Cumplimiento diario (%)" config={cumpDiaCfg as never} />
-          <ChartCard id="v2-efect-dia" title="Efectividad %" config={efDiaCfg as never} />
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>🏆 Comparativos — Rankings</h2>
-        <div className="grid-2">
-          <div className="card"><div className="ch-title">Top 10 Técnicos (Producción)</div><RankList items={tecArr.slice(0, 10).map(t => ({ label: t.n || t.c, value: t.p, sub: t.b }))} /></div>
-          <div className="card"><div className="ch-title">Top 10 Supervisores</div><RankList items={supArr.slice(0, 10)} /></div>
-          <div className="card"><div className="ch-title">Top 10 Municipios (Órdenes)</div><RankList items={munArr.slice(0, 10)} format="n" /></div>
-          <ChartCard id="v2-prod-tipo" title="Producción por Tipo de Brigada" config={prodTipoCfg as never} height="short" />
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>📊 Distribuciones</h2>
-        <div className="grid-2">
-          <ChartCard
-            id="v2-pareto"
-            title="Pareto de Acciones"
-            subtitle="80/20 de las órdenes"
-            config={paretoCfg as never}
-            height="tall"
-            headerExtra={<button className="btn-detalle" onClick={() => { setModalAccion(undefined); setModalOpen(true); }}>Ver detalle</button>}
-          />
-          <ChartCard id="v2-mix" title="Mix de Brigadas" subtitle="Participación en la producción" config={mixCfg as never} height="tall" />
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>🔎 Drivers de Productividad</h2>
-        {drivers.length ? drivers.map((d, i) => (
-          <div key={i} className="driver">
-            <span className={`tipo ${d.tipo}`}>{d.label}</span>
-            {d.text}
+      {/* Banner de estado */}
+      <div style={{ ...card, borderLeft: `4px solid ${nivelCfg.c}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span style={{ width: 12, height: 12, borderRadius: '50%', background: nivelCfg.c, flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: nivelCfg.c }}>{nivelCfg.t}</div>
+          <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>
+            {nivelCfg.s} {d.alertas.length > 0 && <b style={{ color: INK }}>{d.alertas.join(' · ')}</b>}
           </div>
-        )) : <div className="driver">Sin drivers destacados.</div>}
+        </div>
+        <div style={{ marginLeft: 'auto', fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
       </div>
 
-      <div className="section">
-        <h2>💡 Oportunidades de Mejora</h2>
-        {oport.length ? oport.map((o, i) => <div key={i} className="oport">{o}</div>) : <div className="oport">Operación dentro de parámetros esperados.</div>}
+      {/* 1 · Resumen Operativo */}
+      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Resumen operativo</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
+        {kpi('Brigadas disponibles', fmtN(d.brigadasDisp), 'pool del periodo')}
+        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL)}
+        {kpi('Total asignado', fmtN(d.asignado), 'meta de efectivas')}
+        {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
+        {kpi('Órdenes efectivas', fmtN(d.efect), undefined, OK)}
+        {kpi('Órdenes fallidas', fmtN(d.fallidas), undefined, WARN)}
+        {kpi('Órdenes perdidas', fmtN(d.perdidas), undefined, ERR)}
       </div>
 
-      <div className="section">
-        <h2>📋 Detalle por Técnico</h2>
-        <SortableTable
-          id="tabla-tec"
-          columns={[
-            { key: 'n', label: 'Técnico' },
-            { key: 'c', label: 'Cédula' },
-            { key: 'b', label: 'Brigada' },
-            { key: 'o', label: 'Órdenes', type: 'num', render: v => fmtN(Number(v)) },
-            { key: 'e', label: 'Efectivas', type: 'num', render: v => fmtN(Number(v)) },
-            { key: 'ef', label: 'Efectividad %', type: 'num', render: v => Number(v).toFixed(1) + '%' },
-            { key: 'p', label: 'Producción', type: 'num', render: v => fmtCOP(Number(v)) },
-          ]}
-          data={tableData as never}
-          defaultSort="p"
-          searchPlaceholder="Buscar técnico, cédula o brigada…"
-          searchKeys={['n', 'c', 'b']}
-        />
+      {/* 2 · Cumplimiento */}
+      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Cumplimiento · Meta vs Real</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {cumplCard('Órdenes efectivas', d.asignado, d.efect, fmtN)}
+        {cumplCard('Días ejecutados', d.diasHabiles, d.diasEjec, fmtN)}
+        {cumplCard('Asignado vs ejecutado', d.asignado, d.visitas, fmtN)}
       </div>
 
-      <ModalAcciones
-        open={modalOpen}
-        data={det}
-        titulo={modalAccion ? `Detalle: ${modalAccion}` : 'Detalle de Órdenes'}
-        preselectedAccion={modalAccion}
-        onClose={() => setModalOpen(false)}
-      />
+      {/* 3 · Estado de la Operación (un solo panel) */}
+      <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Estado de la operación</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {/* Disponibilidad */}
+        <div style={card}>
+          <div style={kLbl}>Disponibilidad de brigadas</div>
+          <div style={{ ...kVal, color: sem(d.disponibilidad * 100, 90, 80) }}>{fmtPct(d.disponibilidad)}</div>
+          <div style={{ margin: '10px 0 6px' }}><ProgBar pct={d.disponibilidad * 100} color={sem(d.disponibilidad * 100, 90, 80)} /></div>
+          <div style={kSub}>{fmtN(d.brigadasOper)} operativas de {fmtN(d.brigadasDisp)} disponibles</div>
+        </div>
+
+        {/* Distribución de órdenes */}
+        <div style={card}>
+          <div style={kLbl}>Distribución de órdenes</div>
+          <div style={{ display: 'flex', height: 22, borderRadius: 6, overflow: 'hidden', margin: '12px 0 10px' }}>
+            <span style={{ width: `${(d.efect / d.totOrd) * 100}%`, background: OK }} />
+            <span style={{ width: `${(d.fallidas / d.totOrd) * 100}%`, background: WARN }} />
+            <span style={{ width: `${(d.perdidas / d.totOrd) * 100}%`, background: ERR }} />
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, color: MUT }}>
+            <span><b style={{ color: OK }}>●</b> Efectivas {fmtN(d.efect)} ({fmtPct(d.efect / d.totOrd)})</span>
+            <span><b style={{ color: WARN }}>●</b> Fallidas {fmtN(d.fallidas)} ({fmtPct(d.fallidas / d.totOrd)})</span>
+            <span><b style={{ color: ERR }}>●</b> Perdidas {fmtN(d.perdidas)} ({fmtPct(d.perdidas / d.totOrd)})</span>
+          </div>
+        </div>
+
+        {/* Asignado vs Ejecutado */}
+        <div style={card}>
+          <div style={kLbl}>Asignado vs ejecutado</div>
+          <div style={{ ...kVal, color: sem(d.cAsignEjec * 100, 80, 60) }}>{fmtPct(d.cAsignEjec)}</div>
+          <div style={{ margin: '10px 0 6px' }}><ProgBar pct={d.cAsignEjec * 100} color={sem(d.cAsignEjec * 100, 80, 60)} /></div>
+          <div style={kSub}>{fmtN(d.visitas)} ejecutadas de {fmtN(d.asignado)} asignadas</div>
+        </div>
+      </div>
     </>
   );
 }

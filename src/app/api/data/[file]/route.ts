@@ -6,6 +6,8 @@ const ALLOWED = new Set([
   'dashboard_costos.csv',
   'dashboard_costos_empleado.csv',
   'dashboard_ordenes_detalle.csv',
+  'dashboard_funnel_records.csv',
+  'dashboard_roster_brigadas.csv',
 ]);
 
 export async function GET(

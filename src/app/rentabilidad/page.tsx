@@ -1,565 +1,225 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import type { ChartConfiguration } from 'chart.js';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtCos, filtCosSinMes } from '../components/utils/filters';
-import { fmtCOP, fmtPct, deltaPct } from '../components/utils/formatters';
-import { otcAgg, otcAggMes, mesAnterior } from '../components/utils/aggregators';
-import type { CostoRecord } from '../components/utils/types';
-import KpiCard from '../components/KpiCard';
-import ChartCard from '../components/ChartCard';
-import Driver from '../components/Driver';
-import SortableTable from '../components/SortableTable';
+import { filtRaw, ventanaPrevia } from '../components/utils/filters';
+import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
 
-const CFG = { ok: '#2E7D32', warn: '#F57C00', err: '#C62828', otc: '#3949AB', sip: '#00897B', neu: '#5d6785' };
+const TEAL = '#00897B';
+const INDIGO = '#3949AB';
+const INK = '#141b2d';
+const MUT = '#8a93a6';
 
-const baseOpt = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 10 } } },
-};
+/* Sparkline de tendencia */
+function Trend({ data, labels, color, fmt }: { data: number[]; labels: string[]; color: string; fmt: (v: number) => string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chartRef = useRef<import('chart.js').Chart | null>(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    let mounted = true;
+    import('chart.js').then(({ Chart, registerables }) => {
+      if (!mounted || !canvasRef.current) return;
+      Chart.register(...registerables);
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+      const cfg = {
+        type: 'line',
+        data: { labels, datasets: [{ data, borderColor: color, backgroundColor: color + '14', borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: color }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { displayColors: false, backgroundColor: INK, padding: 8, callbacks: { label: (t: { parsed: { y: number } }) => fmt(Number(t.parsed.y)) } } },
+          scales: { x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 9 }, color: MUT, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } }, y: { display: false } },
+        },
+      } as unknown as ChartConfiguration;
+      chartRef.current = new Chart(canvasRef.current, cfg);
+    });
+    return () => { mounted = false; if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(data), JSON.stringify(labels), color]);
+  return <div style={{ position: 'relative', height: 120 }}><canvas ref={canvasRef} /></div>;
+}
 
-// chart.js + strict TS: los datasets mixtos (bar/line) y las opciones anidadas
-// pelean con los genéricos. Casteamos la config completa, igual que hace ChartCard.
-const cc = (c: unknown): ChartConfiguration => c as ChartConfiguration;
+/* Meta vs Real — dos barras */
+function MetaReal({ meta, real, color, fmt }: { meta: number; real: number; color: string; fmt: (v: number) => string }) {
+  const max = Math.max(meta, real, 1);
+  const cumpl = meta ? (real / meta) * 100 : null;
+  const bar = (label: string, value: number, c: string, muted?: boolean) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+      <span style={{ width: 34, fontSize: 11, color: MUT, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
+      <span style={{ flex: 1, height: 8, background: '#eef0f5', borderRadius: 4, overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', width: `${(value / max) * 100}%`, background: c, borderRadius: 4, transition: 'width .5s' }} />
+      </span>
+      <span style={{ width: 84, textAlign: 'right', fontSize: 12.5, fontWeight: 600, color: muted ? MUT : INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(value)}</span>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 12, color: MUT, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600 }}>Meta vs Real</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>{cumpl !== null ? cumpl.toFixed(0) + '%' : '—'}</span>
+      </div>
+      {bar('Real', real, color)}
+      {bar('Meta', meta, '#c9cede', true)}
+    </div>
+  );
+}
+
+function Delta({ d }: { d: number | null }) {
+  if (d === null) return <span style={{ fontSize: 12, color: MUT }}>—</span>;
+  const flat = Math.abs(d) < 0.001;
+  const color = flat ? MUT : d >= 0 ? '#2E7D32' : '#C62828';
+  const arrow = flat ? '' : d >= 0 ? '↑' : '↓';
+  return <span style={{ fontSize: 13, fontWeight: 700, color }}>{arrow} {(Math.abs(d) * 100).toFixed(1)}%</span>;
+}
 
 export default function RentabilidadPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
 
-  const data = useMemo(() => {
+  const d = useMemo(() => {
     if (!raw) return null;
     const F = filters;
+    const n = (v: unknown) => Number(v) || 0;
+    const rawF = filtRaw(raw.raw, F);
+    const base = (r: { _Proyecto?: string; _Zona?: string; _ZonaDet?: string }) =>
+      (F.proy === 'ALL' || r._Proyecto === F.proy) && (F.zona === 'ALL' || r._Zona === F.zona || r._ZonaDet === F.zona);
 
-    // ---- Periodo actual / anterior / acumulado ----
-    const cos = filtCos(raw.costos, F);
-    const p = otcAgg(cos);
-    const mActual = F.mes.length ? [...F.mes].sort().at(-1)! : mesList[mesList.length - 1];
-    const mAnt = mesAnterior(mActual, mesList);
-    const cosAnt = raw.costos.filter(
-      r =>
-        r.Mes === mAnt &&
-        (F.proy === 'ALL' || r._Proyecto === F.proy) &&
-        (F.zona === 'ALL' || r._Zona === F.zona || r._ZonaDet === F.zona)
-    );
-    const pAnt = otcAgg(cosAnt);
-    const acum = otcAgg(filtCosSinMes(raw.costos, F));
+    const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
+    const visitas = rawF.reduce((s, r) => s + n(r.Visitas), 0);
+    const metaEfec = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
+    const ingreso = rawF.reduce((s, r) => s + n(r.Ingresos), 0);          // facturación real (Fact_Ajustada) · TODO(base)
+    const metaFact = rawF.reduce((s, r) => s + n(r.Valores_Iniciales), 0); // meta de facturación en $
+    const perdidas = rawF.reduce((s, r) => s + n(r.Perdidas_COP), 0);
 
-    // ---- KPIs nivel 2 (costos unitarios) ----
-    const num = (v: unknown) => Number(v) || 0;
-    const gPers = cos
-      .filter(r => String(r.CuentaMayor || '').toUpperCase().includes('PERSONAL'))
-      .reduce((s, r) => s + num(r.Valor), 0);
-    const empsF = (raw.emps || []).filter(e => F.proy === 'ALL' || e.Proyecto === F.proy);
-    const nEmps = new Set(empsF.map(e => e.Empleado)).size || 1;
-    const combusTot = cos
-      .filter(
-        r =>
-          String(r.CuentaMayor || '').toUpperCase().includes('COMBUSTIBLE') ||
-          String(r.NombreCuenta || '').toUpperCase().includes('COMBUSTIBLE')
-      )
-      .reduce((s, r) => s + num(r.Valor), 0);
-    const mantTot = cos
-      .filter(r => String(r.CuentaMayor || '').toUpperCase().includes('MANTEN'))
-      .reduce((s, r) => s + num(r.Valor), 0);
-    const totCos = p.costos || 1;
+    const eficiencia = visitas ? efect / visitas : null;
+    const cumplEfic = metaEfec ? efect / metaEfec : null;
+    const cumplFact = metaFact ? ingreso / metaFact : null;
 
-    // ---- Proveedores ----
-    const esProv = (t: unknown) => /^(PS|PB|PI|CN)\d/.test(String(t || '').trim().toUpperCase());
-    const esGasto = (r: CostoRecord) =>
-      !String(r.Categoria || '').toLowerCase().includes('ingres') &&
-      !String(r.Grupo || '').startsWith('01');
-    const provs: Record<string, number> = {};
-    cos.forEach(r => {
-      const t = r.Tercero || r.Proveedor;
-      if (t && esProv(t) && esGasto(r)) provs[String(t)] = (provs[String(t)] || 0) + num(r.Valor);
-    });
-    const provArr = Object.entries(provs).sort((a, b) => b[1] - a[1]);
-    const topProv = provArr[0];
-
-    const shortProv = (s: unknown) => {
-      let t = String(s || '').trim();
-      t = t.replace(/^(PS|PB|PI|CN|ISE?|CV)\d+\s+/i, '');
-      t = t.replace(
-        /\s+(S\.?A\.?S?\.?( E\.?S\.?P\.?)?|LTDA\.?|E\.?U\.?|Y CIA\.? S\.?C\.?A\.?|CIA\.? LTDA\.?)\s*$/i,
-        ''
-      );
-      t = t.replace(/\s+/g, ' ').trim();
-      return t.length > 22 ? t.slice(0, 20) + '…' : t;
-    };
-
-    // ---- Series 12 meses (base proy+zona, sin filtro de mes) ----
+    // Ventanas para comparativo/deltas
     const meses12 = mesList.slice(-12);
-    const base = (r: CostoRecord) =>
-      (F.proy === 'ALL' || r._Proyecto === F.proy) &&
-      (F.zona === 'ALL' || r._Zona === F.zona || r._ZonaDet === F.zona);
-    const series = meses12.map(m => otcAggMes(raw.costos.filter(base), m));
-    const persMes = meses12.map(m =>
-      raw.costos
-        .filter(
-          r => r.Mes === m && base(r) && String(r.CuentaMayor || '').toUpperCase().includes('PERSONAL')
-        )
-        .reduce((s, r) => s + num(r.Valor), 0)
-    );
+    const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
+    const prevWin = ventanaPrevia(selWin, mesList);
+    const aggWin = (arr: string[]) => {
+      const set = new Set(arr);
+      const rr = raw.raw.filter(x => set.has(String(x.Fecha || '').slice(0, 7)) && base(x));
+      const ef = rr.reduce((s, x) => s + n(x.Efectivas), 0);
+      const vi = rr.reduce((s, x) => s + n(x.Visitas), 0);
+      const ing = rr.reduce((s, x) => s + n(x.Ingresos), 0);
+      return { efic: vi ? ef / vi : null, ing };
+    };
+    const wA = aggWin(selWin);
+    const wB = aggWin(prevWin);
+    const dEfic = wA.efic !== null && wB.efic !== null ? deltaPct(wA.efic, wB.efic) : null;
+    const dFact = wB.ing ? deltaPct(wA.ing, wB.ing) : null;
 
-    // ---- Categorías de costo ----
-    const catsSet = [
-      ...new Set(cos.map(r => r.CuentaMayor).filter(c => c && !String(c).toLowerCase().includes('ingres'))),
-    ] as string[];
-    const topCats = catsSet
-      .map(c => ({ c, v: cos.filter(r => r.CuentaMayor === c).reduce((s, r) => s + num(r.Valor), 0) }))
-      .sort((a, b) => b.v - a.v)
-      .slice(0, 5)
-      .map(x => x.c);
-    const catSeries = topCats.map(c =>
-      meses12.map(m =>
-        raw.costos
-          .filter(r => r.Mes === m && r.CuentaMayor === c && base(r))
-          .reduce((s, r) => s + num(r.Valor), 0)
-      )
-    );
-
-    // ---- Comparativos zona / proyecto ----
-    const zonas = [...new Set(cos.map(r => r.Zona))].filter(Boolean) as string[];
-    const zData = zonas.map(z => otcAgg(cos.filter(r => r.Zona === z)));
-    const proys = [...new Set(cos.map(r => r.Proyecto))].filter(Boolean) as string[];
-    const pData = proys.map(pp => otcAgg(cos.filter(r => r.Proyecto === pp)));
-    const worstZ = zData
-      .map((x, i) => ({ z: zonas[i], m: x.margen }))
-      .sort((a, b) => (a.m || 0) - (b.m || 0))[0];
-
-    // ---- Distribuciones ----
-    const treeData = catsSet
-      .map(c => ({ c, v: cos.filter(r => r.CuentaMayor === c).reduce((s, r) => s + num(r.Valor), 0) }))
-      .sort((a, b) => b.v - a.v);
-
-    const provTop = provArr.slice(0, 10);
-    const totP = provArr.reduce((s, x) => s + x[1], 0);
-    let ac = 0;
-    const acP = provTop.map(x => {
-      ac += x[1];
-      return totP ? (ac / totP) * 100 : 0;
+    // Tendencias 12m
+    const perMes = meses12.map(m => {
+      const rr = raw.raw.filter(x => String(x.Fecha || '').startsWith(m) && base(x));
+      const ef = rr.reduce((s, x) => s + n(x.Efectivas), 0);
+      const vi = rr.reduce((s, x) => s + n(x.Visitas), 0);
+      const ing = rr.reduce((s, x) => s + n(x.Ingresos), 0);
+      return { efic: vi ? (ef / vi) * 100 : 0, ing };
     });
 
-    const persCuentas: Record<string, number> = {};
-    cos
-      .filter(r => String(r.CuentaMayor || '').toUpperCase().includes('PERSONAL'))
-      .forEach(r => {
-        const k = String(r.NombreCuenta || '—');
-        persCuentas[k] = (persCuentas[k] || 0) + num(r.Valor);
-      });
-    const persArr = Object.entries(persCuentas).sort((a, b) => b[1] - a[1]).slice(0, 10);
-
-    const depr: Record<string, number> = {};
-    cos
-      .filter(r => String(r.CuentaMayor || '').toUpperCase().includes('DEPREC'))
-      .forEach(r => {
-        const a = String(r.NombreActivo || r.Descripcion || '—');
-        depr[a] = (depr[a] || 0) + num(r.Valor);
-      });
-    const dArr = Object.entries(depr).sort((a, b) => b[1] - a[1]).slice(0, 10);
-
-    // ---- Configs de gráficos ----
-    const colsC = ['#3949AB', '#00897B', '#F57C00', '#7B1FA2', '#546E7A'];
-    const tCols = ['#3949AB', '#00897B', '#F57C00', '#7B1FA2', '#00838F', '#5D4037', '#546E7A', '#C0392B', '#0288D1', '#8E24AA'];
-    const copY = { ...baseOpt, scales: { y: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } } };
-    const copX = {
-      ...baseOpt,
-      indexAxis: 'y',
-      plugins: { ...baseOpt.plugins, legend: { display: false } },
-      scales: { x: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } },
-    };
-
-    const charts = {
-      icu: cc({
-        type: 'bar',
-        data: {
-          labels: meses12,
-          datasets: [
-            { type: 'line', label: 'Ingresos', data: series.map(s => s.ingresos), borderColor: CFG.otc, tension: 0.3 },
-            { type: 'bar', label: 'Costos', data: series.map(s => s.costos), backgroundColor: CFG.err + '99' },
-            { type: 'line', label: 'Utilidad', data: series.map(s => s.utilidad), borderColor: CFG.ok, tension: 0.3 },
-          ],
-        },
-        options: copY,
-      }),
-      margen: cc({
-        type: 'line',
-        data: {
-          labels: meses12,
-          datasets: [
-            {
-              label: 'Margen %',
-              data: series.map(s => (s.margen ? s.margen * 100 : 0)),
-              borderColor: CFG.otc,
-              backgroundColor: CFG.otc + '22',
-              fill: true,
-              tension: 0.3,
-            },
-          ],
-        },
-        options: { ...baseOpt, scales: { y: { ticks: { callback: (v: unknown) => Number(v).toFixed(1) + '%' } } } },
-      }),
-      personal: cc({
-        type: 'line',
-        data: {
-          labels: meses12,
-          datasets: [
-            {
-              label: 'Costo Personal',
-              data: persMes,
-              borderColor: CFG.otc,
-              backgroundColor: CFG.otc + '22',
-              fill: true,
-              tension: 0.3,
-            },
-          ],
-        },
-        options: copY,
-      }),
-      cats: cc({
-        type: 'line',
-        data: {
-          labels: meses12,
-          datasets: topCats.map((c, i) => ({
-            label: c,
-            data: catSeries[i],
-            borderColor: colsC[i],
-            backgroundColor: colsC[i] + '22',
-            tension: 0.3,
-          })),
-        },
-        options: copY,
-      }),
-      zona: cc({
-        type: 'bar',
-        data: {
-          labels: zonas,
-          datasets: [
-            { label: 'Ingresos', data: zData.map(x => x.ingresos), backgroundColor: CFG.otc + 'CC' },
-            { label: 'Costos', data: zData.map(x => x.costos), backgroundColor: CFG.err + 'CC' },
-            { label: 'Utilidad', data: zData.map(x => x.utilidad), backgroundColor: CFG.ok + 'CC' },
-          ],
-        },
-        options: copY,
-      }),
-      proy: cc({
-        type: 'bar',
-        data: {
-          labels: proys,
-          datasets: [
-            { label: 'Ingresos', data: pData.map(x => x.ingresos), backgroundColor: CFG.otc + 'CC' },
-            { label: 'Costos', data: pData.map(x => x.costos), backgroundColor: CFG.err + 'CC' },
-            { label: 'Utilidad', data: pData.map(x => x.utilidad), backgroundColor: CFG.ok + 'CC' },
-          ],
-        },
-        options: copY,
-      }),
-      treemap: cc({
-        type: 'bar',
-        data: {
-          labels: treeData.slice(0, 10).map(x => x.c),
-          datasets: [{ label: 'Costo', data: treeData.slice(0, 10).map(x => x.v), backgroundColor: tCols }],
-        },
-        options: copX,
-      }),
-      prov: cc({
-        type: 'bar',
-        data: {
-          labels: provTop.map(x => shortProv(x[0])),
-          datasets: [
-            { type: 'bar', label: 'Gasto', data: provTop.map(x => x[1]), backgroundColor: CFG.otc + 'CC', yAxisID: 'y' },
-            { type: 'line', label: '% Acumulado', data: acP, borderColor: CFG.warn, tension: 0.2, yAxisID: 'y1' },
-          ],
-        },
-        options: {
-          ...baseOpt,
-          plugins: {
-            ...baseOpt.plugins,
-            tooltip: {
-              callbacks: {
-                title: (items: { dataIndex: number }[]) => String(provTop[items[0].dataIndex][0]),
-                label: (c: { dataset: { type?: string }; parsed: { y: number } }) =>
-                  c.dataset.type === 'line'
-                    ? `% Acumulado: ${Number(c.parsed.y).toFixed(1)}%`
-                    : `Gasto: ${fmtCOP(Number(c.parsed.y))}`,
-              },
-            },
-          },
-          scales: {
-            y: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } },
-            y1: {
-              position: 'right',
-              max: 100,
-              ticks: { callback: (v: unknown) => Number(v).toFixed(0) + '%' },
-              grid: { display: false },
-            },
-          },
-        },
-      }),
-      desgPers: cc({
-        type: 'bar',
-        data: {
-          labels: persArr.map(x => String(x[0]).slice(0, 25)),
-          datasets: [{ label: 'Costo', data: persArr.map(x => x[1]), backgroundColor: CFG.otc + 'CC' }],
-        },
-        options: copX,
-      }),
-      depr: cc({
-        type: 'bar',
-        data: {
-          labels: dArr.map(x => String(x[0]).slice(0, 25)),
-          datasets: [{ label: 'Depreciación', data: dArr.map(x => x[1]), backgroundColor: CFG.warn + 'CC' }],
-        },
-        options: copX,
-      }),
-    };
-
-    // ---- Drivers ----
-    const drivers: ReactNode[] = [];
-    if (treeData.length) {
-      const t = treeData[0];
-      drivers.push(
-        <Driver key="d1" tipo="info" tipoLabel="💰 Estructura">
-          <b>{t.c}</b> representa el <b>{((t.v / totCos) * 100).toFixed(0)}%</b> del costo total.
-        </Driver>
-      );
-    }
-    const dCos = deltaPct(p.costos, pAnt.costos);
-    if (dCos !== null && Math.abs(dCos) >= 0.05) {
-      drivers.push(
-        <Driver key="d2" tipo={dCos < 0 ? 'pos' : 'neg'} tipoLabel="📊 Δ Costos">
-          Costos {dCos >= 0 ? 'crecieron' : 'bajaron'} <b>{(Math.abs(dCos) * 100).toFixed(1)}%</b> vs {mAnt}.
-        </Driver>
-      );
-    }
-    if (topProv && topProv[1] / totCos > 0.15) {
-      drivers.push(
-        <Driver key="d3" tipo="neg" tipoLabel="⚠️ Concentración">
-          <b>{topProv[0].slice(0, 50)}</b> concentra <b>{((topProv[1] / totCos) * 100).toFixed(0)}%</b> del gasto.
-        </Driver>
-      );
-    }
-    if (worstZ && worstZ.m !== null && worstZ.m < 0.1) {
-      drivers.push(
-        <Driver key="d4" tipo="neg" tipoLabel="📍 Zona">
-          Zona <b>{worstZ.z}</b> con margen del <b>{fmtPct(worstZ.m)}</b> — revisar costo operativo.
-        </Driver>
-      );
-    }
-
-    // ---- Oportunidades ----
-    const oport: ReactNode[] = [];
-    if (topProv && topProv[1] / totCos > 0.25) {
-      oport.push(
-        <div key="o1" className="oport">
-          <b>Proveedores:</b> Evaluar dependencia de {topProv[0].slice(0, 40)} (concentra{' '}
-          {((topProv[1] / totCos) * 100).toFixed(0)}%).
-        </div>
-      );
-    }
-    if (gPers / totCos > 0.65) {
-      oport.push(
-        <div key="o2" className="oport">
-          <b>Personal:</b> Estructura de gasto altamente dependiente de nómina ({((gPers / totCos) * 100).toFixed(0)}%) —
-          optimizar productividad por empleado.
-        </div>
-      );
-    }
-    if (worstZ && worstZ.m !== null && worstZ.m < 0.1) {
-      oport.push(
-        <div key="o3" className="oport">
-          <b>Zona:</b> Redistribuir esfuerzos hacia zonas más rentables o intervenir estructura de costos en {worstZ.z}.
-        </div>
-      );
-    }
-
-    // ---- Tablas ----
-    const provRows = provArr.slice(0, 20).map(([n, v]) => ({
-      n,
-      v,
-      pct: totCos ? (v / totCos) * 100 : 0,
-      cat: '—',
-    }));
-
-    const empMap: Record<string, { total: number; zonas: Set<string>; brig: string }> = {};
-    empsF.forEach(e => {
-      const k = e.Empleado || '—';
-      if (!empMap[k]) empMap[k] = { total: 0, zonas: new Set(), brig: e.EnBrigadas || '—' };
-      empMap[k].total += num(e.Valor_Total);
-      if (e.Zona) empMap[k].zonas.add(e.Zona);
-      if (e.EnBrigadas === 'Sí') empMap[k].brig = 'Sí';
-    });
-    const persRows = Object.entries(empMap)
-      .map(([n, v]) => ({ n, total: v.total, zonas: [...v.zonas].join(', ') || '—', brig: v.brig }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 20);
+    const winLbl = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
 
     return {
-      p, pAnt, acum,
-      gPers, nEmps, combusTot, mantTot, topProv, totCos,
-      charts, drivers, oport, provRows, persRows,
+      efect, metaEfec, eficiencia, cumplEfic,
+      ingreso, metaFact, cumplFact, perdidas,
+      dEfic, dFact, acumA: wA.ing, acumB: wB.ing,
+      selLbl: winLbl(selWin), prevLbl: winLbl(prevWin),
+      xlabels: meses12.map(m => m.slice(2)),
+      eficTrend: perMes.map(x => x.efic),
+      factTrend: perMes.map(x => x.ing),
+      periodoLabel: winLbl(selWin),
     };
   }, [raw, filters, mesList]);
 
-  if (loading) {
-    return (
-      <div className="loading-wrap">
-        <div className="spinner" />
-        <div>Cargando datos…</div>
-      </div>
-    );
-  }
+  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
-  if (!data) return null;
+  if (!d) return null;
 
-  const { p, pAnt, acum, gPers, nEmps, combusTot, mantTot, topProv, totCos, charts, drivers, oport, provRows, persRows } =
-    data;
+  const eyebrow = (c: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, letterSpacing: 1.6, textTransform: 'uppercase', color: c });
+  const dot = (c: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: c });
+  const bigNum: React.CSSProperties = { fontSize: 'clamp(40px, 5vw, 54px)', fontWeight: 700, letterSpacing: '-1.6px', color: INK, lineHeight: 1, fontVariantNumeric: 'tabular-nums' };
+  const kLabel: React.CSSProperties = { fontSize: 12.5, color: MUT, marginTop: 8, fontWeight: 500 };
+  const sepRow: React.CSSProperties = { borderTop: '1px solid #eef0f5', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' };
+  const secLbl: React.CSSProperties = { fontSize: 12, color: MUT, textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: 600 };
+  const secVal: React.CSSProperties = { fontSize: 22, fontWeight: 700, color: INK, fontVariantNumeric: 'tabular-nums' };
+  const chartCap: React.CSSProperties = { fontSize: 11, color: MUT, marginBottom: 4 };
+  const col = (accent: string): React.CSSProperties => ({ background: '#fff', borderRadius: 14, padding: '30px 30px 24px', borderTop: `3px solid ${accent}`, boxShadow: '0 1px 3px rgba(20,30,60,.05)', display: 'flex', flexDirection: 'column', gap: 22 });
 
   return (
     <>
-      <div className="section">
-        <h2>
-          💰 Rentabilidad y Costos <span className="tag-otc">OTC</span>
-        </h2>
-        <div className="sec-sub">Realidad financiera del proyecto — ingresos, costos y utilidad contables</div>
+      {/* Título */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 18px' }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>ESTRATÉGICO</div>
+          <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>Estado general del negocio</div>
+        </div>
+        <div style={{ fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
       </div>
 
-      {/* Indicadores Nivel 1 */}
-      <div className="section">
-        <h2>Indicadores Nivel 1</h2>
-        <div className="kpi-grid">
-          <KpiCard
-            cls="otc"
-            lbl="Utilidad Contable"
-            val={fmtCOP(p.utilidad)}
-            delta={deltaPct(p.utilidad, pAnt.utilidad)}
-            help="Ingresos − Costos del periodo."
-          />
-          <KpiCard
-            cls="otc"
-            lbl="Margen %"
-            val={fmtPct(p.margen)}
-            delta={p.margen !== null && pAnt.margen !== null ? deltaPct(p.margen, pAnt.margen) : null}
-            help="Utilidad / Ingresos."
-          />
-          <KpiCard cls="otc" lbl="Margen Acumulado" val={fmtPct(acum.margen)} help="Margen acumulado del año." />
-          <KpiCard
-            cls="otc"
-            lbl="Ingresos"
-            val={fmtCOP(p.ingresos)}
-            delta={deltaPct(p.ingresos, pAnt.ingresos)}
-            help="Ingresos contables del periodo."
-          />
+      {/* Dos columnas */}
+      <div className="grid-2" style={{ alignItems: 'stretch', gap: 16 }}>
+        {/* EFICIENCIA */}
+        <div style={col(TEAL)}>
+          <div style={eyebrow(TEAL)}><span style={dot(TEAL)} /> Eficiencia</div>
+          <div>
+            <div style={bigNum}>{d.eficiencia !== null ? fmtPct(d.eficiencia) : '—'}</div>
+            <div style={kLabel}>Órdenes efectivas sobre el total de visitas</div>
+          </div>
+          <div style={sepRow}>
+            <div style={secLbl}>% Cumplimiento de meta</div>
+            <div style={secVal}>{d.cumplEfic !== null ? fmtPct(d.cumplEfic) : '—'}</div>
+          </div>
+          <MetaReal meta={d.metaEfec} real={d.efect} color={TEAL} fmt={fmtN} />
+          <div>
+            <div style={chartCap}>Tendencia · eficiencia (12 meses)</div>
+            <Trend data={d.eficTrend} labels={d.xlabels} color={TEAL} fmt={(v) => v.toFixed(1) + '%'} />
+          </div>
+        </div>
+
+        {/* PRODUCTIVIDAD */}
+        <div style={col(INDIGO)}>
+          <div style={eyebrow(INDIGO)}><span style={dot(INDIGO)} /> Productividad</div>
+          <div>
+            <div style={bigNum}>{d.cumplFact !== null ? fmtPct(d.cumplFact) : '—'}</div>
+            <div style={kLabel}>Facturación real vs meta del periodo</div>
+          </div>
+          <div style={sepRow}>
+            <div style={secLbl}>Ingreso real</div>
+            <div style={secVal}>{fmtCOP(d.ingreso)}</div>
+          </div>
+          <MetaReal meta={d.metaFact} real={d.ingreso} color={INDIGO} fmt={fmtCOP} />
+          <div>
+            <div style={chartCap}>Tendencia · facturación real (12 meses)</div>
+            <Trend data={d.factTrend} labels={d.xlabels} color={INDIGO} fmt={fmtCOP} />
+          </div>
         </div>
       </div>
 
-      {/* Indicadores Nivel 2 */}
-      <div className="section">
-        <h2>Indicadores Nivel 2 — Costos Unitarios</h2>
-        <div className="kpi-grid">
-          <KpiCard
-            cls="otc"
-            lbl="Costo Personal / Empleado"
-            val={fmtCOP(gPers / nEmps)}
-            help={`Costo total de personal ${fmtCOP(gPers)} / ${nEmps} empleados.`}
-          />
-          <KpiCard cls="otc" lbl="Combustible (mes)" val={fmtCOP(combusTot)} help="Gasto en combustible del periodo." />
-          <KpiCard cls="otc" lbl="Mantenimiento (mes)" val={fmtCOP(mantTot)} help="Gasto en mantenimientos." />
-          <KpiCard
-            cls="otc"
-            lbl="Top Proveedor"
-            val={topProv ? fmtCOP(topProv[1]) : '—'}
-            help={topProv ? `${topProv[0]} representa ${((topProv[1] / totCos) * 100).toFixed(1)}% del gasto.` : ''}
-          />
+      {/* Franja inferior — resumen ejecutivo */}
+      <div className="grid-3" style={{ marginTop: 16, gap: 16 }}>
+        <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' }}>
+          <div style={secLbl}>Comparativo acumulado</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: INK }}>{fmtCOP(d.acumA)}</span>
+            <Delta d={d.dFact} />
+          </div>
+          <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>{d.selLbl} vs {d.prevLbl}</div>
         </div>
-      </div>
 
-      {/* Evolutivos */}
-      <div className="section">
-        <h2>📈 Evolutivos</h2>
-        <div className="grid-2">
-          <ChartCard id="v3-icu" title="Ingresos · Costos · Utilidad (12M)" config={charts.icu} />
-          <ChartCard id="v3-margen" title="Margen %" config={charts.margen} />
-          <ChartCard id="v3-personal" title="Costo Personal (12M)" config={charts.personal} />
-          <ChartCard id="v3-cats" title="Costos por categoría (12M)" config={charts.cats} />
+        <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' }}>
+          <div style={secLbl}>Facturación real</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: INK, marginTop: 8 }}>{fmtCOP(d.ingreso)}</div>
+          <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>Valor real facturado del periodo</div>
         </div>
-      </div>
 
-      {/* Comparativos */}
-      <div className="section">
-        <h2>⚖️ Comparativos</h2>
-        <div className="grid-2">
-          <ChartCard id="v3-zona" title="Rentabilidad por Zona" config={charts.zona} />
-          <ChartCard id="v3-proy" title="Rentabilidad por Proyecto" config={charts.proy} />
+        <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' }}>
+          <div style={secLbl}>Descuentos / pérdidas</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: d.perdidas > 0 ? '#C62828' : INK, marginTop: 8 }}>{fmtCOP(d.perdidas)}</div>
+          <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>Valor no reconocido (Perdidas_COP)</div>
         </div>
-      </div>
-
-      {/* Distribuciones */}
-      <div className="section">
-        <h2>📊 Distribuciones</h2>
-        <div className="grid-2">
-          <ChartCard
-            id="v3-treemap"
-            title="Estructura de Costos"
-            subtitle="Por categoría — top 10"
-            config={charts.treemap}
-            height="tall"
-          />
-          <ChartCard id="v3-prov" title="Pareto de Proveedores" config={charts.prov} height="tall" />
-          <ChartCard id="v3-desg-pers" title="Desglose Costo Personal" config={charts.desgPers} />
-          <ChartCard id="v3-depr" title="Depreciación de Activos (Top 10)" config={charts.depr} />
-        </div>
-      </div>
-
-      {/* Drivers */}
-      <div className="section">
-        <h2>🔎 Drivers de Rentabilidad</h2>
-        {drivers.length ? drivers : <div className="driver">Sin drivers destacados en el periodo.</div>}
-      </div>
-
-      {/* Oportunidades */}
-      <div className="section">
-        <h2>💡 Oportunidades de Optimización</h2>
-        {oport.length ? oport : <div className="oport">Estructura de costos dentro de parámetros aceptables.</div>}
-      </div>
-
-      {/* Detalle Proveedores */}
-      <div className="section">
-        <h2>📋 Detalle de Proveedores (Top 20)</h2>
-        <SortableTable
-          id="tabla-prov"
-          data={provRows}
-          defaultSort="v"
-          defaultDir="desc"
-          searchPlaceholder="Buscar proveedor…"
-          searchKeys={['n']}
-          columns={[
-            { key: 'n', label: 'Proveedor', render: v => String(v).slice(0, 50) },
-            { key: 'v', label: 'Gasto', type: 'num', render: v => fmtCOP(Number(v)) },
-            { key: 'pct', label: '% del total', type: 'num', render: v => Number(v).toFixed(1) + '%' },
-            { key: 'cat', label: 'Categoría' },
-          ]}
-        />
-      </div>
-
-      {/* Detalle Personal */}
-      <div className="section">
-        <h2>📋 Detalle de Personal (Top 20)</h2>
-        <SortableTable
-          id="tabla-pers"
-          data={persRows}
-          defaultSort="total"
-          defaultDir="desc"
-          searchPlaceholder="Buscar empleado o zona…"
-          searchKeys={['n', 'zonas']}
-          columns={[
-            { key: 'n', label: 'Empleado' },
-            { key: 'total', label: 'Costo', type: 'num', render: v => fmtCOP(Number(v)) },
-            { key: 'brig', label: 'En Brigadas' },
-            { key: 'zonas', label: 'Zona' },
-          ]}
-        />
       </div>
     </>
   );
