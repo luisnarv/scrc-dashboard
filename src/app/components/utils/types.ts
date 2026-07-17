@@ -82,7 +82,7 @@ export interface RawData {
 export interface Filters {
   proy: string;
   zona: string;
-  mes: string;
+  mes: string[];
   fecha: string;
 }
 

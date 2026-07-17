@@ -19,7 +19,7 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue>({
   raw: null,
-  filters: { proy: 'ALL', zona: 'ALL', mes: 'ALL', fecha: 'ALL' },
+  filters: { proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' },
   setFilters: () => {},
   mesList: [],
   proyList: [],
@@ -69,7 +69,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [raw, setRaw] = useState<RawData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: 'ALL', fecha: 'ALL' });
+  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' });
   const [mesList, setMesList] = useState<string[]>([]);
   const [proyList, setProyList] = useState<string[]>([]);
   const [zonaList, setZonaList] = useState<string[]>([]);
@@ -147,7 +147,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       // Default: último mes preseleccionado (como casilla marcada)
       const mesDef = meses[meses.length - 1];
-      const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef || 'ALL' , fecha: 'ALL' };
+      const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef ? [mesDef] : [] , fecha: 'ALL' };
       setFiltersState(newFilters);
 
       // Fechas para el mes por defecto
