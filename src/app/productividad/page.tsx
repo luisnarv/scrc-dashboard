@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw } from '../components/utils/filters';
-import { fmtCOP, fmtPct, fmtN } from '../components/utils/formatters';
-import SortableTable from '../components/SortableTable';
+import { fmtPct, fmtN } from '../components/utils/formatters';
+import BrigadasDetalleModal from './BrigadasDetalleModal';
 
 const TEAL = '#00897B';
 const INDIGO = '#3949AB';
@@ -40,8 +40,7 @@ function sem(v: number, good: number, warn: number) { return v >= good ? OK : v 
 
 export default function OperativaPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
-  const [view, setView] = useState<'main' | 'detalle'>('main');
-  const [tab, setTab] = useState<'brigadas' | 'tecnicos'>('brigadas');
+  const [modalOpen, setModalOpen] = useState(false);
 
   const d = useMemo(() => {
     if (!raw) return null;
@@ -150,61 +149,6 @@ export default function OperativaPage() {
     );
   };
 
-  // ---- DETALLE ----
-  if (view === 'detalle') {
-    return (
-      <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 14px' }}>
-          <div>
-            <button onClick={() => setView('main')} style={{ background: 'none', border: 'none', color: TEAL, fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>← Volver al resumen</button>
-            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK, marginTop: 4 }}>DETALLE OPERATIVO</div>
-          </div>
-          <div style={{ fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, margin: '0 2px 14px' }}>
-          {(['brigadas', 'tecnicos'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${tab === t ? TEAL : '#dfe3ec'}`, background: tab === t ? TEAL : '#fff', color: tab === t ? '#fff' : INK, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              {t === 'brigadas' ? 'Por brigadas' : 'Por técnicos'}
-            </button>
-          ))}
-        </div>
-
-        <div style={card}>
-          {tab === 'brigadas' ? (
-            <SortableTable id="det-brig" data={d.brigadaRows} defaultSort="ingreso" defaultDir="desc"
-              searchPlaceholder="Buscar brigada, técnico o zona…" searchKeys={['brigada', 'tecnico', 'zona']}
-              columns={[
-                { key: 'brigada', label: 'Brigada' },
-                { key: 'zona', label: 'Zona' },
-                { key: 'tecnico', label: 'Técnico responsable' },
-                { key: 'asignadas', label: 'Asignadas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'ejecutadas', label: 'Ejecutadas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'fallidas', label: 'Fallidas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'ingreso', label: 'Ingreso', type: 'num', render: v => fmtCOP(Number(v)) },
-                { key: 'productividad', label: 'Prod. (ef/día)', type: 'num', render: v => Number(v).toFixed(1) },
-                { key: 'efectividad', label: 'Efectividad', type: 'num', render: v => fmtPct(Number(v)) },
-              ]} />
-          ) : (
-            <SortableTable id="det-tec" data={d.tecnicoRows} defaultSort="ejecutadas" defaultDir="desc"
-              searchPlaceholder="Buscar técnico o brigada…" searchKeys={['tecnico', 'brigada']}
-              columns={[
-                { key: 'tecnico', label: 'Técnico' },
-                { key: 'brigada', label: 'Brigada' },
-                { key: 'asignadas', label: 'Asignadas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'ejecutadas', label: 'Ejecutadas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'fallidas', label: 'Fallidas', type: 'num', render: v => fmtN(Number(v)) },
-                { key: 'horas', label: 'Horas/día', type: 'num', render: v => Number(v).toFixed(1) + ' h' },
-                { key: 'productividad', label: 'Prod. (ef/día)', type: 'num', render: v => Number(v).toFixed(1) },
-                { key: 'efectividad', label: 'Efectividad', type: 'num', render: v => fmtPct(Number(v)) },
-              ]} />
-          )}
-        </div>
-      </>
-    );
-  }
-
   // ---- VISTA PRINCIPAL ----
   const nivelCfg = {
     ok: { c: OK, t: 'La operación está en línea', s: 'Sin desviaciones que requieran atención inmediata.' },
@@ -220,7 +164,7 @@ export default function OperativaPage() {
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVA</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
-        <button onClick={() => setView('detalle')}
+        <button onClick={() => setModalOpen(true)}
           style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)' }}>
           Ver Detalle Operativo →
         </button>
@@ -292,6 +236,7 @@ export default function OperativaPage() {
           <div style={kSub}>{fmtN(d.visitas)} ejecutadas de {fmtN(d.asignado)} asignadas</div>
         </div>
       </div>
+      {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
     </>
   );
 }
