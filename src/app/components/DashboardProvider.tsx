@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import Papa from 'papaparse';
+
 import type { RawData, RawRecord, CostoRecord, EmpleadoRecord, OrdenDetalle, Filters } from './utils/types';
 import { normProy, normZonaDet } from './utils/filters';
 
@@ -33,25 +33,7 @@ export function useDashboard() {
   return useContext(DashboardContext);
 }
 
-function parseCSV<T>(text: string): T[] {
-  if (!text || !text.trim()) return [];
-  const result = Papa.parse<T>(text.trim(), {
-    header: true,
-    dynamicTyping: true,
-    skipEmptyLines: true,
-  });
-  return result.data;
-}
 
-async function loadCSV(url: string): Promise<string> {
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return '';
-    return r.text();
-  } catch {
-    return '';
-  }
-}
 
 const PROYS_VAL = ['Norte-Centro', 'Sur'];
 
@@ -80,87 +62,72 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    Promise.all([
-      loadCSV('/api/data/dashboard_raw_records.csv'),
-      loadCSV('/api/data/dashboard_costos.csv'),
-      loadCSV('/api/data/dashboard_costos_empleado.csv'),
-      loadCSV('/api/data/dashboard_ordenes_detalle.csv'),
-    ]).then(([r, c, e, d]) => {
-      if (!r) {
-        setError('No se encontraron los archivos CSV. Verifique public/data/');
+    fetch('/api/data/base')
+      .then(res => {
+        if (!res.ok) throw new Error('Error de conexión a la Base de Datos PostgreSQL');
+        return res.json();
+      })
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        const { rawRecords, costos, emps } = data;
+        const det: OrdenDetalle[] = []; // No se carga completo por volumen, se solicitará on-demand
+
+        // Normalize zones ya se hizo parcialmente en el backend, 
+        // pero repasamos para consistencia con el código existente
+        rawRecords.forEach((rec: RawRecord) => {
+          const p = normProy(rec.Zona);
+          const z = normZonaDet(rec.Zona);
+          if (p) rec._Proyecto = p;
+          rec._Zona = z || p || undefined;
+          const dz = normZonaDet(rec.Zona_Detalle || rec.Zona);
+          rec._ZonaDet = dz || rec._Zona;
+        });
+        costos.forEach((rec: CostoRecord) => {
+          const p = normProy(rec.Zona) || normProy(rec.Proyecto);
+          const z = normZonaDet(rec.Zona) || normZonaDet(rec.Proyecto);
+          if (p) rec._Proyecto = p;
+          rec._Zona = z || p || undefined;
+          rec._ZonaDet = rec._Zona;
+        });
+
+        const rawData: RawData = { raw: rawRecords, costos, emps, det };
+        setRaw(rawData);
+
+        // Build filters
+        const proys = PROYS_VAL.filter(
+          p => rawRecords.some((r: RawRecord) => r._Proyecto === p) || costos.some((r: CostoRecord) => r._Proyecto === p)
+        );
+        setProyList(proys);
+
+        const mRawC: Record<string, number> = {};
+        const mCosC: Record<string, number> = {};
+        rawRecords.forEach((r: RawRecord) => {
+          const m = String(r.Fecha || '').slice(0, 7);
+          if (m) mRawC[m] = (mRawC[m] || 0) + 1;
+        });
+        costos.forEach((r: CostoRecord) => {
+          if (r.Mes) mCosC[String(r.Mes)] = (mCosC[String(r.Mes)] || 0) + 1;
+        });
+        const mR = new Set(mesesValidos(mRawC));
+        const mC = new Set(mesesValidos(mCosC));
+        const meses = [...new Set([...mR, ...mC])].sort();
+        setMesList(meses);
+
+        const mesDef = meses[meses.length - 1];
+        const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef ? [mesDef] : [] , fecha: 'ALL' };
+        setFiltersState(newFilters);
+
+        const fechas = [...new Set(
+          rawRecords.filter((r: RawRecord) => !mesDef || String(r.Fecha || '').startsWith(mesDef)).map((r: RawRecord) => r.Fecha)
+        )].filter((x): x is string => !!x).sort();
+        setFechaList(fechas);
+
         setLoading(false);
-        return;
-      }
-
-      const rawRecords = parseCSV<RawRecord>(r).filter(x => x && x.Fecha);
-      const costos = parseCSV<CostoRecord>(c).filter(x => x && x.Proyecto && x.Mes);
-      const emps = parseCSV<EmpleadoRecord>(e).filter(x => x && x.Empleado);
-      const det = parseCSV<OrdenDetalle>(d).filter(x => x && x.Orden);
-
-      // Normalize zones
-      rawRecords.forEach(rec => {
-        const p = normProy(rec.Zona);
-        const z = normZonaDet(rec.Zona);
-        if (p) rec._Proyecto = p;
-        rec._Zona = z || p || undefined;
-        const dz = normZonaDet(rec.Zona_Detalle || rec.Zona);
-        rec._ZonaDet = dz || rec._Zona;
+      })
+      .catch(err => {
+        setError(String(err));
+        setLoading(false);
       });
-      costos.forEach(rec => {
-        const p = normProy(rec.Zona) || normProy(rec.Proyecto);
-        const z = normZonaDet(rec.Zona) || normZonaDet(rec.Proyecto);
-        if (p) rec._Proyecto = p;
-        rec._Zona = z || p || undefined;
-        rec._ZonaDet = rec._Zona;
-      });
-      det.forEach(rec => {
-        const p = normProy(rec.Zona);
-        const z = normZonaDet(rec.Zona);
-        if (p) rec._Proyecto = p;
-        rec._Zona = z || p || undefined;
-        const dz = normZonaDet(rec.Zona);
-        rec._ZonaDet = dz || rec._Zona;
-      });
-
-      const data: RawData = { raw: rawRecords, costos, emps, det };
-      setRaw(data);
-
-      // Build filters
-      const proys = PROYS_VAL.filter(
-        p => rawRecords.some(r => r._Proyecto === p) || costos.some(r => r._Proyecto === p)
-      );
-      setProyList(proys);
-
-      const mRawC: Record<string, number> = {};
-      const mCosC: Record<string, number> = {};
-      rawRecords.forEach(r => {
-        const m = String(r.Fecha || '').slice(0, 7);
-        if (m) mRawC[m] = (mRawC[m] || 0) + 1;
-      });
-      costos.forEach(r => {
-        if (r.Mes) mCosC[String(r.Mes)] = (mCosC[String(r.Mes)] || 0) + 1;
-      });
-      const mR = new Set(mesesValidos(mRawC));
-      const mC = new Set(mesesValidos(mCosC));
-      const meses = [...new Set([...mR, ...mC])].sort();
-      setMesList(meses);
-
-      // Default: último mes preseleccionado (como casilla marcada)
-      const mesDef = meses[meses.length - 1];
-      const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef ? [mesDef] : [] , fecha: 'ALL' };
-      setFiltersState(newFilters);
-
-      // Fechas para el mes por defecto
-      const fechas = [...new Set(
-        rawRecords.filter(r => !mesDef || String(r.Fecha || '').startsWith(mesDef)).map(r => r.Fecha)
-      )].filter((x): x is string => !!x).sort();
-      setFechaList(fechas);
-
-      setLoading(false);
-    }).catch(err => {
-      setError(String(err));
-      setLoading(false);
-    });
   }, []);
 
   // Actualiza zona list cuando cambia proyecto o raw
