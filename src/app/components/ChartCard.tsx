@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChartConfiguration } from 'chart.js';
+import AnalysisModal from './AnalysisModal';
 
 interface ChartCardProps {
   id: string;
@@ -9,9 +10,16 @@ interface ChartCardProps {
   config: ChartConfiguration | null;
   height?: 'normal' | 'tall' | 'short';
   headerExtra?: React.ReactNode;
+  hasDetail?: boolean;
+  detailTableData?: {
+    columns: string[];
+    rows: (string | number | null | undefined)[][];
+  };
+  detailActiveFilters?: { label: string; value: string }[];
 }
 
-export default function ChartCard({ id, title, subtitle, config, height = 'normal', headerExtra }: ChartCardProps) {
+export default function ChartCard({ id, title, subtitle, config, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters }: ChartCardProps) {
+  const [modalOpen, setModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
 
@@ -34,15 +42,39 @@ export default function ChartCard({ id, title, subtitle, config, height = 'norma
   const boxCls = `chart-box${height === 'tall' ? ' tall' : height === 'short' ? ' short' : ''}`;
 
   return (
-    <div className="card">
-      <div className="ch-title">
-        {title}
-        {headerExtra}
+    <>
+      <div className="card">
+        <div className="ch-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+            {title}
+            {headerExtra}
+          </div>
+          {hasDetail && (
+            <button
+              onClick={() => setModalOpen(true)}
+              style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: '#f5f7fa', color: '#5d6785', border: '1px solid #e2e8f0', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              ⤢ Expandir
+            </button>
+          )}
+        </div>
+        {subtitle && <div className="ch-sub">{subtitle}</div>}
+        <div className={boxCls}>
+          <canvas ref={canvasRef} id={id} />
+        </div>
       </div>
-      {subtitle && <div className="ch-sub">{subtitle}</div>}
-      <div className={boxCls}>
-        <canvas ref={canvasRef} id={id} />
-      </div>
-    </div>
+
+      {hasDetail && modalOpen && (
+        <AnalysisModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title={title}
+          description={subtitle}
+          config={config}
+          tableData={detailTableData}
+          activeFilters={detailActiveFilters}
+        />
+      )}
+    </>
   );
 }

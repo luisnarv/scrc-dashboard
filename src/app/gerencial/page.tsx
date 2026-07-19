@@ -5,6 +5,7 @@ import type { ChartConfiguration } from 'chart.js';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw, ventanaPrevia } from '../components/utils/filters';
 import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
+import ChartCard from '../components/ChartCard';
 
 const TEAL = '#00897B';
 const INDIGO = '#3949AB';
@@ -72,7 +73,9 @@ function Delta({ d }: { d: number | null }) {
   return <span style={{ fontSize: 13, fontWeight: 700, color }}>{arrow} {(Math.abs(d) * 100).toFixed(1)}%</span>;
 }
 
-export default function RentabilidadPage() {
+
+
+export default function GerencialPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
 
   const d = useMemo(() => {
@@ -86,13 +89,27 @@ export default function RentabilidadPage() {
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
     const visitas = rawF.reduce((s, r) => s + n(r.Visitas), 0);
     const metaEfec = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
-    const ingreso = rawF.reduce((s, r) => s + n(r.Ingresos), 0);          // facturación real (Fact_Ajustada) · TODO(base)
-    const metaFact = rawF.reduce((s, r) => s + n(r.Valores_Iniciales), 0); // meta de facturación en $
+    const ingreso = rawF.reduce((s, r) => s + n(r.Ingresos), 0);
+    const metaFact = rawF.reduce((s, r) => s + n(r.Meta_Facturacion), 0);
     const perdidas = rawF.reduce((s, r) => s + n(r.Perdidas_COP), 0);
 
     const eficiencia = visitas ? efect / visitas : null;
     const cumplEfic = metaEfec ? efect / metaEfec : null;
     const cumplFact = metaFact ? ingreso / metaFact : null;
+
+    // Unit Economics (Productividad y Costo por Brigada)
+    const tmap: Record<string, { b: Set<unknown>; ing: number; co: number; ef: number }> = {};
+    rawF.forEach(r => {
+      const t = String(r.Tipo_Brigada_Operaciones || 'Sin tipo');
+      if (!tmap[t]) tmap[t] = { b: new Set(), ing: 0, co: 0, ef: 0 };
+      tmap[t].b.add(r.Cedula);
+      tmap[t].ing += n(r.Ingresos);
+      tmap[t].co += n(r.Costo_Operativo);
+      tmap[t].ef += n(r.Efectivas);
+    });
+    const tipoRows = Object.entries(tmap)
+      .map(([tipo, v]) => { const nb = v.b.size; return { tipo, brigadas: nb, ingreso: v.ing, ingXbrig: nb ? v.ing / nb : 0, costXbrig: nb ? v.co / nb : 0 }; })
+      .sort((a, b) => b.ingreso - a.ingreso);
 
     // Ventanas para comparativo/deltas
     const meses12 = mesList.slice(-12);
@@ -131,6 +148,7 @@ export default function RentabilidadPage() {
       eficTrend: perMes.map(x => x.efic),
       factTrend: perMes.map(x => x.ing),
       periodoLabel: winLbl(selWin),
+      tipoRows,
     };
   }, [raw, filters, mesList]);
 
@@ -148,13 +166,36 @@ export default function RentabilidadPage() {
   const chartCap: React.CSSProperties = { fontSize: 11, color: MUT, marginBottom: 4 };
   const col = (accent: string): React.CSSProperties => ({ background: '#fff', borderRadius: 14, padding: '30px 30px 24px', borderTop: `3px solid ${accent}`, boxShadow: '0 1px 3px rgba(20,30,60,.05)', display: 'flex', flexDirection: 'column', gap: 22 });
 
+
+  // Configuración del gráfico de Drivers
+  const tipoCfg = {
+    type: 'bar' as const,
+    data: {
+      labels: d.tipoRows.map(r => r.tipo),
+      datasets: [
+        { label: 'Ingreso Promedio / Brig', data: d.tipoRows.map(r => r.ingXbrig), backgroundColor: INDIGO + 'CC' },
+        { label: 'Costo Promedio / Brig', data: d.tipoRows.map(r => r.costXbrig), backgroundColor: '#C62828CC' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' as const } },
+      scales: { y: { ticks: { callback: (v: unknown) => fmtCOP(Number(v)) } } }
+    }
+  };
+
+  const tipoTableData = {
+    columns: ['Tipo de brigada', '# Brigadas', 'Ingreso Total', 'Ingreso / Brig', 'Costo / Brig'],
+    rows: d.tipoRows.map(r => [r.tipo, fmtN(r.brigadas), fmtCOP(r.ingreso), fmtCOP(r.ingXbrig), fmtCOP(r.costXbrig)])
+  };
+
   return (
     <>
       {/* Título */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 18px' }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>ESTRATÉGICO</div>
-          <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>Estado general del negocio</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>GERENCIAL</div>
+          <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>Explicación de los drivers del negocio y rentabilidad</div>
         </div>
         <div style={{ fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
       </div>
@@ -163,7 +204,7 @@ export default function RentabilidadPage() {
       <div className="grid-2" style={{ alignItems: 'stretch', gap: 16 }}>
         {/* EFICIENCIA */}
         <div style={col(TEAL)}>
-          <div style={eyebrow(TEAL)}><span style={dot(TEAL)} /> Eficiencia</div>
+          <div style={eyebrow(TEAL)}><span style={dot(TEAL)} /> Eficiencia y Operación</div>
           <div>
             <div style={bigNum}>{d.eficiencia !== null ? fmtPct(d.eficiencia) : '—'}</div>
             <div style={kLabel}>Órdenes efectivas sobre el total de visitas</div>
@@ -181,7 +222,7 @@ export default function RentabilidadPage() {
 
         {/* PRODUCTIVIDAD */}
         <div style={col(INDIGO)}>
-          <div style={eyebrow(INDIGO)}><span style={dot(INDIGO)} /> Productividad</div>
+          <div style={eyebrow(INDIGO)}><span style={dot(INDIGO)} /> Financiero (P&L)</div>
           <div>
             <div style={bigNum}>{d.cumplFact !== null ? fmtPct(d.cumplFact) : '—'}</div>
             <div style={kLabel}>Facturación real vs meta del periodo</div>
@@ -219,6 +260,22 @@ export default function RentabilidadPage() {
           <div style={secLbl}>Descuentos / pérdidas</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: d.perdidas > 0 ? '#C62828' : INK, marginTop: 8 }}>{fmtCOP(d.perdidas)}</div>
           <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>Valor no reconocido (Perdidas_COP)</div>
+        </div>
+      </div>
+
+      {/* Productividad por tipo de brigada (Unit Economics) convertido a Gráfico */}
+      <div className="section" style={{ marginTop: 24 }}>
+        <h2>⚙️ Drivers de Producción (Unit Economics)</h2>
+        <div style={{ height: 400 }}>
+          <ChartCard 
+            id="r-tipos" 
+            title="Ingreso vs Costo Promedio por Tipo de Brigada" 
+            subtitle="Análisis de rentabilidad unitaria por perfil de cuadrilla"
+            config={tipoCfg as never} 
+            height="tall" 
+            hasDetail 
+            detailTableData={tipoTableData} 
+          />
         </div>
       </div>
     </>

@@ -6,10 +6,7 @@ import { filtRaw, filtCos, ventanaPrevia } from '../components/utils/filters';
 import { otcAgg, otcAggMes, mesAnterior } from '../components/utils/aggregators';
 import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
 import { calcHealth } from '../components/utils/health';
-import KpiCard from '../components/KpiCard';
 import ChartCard from '../components/ChartCard';
-import HealthScore from '../components/HealthScore';
-import SortableTable from '../components/SortableTable';
 
 const CFG = { ok: '#2E7D32', warn: '#F57C00', err: '#C62828', otc: '#3949AB', sip: '#00897B', neu: '#5d6785' };
 
@@ -111,7 +108,43 @@ export default function ResumenPage() {
       const co = rr.reduce((s, x) => s + num(x.Costo_Operativo), 0);
       const me = rr.reduce((s, x) => s + num(x.Asignacion), 0);
       const nb = new Set(rr.map(x => x.Cedula)).size;
-      return { efic: vi ? (ef / vi) * 100 : 0, cumpProd: me ? (ef / me) * 100 : 0, ingXbrig: nb ? ing / nb : 0, costXbrig: nb ? co / nb : 0, brig: nb };
+      return { 
+        mes: m, ef, vi, ing, co, me, brig: nb,
+        efic: vi ? (ef / vi) * 100 : 0, 
+        cumpProd: me ? (ef / me) * 100 : 0, 
+        ingXbrig: nb ? ing / nb : 0, 
+        costXbrig: nb ? co / nb : 0 
+      };
+    });
+
+    const efMesPorTipo = meses12.flatMap(m => {
+      const rr = raw.raw.filter(x => String(x.Fecha || '').startsWith(m) && filtBase(x));
+      const tmap: Record<string, { ef: number; vi: number; ing: number; co: number; me: number; b: Set<unknown>; tecs: Record<string, { nombre: string; ef: number; vi: number; ing: number; co: number; me: number; }> }> = {};
+      rr.forEach(r => {
+        const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || r['Tipo de cuadrilla '] || 'Sin tipo').trim();
+        if (!tmap[t]) tmap[t] = { ef:0, vi:0, ing:0, co:0, me:0, b: new Set(), tecs: {} };
+        const ced = String(r.Cedula || '');
+        if (!tmap[t].tecs[ced]) tmap[t].tecs[ced] = { nombre: String(r.Nombre || r.Cedula || ''), ef:0, vi:0, ing:0, co:0, me:0 };
+        
+        const e = num(r.Efectivas), v = num(r.Visitas), i = num(r.Ingresos), c = num(r.Costo_Operativo), a = num(r.Asignacion);
+        tmap[t].ef += e; tmap[t].vi += v; tmap[t].ing += i; tmap[t].co += c; tmap[t].me += a;
+        tmap[t].b.add(ced);
+        
+        const tec = tmap[t].tecs[ced];
+        tec.ef += e; tec.vi += v; tec.ing += i; tec.co += c; tec.me += a;
+      });
+      return Object.entries(tmap).map(([tipo, v]) => {
+        const nb = v.b.size;
+        return {
+          mes: m, tipo,
+          ef: v.ef, vi: v.vi, ing: v.ing, co: v.co, me: v.me, brig: nb,
+          efic: v.vi ? (v.ef / v.vi) * 100 : 0,
+          cumpProd: v.me ? (v.ef / v.me) * 100 : 0,
+          ingXbrig: nb ? v.ing / nb : 0,
+          costXbrig: nb ? v.co / nb : 0,
+          tecnicos: Object.values(v.tecs).sort((a, b) => b.ing - a.ing)
+        };
+      }).sort((a, b) => b.ing - a.ing);
     });
 
     // Acumulado dinámico: ventana seleccionada vs previa equivalente
@@ -151,7 +184,7 @@ export default function ResumenPage() {
       health, narrativa,
       ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas: pSIP.efectivas,
       ingXbrig, costoXbrig, ingElec,
-      meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
+      meses12, efMes, efMesPorTipo, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
     };
   }, [raw, filters, mesList]);
 
@@ -161,7 +194,7 @@ export default function ResumenPage() {
 
   const {
     health, narrativa, ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas,
-    ingElec, meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
+    ingElec, meses12, efMes, efMesPorTipo, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
   } = data;
 
   // ---- Configs de gráficos (evolutivos) ----
@@ -189,65 +222,73 @@ export default function ResumenPage() {
     { lbl: 'Brigadas', a: winA.brig, b: winB.brig, fmt: fmtN },
   ];
 
+  const eficTable = {
+    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Efectivas', 'Visitas', 'Eficiencia'],
+    rows: [],
+    hierarchicalRows: efMesPorTipo.map(x => ({
+      row: [x.mes, x.tipo, fmtN(x.ef), fmtN(x.vi), x.efic.toFixed(1) + '%'],
+      children: x.tecnicos.map(t => ({
+        row: [x.mes, t.nombre, fmtN(t.ef), fmtN(t.vi), (t.vi ? (t.ef / t.vi) * 100 : 0).toFixed(1) + '%']
+      }))
+    }))
+  };
+  
+  const cumpTable = {
+    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Efectivas', 'Meta (Asignación)', 'Cumplimiento'],
+    rows: [],
+    hierarchicalRows: efMesPorTipo.map(x => ({
+      row: [x.mes, x.tipo, fmtN(x.ef), fmtN(x.me), x.cumpProd.toFixed(1) + '%'],
+      children: x.tecnicos.map(t => ({
+        row: [x.mes, t.nombre, fmtN(t.ef), fmtN(t.me), (t.me ? (t.ef / t.me) * 100 : 0).toFixed(1) + '%']
+      }))
+    }))
+  };
+
+  const ingBrigTable = {
+    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Ingreso', 'Brigadas (Días)', 'Ingreso Promedio'],
+    rows: [],
+    hierarchicalRows: efMesPorTipo.map(x => ({
+      row: [x.mes, x.tipo, fmtCOP(x.ing), fmtN(x.brig), fmtCOP(x.ingXbrig)],
+      children: x.tecnicos.map(t => ({
+        row: [x.mes, t.nombre, fmtCOP(t.ing), 1, fmtCOP(t.ing)] // Para un técnico, el promedio es su ingreso
+      }))
+    }))
+  };
+
+  const costBrigTable = {
+    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Costo Operativo', 'Brigadas (Días)', 'Costo Promedio'],
+    rows: [],
+    hierarchicalRows: efMesPorTipo.map(x => ({
+      row: [x.mes, x.tipo, fmtCOP(x.co), fmtN(x.brig), fmtCOP(x.costXbrig)],
+      children: x.tecnicos.map(t => ({
+        row: [x.mes, t.nombre, fmtCOP(t.co), 1, fmtCOP(t.co)]
+      }))
+    }))
+  };
+
   return (
     <>
-      {/* Health Score (se conserva) */}
-      <HealthScore h={health} />
-
-      {/* Narrativa (se conserva) */}
-      <div className="section">
-        <h2>📅 Resumen Ejecutivo</h2>
-        <div className="sec-sub">Narrativa automática · se recalcula con los filtros</div>
-        <div className="narrativa">
-          <div className="titulo">Análisis del Periodo</div>
-          <div className="cuerpo">{narrativa}</div>
-        </div>
+      <div className="section" style={{ marginBottom: 24 }}>
+        <h2>📈 Estratégico · Evolutivos y Comparativos</h2>
+        <div className="sec-sub">Tendencias de los últimos 12 meses y comparativos acumulados</div>
       </div>
 
-      {/* ===== 2 COLUMNAS ===== */}
       <div className="grid-2" style={{ alignItems: 'start' }}>
-
-        {/* ---------- IZQUIERDA: Estratégico / Evolutivos ---------- */}
+        {/* ---------- IZQUIERDA: Evolutivos ---------- */}
         <div>
           <div className="section">
-            <h2>📈 Estratégico · Evolutivos <span className="tag-sip">SIPREM</span></h2>
-            <div className="sec-sub">Tendencias de los últimos 12 meses</div>
+            <h2>Evolutivos <span className="tag-sip">SIPREM / OTC</span></h2>
             <div style={{ display: 'grid', gap: 10 }}>
-              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} height="short" />
-              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs meta (Asignacion)" config={cumpProdCfg as never} height="short" />
-              <ChartCard id="r-ingbrig" title="Ingreso promedio por brigada" config={ingBrigCfg as never} height="short" />
-              <ChartCard id="r-costbrig" title="Costo por brigada" config={costBrigCfg as never} height="short" />
-              <ChartCard id="r-brig" title="Brigadas por mes" config={brigCfg as never} height="short" />
+              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} height="short" hasDetail detailTableData={eficTable} />
+              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs meta (Asignacion)" config={cumpProdCfg as never} height="short" hasDetail detailTableData={cumpTable} />
+              <ChartCard id="r-ingbrig" title="Ingreso promedio por brigada" config={ingBrigCfg as never} height="short" hasDetail detailTableData={ingBrigTable} />
+              <ChartCard id="r-costbrig" title="Costo por brigada" config={costBrigCfg as never} height="short" hasDetail detailTableData={costBrigTable} />
             </div>
           </div>
         </div>
 
-        {/* ---------- DERECHA: Operativo / Resultados del periodo ---------- */}
+        {/* ---------- DERECHA: Comparativos ---------- */}
         <div>
-          {/* KPIs del periodo */}
-          <div className="section">
-            <h2>🎯 Indicadores Clave del Periodo</h2>
-            <div className="sec-sub">Ventana seleccionada: {winLabel(selWin)}</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Ingreso Real" val={fmtCOP(ingresoReal)} help="Ingreso real SIPREM. Pendiente de recálculo en la base." />
-              <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '—'} help="Efectivas / Visitas." />
-              <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." />
-              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '—'} help="Efectivas / Meta (Asignacion)." />
-            </div>
-          </div>
-
-          {/* Metas */}
-          <div className="section">
-            <h2>🎯 Metas de Producción</h2>
-            <div className="sec-sub">Meta de efectivas (Asignacion) vs ejecución real</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Meta (efectivas)" val={fmtN(metaEfec)} help="Suma de Asignacion (meta de efectivas del periodo)." />
-              <KpiCard cls="sip" lbl="Real (efectivas)" val={fmtN(efectivas)} help="Efectivas ejecutadas." />
-              <KpiCard cls="sip" lbl="% Cumplimiento" val={cumpProd !== null ? fmtPct(cumpProd) : '—'} help="Real / Meta." />
-            </div>
-          </div>
-
-          {/* Comparativos acumulados dinámicos */}
           <div className="section">
             <h2>⚖️ Comparativo Acumulado</h2>
             <div className="sec-sub">{winLabel(selWin)} vs {winLabel(prevWin)} (ventana previa equivalente)</div>
@@ -271,37 +312,6 @@ export default function ResumenPage() {
                 );
               })}
             </div>
-          </div>
-
-          {/* Ingresos */}
-          <div className="section">
-            <h2>💵 Ingresos</h2>
-            <div className="sec-sub">Sólo ingreso real (se eliminó el ingreso contable general)</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Ingreso Real" val={fmtCOP(ingresoReal)} help="Ingreso real SIPREM del periodo." />
-              <KpiCard cls="otc" lbl="Ing. Eléctrica (real)" val={fmtCOP(ingElec)} help="Ingreso real de Ingeniería Eléctrica. El contable no puede calcularse: falta WIP." />
-            </div>
-          </div>
-
-          {/* Productividad por tipo de brigada */}
-          <div className="section">
-            <h2>⚙️ Productividad por Tipo de Brigada</h2>
-            <div className="sec-sub">Brigadas, ingreso y costo por tipo · periodo seleccionado</div>
-            <SortableTable
-              id="r-tipos"
-              data={tipoRows}
-              defaultSort="ingreso"
-              defaultDir="desc"
-              searchPlaceholder="Buscar tipo de brigada…"
-              searchKeys={['tipo']}
-              columns={[
-                { key: 'tipo', label: 'Tipo de brigada' },
-                { key: 'brigadas', label: '# Brig.', type: 'num' },
-                { key: 'ingreso', label: 'Ingreso', type: 'num', render: v => fmtCOP(Number(v)) },
-                { key: 'ingXbrig', label: 'Ing/Brig', type: 'num', render: v => fmtCOP(Number(v)) },
-                { key: 'costXbrig', label: 'Costo/Brig', type: 'num', render: v => fmtCOP(Number(v)) },
-              ]}
-            />
           </div>
         </div>
       </div>

@@ -6,9 +6,11 @@ export async function GET() {
     // 1. Tecnico Dia (raw)
     const rawRes = await query(`
       SELECT fecha::text, cedula, tipo_brigada as "Tipo_Brigada_Operaciones", mes_ym, zona, supervisor,
-             efectivas as "Efectivas", visitas as "Visitas", valor_produccion as "Ingresos", 
+             efectivas as "Efectivas", fallidas as "Fallidas", perdidas as "Perdidas",
+             fallida_con_pago as "Fallida_Con_Pago", fallida_sin_pago as "Fallida_Sin_Pago",
+             visitas as "Visitas", valor_produccion as "Ingresos", 
              meta_dia as "Meta_Facturacion", valor_fact_base, fact_ajustada, margen_neto,
-             0 as "Asignacion"
+             asignacion as "Asignacion", perdidas_cop as "Perdidas_COP"
       FROM scr.tecnico_dia
     `);
     
@@ -53,8 +55,13 @@ export async function GET() {
         Zona: r.zona, 
         Visitas: Number(r.Visitas),
         Efectivas: Number(r.Efectivas),
+        Fallidas: Number(r.Fallidas),
+        Perdidas: Number(r.Perdidas),
+        Fallida_Con_Pago: Number(r.Fallida_Con_Pago),
+        Fallida_Sin_Pago: Number(r.Fallida_Sin_Pago),
         Ingresos: Number(r.Ingresos),
         Meta_Facturacion: Number(r.Meta_Facturacion),
+        Perdidas_COP: Number(r.Perdidas_COP),
         Costo_Operativo: costoDistribuido,
         Asignacion: Number(r.Asignacion) || 0
       };

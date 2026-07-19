@@ -18,38 +18,28 @@ const LINE = '#e7eaf0';
 interface Row {
   key: string;
   label: string;
-  susp: number;
-  reco: number;
-  seMant: number;
   efec: number;
-  fall: number;   // fallidas sin pago
-  pagos: number;  // fallidas con pago
-  perd: number;
+  fall: number;   // fallidas con pago
+  perd: number;   // fallidas sin pago + perdidas
   totVis: number;
   dias: number;   // técnico-días (denominador de los promedios)
   tecnicos?: Row[];
 }
 
 type SortKey =
-  | 'label' | 'susp' | 'reco' | 'seMant' | 'efec' | 'fall' | 'pagos' | 'perd'
-  | 'totVis' | 'promVis' | 'promEfec' | 'promSusp' | 'promSeMant';
+  | 'label' | 'efec' | 'fall' | 'perd'
+  | 'totVis' | 'promVis' | 'promEfec';
 
 const num = (v: unknown) => Number(v) || 0;
 
 /* columnas de la tabla: clave, título, ¿es promedio? */
 const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string }[] = [
-  { key: 'susp', label: 'Susp.' },
-  { key: 'reco', label: 'Reco.' },
-  { key: 'seMant', label: 'Se Mant.' },
   { key: 'efec', label: 'Efectivas', accent: OK },
-  { key: 'fall', label: 'Fallidas', accent: WARN },
-  { key: 'pagos', label: 'Pagos' },
+  { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
   { key: 'perd', label: 'Perdidas', accent: ERR },
   { key: 'totVis', label: 'Total Visitas' },
   { key: 'promVis', label: 'Prom Vis.', prom: true },
   { key: 'promEfec', label: 'Prom Efec.', prom: true },
-  { key: 'promSusp', label: 'Prom Susp.', prom: true },
-  { key: 'promSeMant', label: 'Prom Se Mant.', prom: true },
 ];
 
 function promValue(r: Row, key: SortKey): number {
@@ -57,8 +47,6 @@ function promValue(r: Row, key: SortKey): number {
   switch (key) {
     case 'promVis': return r.totVis / d;
     case 'promEfec': return r.efec / d;
-    case 'promSusp': return r.susp / d;
-    case 'promSeMant': return r.seMant / d;
     default: return num((r as unknown as Record<string, number>)[key]);
   }
 }
@@ -88,26 +76,24 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     // brigada -> (cedula -> acumulador)
     const briMap: Record<string, { agg: Row; tecs: Record<string, Row> }> = {};
     for (const r of rows) {
-      const bKey = String(r.Tipo_Cuadrilla || '—');
+      const bKey = String(r.Tipo_Brigada_Operaciones || '—');
       const b = (briMap[bKey] ??= {
-        agg: { key: bKey, label: bKey, susp: 0, reco: 0, seMant: 0, efec: 0, fall: 0, pagos: 0, perd: 0, totVis: 0, dias: 0 },
+        agg: { key: bKey, label: bKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0 },
         tecs: {},
       });
       const ced = String(r.Cedula || '');
       const t = (b.tecs[ced] ??= {
         key: `${bKey}::${ced}`, label: String(r.Nombre || ced),
-        susp: 0, reco: 0, seMant: 0, efec: 0, fall: 0, pagos: 0, perd: 0, totVis: 0, dias: 0,
+        efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0,
       });
 
-      const susp = num(r.Suspensiones), reco = num(r.Reconexiones), seMant = num(r.Se_Mantiene);
-      const efec = num(r.Efectivas), perd = num(r.Perdidas);
-      const pagos = num(r.Fallida_Con_Pago);
-      const fall = num(r.Fallida_Sin_Pago);
-      const totVis = efec + fall + pagos + perd;
+      const efec = num(r.Efectivas);
+      const fall = num(r.Fallida_Con_Pago);
+      const perd = num(r.Fallida_Sin_Pago) + num(r.Perdidas);
+      const totVis = efec + fall + perd;
 
       for (const acc of [b.agg, t]) {
-        acc.susp += susp; acc.reco += reco; acc.seMant += seMant;
-        acc.efec += efec; acc.fall += fall; acc.pagos += pagos; acc.perd += perd;
+        acc.efec += efec; acc.fall += fall; acc.perd += perd;
         acc.totVis += totVis; acc.dias += 1; // cada registro = un técnico-día
       }
     }
@@ -118,10 +104,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     }));
 
     const total: Row = brigadas.reduce((s, b) => {
-      (['susp', 'reco', 'seMant', 'efec', 'fall', 'pagos', 'perd', 'totVis', 'dias'] as const)
+      (['efec', 'fall', 'perd', 'totVis', 'dias'] as const)
         .forEach(k => { s[k] += b[k]; });
       return s;
-    }, { key: '__total', label: 'Total', susp: 0, reco: 0, seMant: 0, efec: 0, fall: 0, pagos: 0, perd: 0, totVis: 0, dias: 0 } as Row);
+    }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0 } as Row);
 
     // etiqueta de periodo (a partir de fechas filtradas)
     const fechas = [...new Set(rows.map(r => String(r.Fecha || '')).filter(Boolean))].sort();
@@ -259,7 +245,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         {/* pie */}
         <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11.5, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>{brigadasSort.length} brigada(s) · {total ? fmtN(total.dias) : 0} técnico-días</span>
-          <span>Prom = valor ÷ técnico-días · Total Visitas = Efectivas + Fallidas + Pagos + Perdidas</span>
+          <span>Prom = valor ÷ técnico-días · Total Visitas = Efectivas + Fallidas + Perdidas</span>
         </div>
       </div>
     </div>

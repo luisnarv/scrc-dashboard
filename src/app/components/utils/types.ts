@@ -16,8 +16,10 @@ export interface RawRecord {
   Fallida_Con_Pago?: number | string;
   Fallida_Sin_Pago?: number | string;
   Suspensiones?: number | string;
-  Reconexiones?: number | string;
   Se_Mantiene?: number | string;
+  ORD_SUSPENSION?: number | string;
+  ORD_REVISION_SUSP?: number | string;
+  ORD_RECONEXION?: number | string;
   // normalized
   _Proyecto?: string;
   _Zona?: string;

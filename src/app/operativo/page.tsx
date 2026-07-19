@@ -38,7 +38,7 @@ function ProgBar({ pct, color }: { pct: number; color: string }) {
 
 function sem(v: number, good: number, warn: number) { return v >= good ? OK : v >= warn ? WARN : ERR; }
 
-export default function OperativaPage() {
+export default function OperativoPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -49,8 +49,9 @@ export default function OperativaPage() {
     const rawF = filtRaw(raw.raw, F);
 
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
-    const fallidas = rawF.reduce((s, r) => s + n(r.Fallidas), 0);
-    const perdidas = rawF.reduce((s, r) => s + n(r.Perdidas), 0);
+    // Para el negocio, "Perdidas" = "Fallidas sin pago" + las perdidas originales (sin precio)
+    const fallidas = rawF.reduce((s, r) => s + n(r.Fallida_Con_Pago), 0);
+    const perdidas = rawF.reduce((s, r) => s + n(r.Fallida_Sin_Pago) + n(r.Perdidas), 0);
     const visitas = rawF.reduce((s, r) => s + n(r.Visitas), 0);
     const asignado = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
     const brigadasDisp = new Set(rawF.map(r => r.Cedula)).size;
@@ -94,8 +95,8 @@ export default function OperativaPage() {
       c.nombre = String(r.Nombre || k);
       c.brigada = String(r.Tipo_Brigada_Operaciones || '—');
       c.zona = String(r._Zona || r.Zona || '—');
-      c.asign += n(r.Asignacion); c.efec += n(r.Efectivas); c.fall += n(r.Fallidas);
-      c.perd += n(r.Perdidas); c.vis += n(r.Visitas); c.ing += n(r.Ingresos);
+      c.asign += n(r.Asignacion); c.efec += n(r.Efectivas); c.fall += n(r.Fallida_Con_Pago);
+      c.perd += n(r.Fallida_Sin_Pago) + n(r.Perdidas); c.vis += n(r.Visitas); c.ing += n(r.Ingresos);
       c.dias.add(String(r.Fecha || ''));
       const p = Number(r.Primera_Digitacion), u = Number(r.Ultima_Digitacion);
       if (isFinite(p) && isFinite(u) && u > p) c.horas.push(u - p);
@@ -161,7 +162,7 @@ export default function OperativaPage() {
       {/* Título + acción de detalle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 12px' }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVA</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVO</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
         <button onClick={() => setModalOpen(true)}
