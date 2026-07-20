@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw } from '../components/utils/filters';
-import { fmtN } from '../components/utils/formatters';
+import { fmtN, fmtCOP } from '../components/utils/formatters';
 
 /* Paleta del dashboard */
 const TEAL = '#00897B';
@@ -23,21 +23,23 @@ interface Row {
   perd: number;   // fallidas sin pago + perdidas
   totVis: number;
   dias: number;   // técnico-días (denominador de los promedios)
+  ingreso: number; // Ingreso acumulado
   tecnicos?: Row[];
 }
 
 type SortKey =
   | 'label' | 'efec' | 'fall' | 'perd'
-  | 'totVis' | 'promVis' | 'promEfec';
+  | 'totVis' | 'promVis' | 'promEfec' | 'ingreso';
 
 const num = (v: unknown) => Number(v) || 0;
 
 /* columnas de la tabla: clave, título, ¿es promedio? */
-const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string }[] = [
+const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean }[] = [
   { key: 'efec', label: 'Efectivas', accent: OK },
   { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
   { key: 'perd', label: 'Perdidas', accent: ERR },
   { key: 'totVis', label: 'Total Visitas' },
+  { key: 'ingreso', label: 'Ingreso Generado', accent: '#00796b', isMoney: true },
   { key: 'promVis', label: 'Prom Vis.', prom: true },
   { key: 'promEfec', label: 'Prom Efec.', prom: true },
 ];
@@ -76,25 +78,26 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     // brigada -> (cedula -> acumulador)
     const briMap: Record<string, { agg: Row; tecs: Record<string, Row> }> = {};
     for (const r of rows) {
-      const bKey = String(r.Tipo_Brigada_Operaciones || '—');
+      const bKey = String(r.Tipo_Brigada_Mes || '—');
       const b = (briMap[bKey] ??= {
-        agg: { key: bKey, label: bKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0 },
+        agg: { key: bKey, label: bKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 },
         tecs: {},
       });
       const ced = String(r.Cedula || '');
       const t = (b.tecs[ced] ??= {
         key: `${bKey}::${ced}`, label: String(r.Nombre || ced),
-        efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0,
+        efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0,
       });
 
       const efec = num(r.Efectivas);
       const fall = num(r.Fallida_Con_Pago);
       const perd = num(r.Fallida_Sin_Pago) + num(r.Perdidas);
       const totVis = efec + fall + perd;
+      const ingreso = num(r.Ingresos);
 
       for (const acc of [b.agg, t]) {
         acc.efec += efec; acc.fall += fall; acc.perd += perd;
-        acc.totVis += totVis; acc.dias += 1; // cada registro = un técnico-día
+        acc.totVis += totVis; acc.dias += 1; acc.ingreso += ingreso; // cada registro = un técnico-día
       }
     }
 
@@ -104,10 +107,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     }));
 
     const total: Row = brigadas.reduce((s, b) => {
-      (['efec', 'fall', 'perd', 'totVis', 'dias'] as const)
+      (['efec', 'fall', 'perd', 'totVis', 'dias', 'ingreso'] as const)
         .forEach(k => { s[k] += b[k]; });
       return s;
-    }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0 } as Row);
+    }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 } as Row);
 
     // etiqueta de periodo (a partir de fechas filtradas)
     const fechas = [...new Set(rows.map(r => String(r.Fecha || '')).filter(Boolean))].sort();
@@ -152,9 +155,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   /* fila de datos reutilizable (brigada o técnico) */
   const dataCells = (r: Row, prom = false) => COLS.map(c => {
     const v = c.prom ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
+    const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
     return (
       <td key={c.key} style={numCell(v, !!c.prom, c.accent)}>
-        {c.prom ? v.toFixed(2) : fmtN(v)}
+        {displayVal}
       </td>
     );
   });
@@ -199,7 +203,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             <thead>
               <tr>
                 <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => clickSort('label')}>
-                  Tipo de cuadrilla{arrow('label')}
+                  Brigada{arrow('label')}
                 </th>
                 {COLS.map(c => (
                   <th key={c.key} style={{ ...th, textAlign: 'right' }} onClick={() => clickSort(c.key)}>
@@ -230,9 +234,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   <td style={{ ...tdBase, fontWeight: 800, color: INK, background: '#f4f6fa', borderTop: `2px solid ${TEAL}` }}>Total</td>
                   {COLS.map(c => {
                     const v = c.prom ? promValue(total, c.key) : num((total as unknown as Record<string, number>)[c.key]);
+                    const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
                     return (
                       <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: INK, background: '#f4f6fa', borderTop: `2px solid ${TEAL}` }}>
-                        {c.prom ? v.toFixed(2) : fmtN(v)}
+                        {displayVal}
                       </td>
                     );
                   })}

@@ -5,6 +5,7 @@ import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw } from '../components/utils/filters';
 import { fmtPct, fmtN } from '../components/utils/formatters';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
+import DisponibilidadSection from './DisponibilidadSection';
 
 const TEAL = '#00897B';
 const INDIGO = '#3949AB';
@@ -237,6 +238,9 @@ export default function OperativoPage() {
           <div style={kSub}>{fmtN(d.visitas)} ejecutadas de {fmtN(d.asignado)} asignadas</div>
         </div>
       </div>
+      
+      <DisponibilidadSection />
+
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
     </>
   );

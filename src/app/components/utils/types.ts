@@ -20,6 +20,7 @@ export interface RawRecord {
   ORD_SUSPENSION?: number | string;
   ORD_REVISION_SUSP?: number | string;
   ORD_RECONEXION?: number | string;
+  Tipo_Brigada_Mes?: string;
   // normalized
   _Proyecto?: string;
   _Zona?: string;
@@ -74,11 +75,38 @@ export interface OrdenDetalle {
   [key: string]: unknown;
 }
 
+export interface MesRecord {
+  Mes_YM?: string;
+  Cedula?: string;
+  Tecnico?: string;
+  Tipo_Brigada_Mes?: string;
+  Ordenes?: number | string;
+  Efectivas?: number | string;
+  Fallidas?: number | string;
+  Perdidas?: number | string;
+  Visitas?: number | string;
+  Ingresos_COP?: number | string;
+  [key: string]: unknown;
+}
+
+export interface DispDiariaRecord {
+  Fecha?: string;
+  Tipo_Brigada?: string;
+  Zona?: string;
+  BrigadasActivas?: number | string;
+  _Proyecto?: string;
+  _Zona?: string;
+  _ZonaDet?: string;
+  [key: string]: unknown;
+}
+
 export interface RawData {
   raw: RawRecord[];
   costos: CostoRecord[];
   emps: EmpleadoRecord[];
   det: OrdenDetalle[];
+  mes: MesRecord[];
+  disp: DispDiariaRecord[];
 }
 
 export interface Filters {

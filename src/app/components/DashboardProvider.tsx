@@ -69,7 +69,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       })
       .then(data => {
         if (data.error) throw new Error(data.error);
-        const { rawRecords, costos, emps } = data;
+        const { rawRecords, costos, emps, mesRecords = [], dispDiaria = [] } = data;
         const det: OrdenDetalle[] = []; // No se carga completo por volumen, se solicitará on-demand
 
         // Normalize zones ya se hizo parcialmente en el backend, 
@@ -90,7 +90,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           rec._ZonaDet = rec._Zona;
         });
 
-        const rawData: RawData = { raw: rawRecords, costos, emps, det };
+        dispDiaria.forEach((rec: any) => {
+          const p = normProy(rec.Zona);
+          const z = normZonaDet(rec.Zona);
+          if (p) rec._Proyecto = p;
+          rec._Zona = z || p || undefined;
+          rec._ZonaDet = rec._Zona;
+        });
+
+        const rawData: RawData = { raw: rawRecords, costos, emps, det, mes: mesRecords, disp: dispDiaria };
         setRaw(rawData);
 
         // Build filters
