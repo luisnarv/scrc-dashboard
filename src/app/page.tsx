@@ -192,7 +192,7 @@ export default function ResumenPage() {
   });
   const eficCfg = line('Eficiencia %', efMes.map(x => x.efic), 'pct');
   const cumpProdCfg = line('Cumplimiento %', efMes.map(x => x.cumpProd), 'pct');
-  const ingBrigCfg = line('Ingreso/brigada', efMes.map(x => x.ingXbrig), 'cop');
+  const ingBrigCfg = line('Prod. Valorizada/brigada', efMes.map(x => x.ingXbrig), 'cop');
   const costBrigCfg = line('Costo/brigada', efMes.map(x => x.costXbrig), 'cop');
   const brigCfg = {
     type: 'bar' as const,
@@ -203,7 +203,7 @@ export default function ResumenPage() {
   const winLabel = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
 
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
-    { lbl: 'Ingreso real', a: winA.ing, b: winB.ing, fmt: fmtCOP },
+    { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
     { lbl: 'Efectivas', a: winA.ef, b: winB.ef, fmt: fmtN },
     { lbl: 'Eficiencia', a: (winA.efic ?? 0) * 100, b: (winB.efic ?? 0) * 100, fmt: (v) => v.toFixed(1) + '%' },
     { lbl: 'Brigadas', a: winA.brig, b: winB.brig, fmt: fmtN },
@@ -246,20 +246,20 @@ export default function ResumenPage() {
             <h2>🎯 Indicadores Clave del Periodo</h2>
             <div className="sec-sub">Ventana seleccionada: {winLabel(selWin)}</div>
             <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Ingreso Real" val={fmtCOP(ingresoReal)} help="Ingreso real SIPREM. Pendiente de recálculo en la base." />
-              <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '—'} help="Efectivas / Visitas." />
+              <KpiCard cls="sip" lbl="Producción Valorizada" val={fmtCOP(ingresoReal)} help="Valor calculado de la producción operativa del periodo." />
+              <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '-'} help="Efectivas / Visitas." />
               <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." />
-              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '—'} help="Efectivas / Meta (Asignacion)." />
+              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." />
             </div>
           </div>
 
           {/* Ingresos */}
           <div className="section">
-            <h2>💵 Ingresos</h2>
-            <div className="sec-sub">Sólo ingreso real (se eliminó el ingreso contable general)</div>
+            <h2>💰 Financiero</h2>
+            <div className="sec-sub">Comparativa de Producción Valorizada vs Ingreso Real</div>
             <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Ingreso Real" val={fmtCOP(ingresoReal)} help="Ingreso real SIPREM del periodo." />
-              <KpiCard cls="otc" lbl="Ing. Eléctrica (real)" val={fmtCOP(ingElec)} help="Ingreso real de Ingeniería Eléctrica." />
+              <KpiCard cls="sip" lbl="Producción Valorizada" val={fmtCOP(ingresoReal)} help="Valor calculado de la producción operativa del periodo." />
+              <KpiCard cls="otc" lbl="Ingreso Real" val={fmtCOP(ingElec)} help="Ingreso real facturado de Ingeniería Eléctrica (OTC)." />
             </div>
           </div>
         </div>

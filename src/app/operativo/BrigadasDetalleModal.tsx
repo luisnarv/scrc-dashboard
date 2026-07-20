@@ -39,7 +39,7 @@ const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMo
   { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
   { key: 'perd', label: 'Perdidas', accent: ERR },
   { key: 'totVis', label: 'Total Visitas' },
-  { key: 'ingreso', label: 'Ingreso Generado', accent: '#00796b', isMoney: true },
+  { key: 'ingreso', label: 'Producción Valorizada', accent: '#00796b', isMoney: true },
   { key: 'promVis', label: 'Prom Vis.', prom: true },
   { key: 'promEfec', label: 'Prom Efec.', prom: true },
 ];

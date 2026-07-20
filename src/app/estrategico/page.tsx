@@ -176,9 +176,9 @@ export default function ResumenPage() {
       .map(([tipo, v]) => { const nb = v.b.size; return { tipo, brigadas: nb, ingreso: v.ing, ingXbrig: nb ? v.ing / nb : 0, costXbrig: nb ? v.co / nb : 0 }; })
       .sort((a, b) => b.ingreso - a.ingreso);
 
-    // Narrativa (ahora en términos de ingreso real + cumplimiento de producción)
+    // Narrativa (ahora en términos de producción valorizada + cumplimiento de producción)
     const periodoLabel = F.mes.length ? F.mes.join(', ') : 'periodo seleccionado';
-    const narrativa = `En ${periodoLabel}, el proyecto registra un ingreso real de ${fmtCOP(ingresoReal)} con ${fmtN(brigadas)} brigadas activas y una eficiencia del ${eficiencia !== null ? fmtPct(eficiencia) : '—'}. El cumplimiento de producción (efectivas vs meta) es del ${cumpProd !== null ? fmtPct(cumpProd) : '—'}.`;
+    const narrativa = `En ${periodoLabel}, el proyecto registra una producción valorizada de ${fmtCOP(ingresoReal)} con ${fmtN(brigadas)} brigadas activas y una eficiencia del ${eficiencia !== null ? fmtPct(eficiencia) : '-'}. El cumplimiento de producción (efectivas vs meta) es del ${cumpProd !== null ? fmtPct(cumpProd) : '-'}.`;
 
     return {
       health, narrativa,
@@ -205,7 +205,7 @@ export default function ResumenPage() {
   });
   const eficCfg = line('Eficiencia %', efMes.map(x => x.efic), 'pct');
   const cumpProdCfg = line('Cumplimiento %', efMes.map(x => x.cumpProd), 'pct');
-  const ingBrigCfg = line('Ingreso/brigada', efMes.map(x => x.ingXbrig), 'cop');
+  const ingBrigCfg = line('Prod. Valorizada/brigada', efMes.map(x => x.ingXbrig), 'cop');
   const costBrigCfg = line('Costo/brigada', efMes.map(x => x.costXbrig), 'cop');
   const brigCfg = {
     type: 'bar' as const,
@@ -213,10 +213,44 @@ export default function ResumenPage() {
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } } },
   };
 
+  const buildModalConfig = (metric: 'efic' | 'cumpProd' | 'ingXbrig' | 'costXbrig', kind: 'pct' | 'cop') => {
+    const tipos = Array.from(new Set(efMesPorTipo.map(x => x.tipo)));
+    const colors = ['#3949AB', '#00796b', '#F57C00', '#C62828', '#8E24AA', '#039BE5', '#43A047', '#E53935'];
+    const datasets = tipos.map((tipo, idx) => {
+      const arr = meses12.map(m => {
+        const v = efMesPorTipo.find(x => x.mes === m && x.tipo === tipo);
+        return v ? Number(v[metric] || 0) : 0;
+      });
+      const c = colors[idx % colors.length];
+      return {
+        label: tipo,
+        data: arr,
+        borderColor: c,
+        backgroundColor: c + '22',
+        fill: false,
+        tension: 0.3
+      };
+    });
+    return {
+      type: 'line' as const,
+      data: { labels: meses12, datasets },
+      options: { 
+        ...baseOpt, 
+        plugins: { ...baseOpt.plugins, legend: { display: true } }, 
+        scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } 
+      },
+    };
+  };
+
+  const eficModalCfg = buildModalConfig('efic', 'pct');
+  const cumpProdModalCfg = buildModalConfig('cumpProd', 'pct');
+  const ingBrigModalCfg = buildModalConfig('ingXbrig', 'cop');
+  const costBrigModalCfg = buildModalConfig('costXbrig', 'cop');
+
   const winLabel = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
 
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
-    { lbl: 'Ingreso real', a: winA.ing, b: winB.ing, fmt: fmtCOP },
+    { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
     { lbl: 'Efectivas', a: winA.ef, b: winB.ef, fmt: fmtN },
     { lbl: 'Eficiencia', a: (winA.efic ?? 0) * 100, b: (winB.efic ?? 0) * 100, fmt: (v) => v.toFixed(1) + '%' },
     { lbl: 'Brigadas', a: winA.brig, b: winB.brig, fmt: fmtN },
@@ -224,6 +258,7 @@ export default function ResumenPage() {
 
   const eficTable = {
     columns: ['Mes', 'Tipo de Brigada / Técnico', 'Efectivas', 'Visitas', 'Eficiencia'],
+    categoryIndex: 1,
     rows: [],
     hierarchicalRows: efMesPorTipo.map(x => ({
       row: [x.mes, x.tipo, fmtN(x.ef), fmtN(x.vi), x.efic.toFixed(1) + '%'],
@@ -235,6 +270,7 @@ export default function ResumenPage() {
   
   const cumpTable = {
     columns: ['Mes', 'Tipo de Brigada / Técnico', 'Efectivas', 'Meta (Asignación)', 'Cumplimiento'],
+    categoryIndex: 1,
     rows: [],
     hierarchicalRows: efMesPorTipo.map(x => ({
       row: [x.mes, x.tipo, fmtN(x.ef), fmtN(x.me), x.cumpProd.toFixed(1) + '%'],
@@ -245,7 +281,8 @@ export default function ResumenPage() {
   };
 
   const ingBrigTable = {
-    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Ingreso', 'Brigadas (Días)', 'Ingreso Promedio'],
+    columns: ['Mes', 'Tipo de Brigada / Técnico', 'Prod. Valorizada', 'Brigadas (Días)', 'Prod. Val. Promedio'],
+    categoryIndex: 1,
     rows: [],
     hierarchicalRows: efMesPorTipo.map(x => ({
       row: [x.mes, x.tipo, fmtCOP(x.ing), fmtN(x.brig), fmtCOP(x.ingXbrig)],
@@ -257,6 +294,7 @@ export default function ResumenPage() {
 
   const costBrigTable = {
     columns: ['Mes', 'Tipo de Brigada / Técnico', 'Costo Operativo', 'Brigadas (Días)', 'Costo Promedio'],
+    categoryIndex: 1,
     rows: [],
     hierarchicalRows: efMesPorTipo.map(x => ({
       row: [x.mes, x.tipo, fmtCOP(x.co), fmtN(x.brig), fmtCOP(x.costXbrig)],
@@ -279,10 +317,10 @@ export default function ResumenPage() {
           <div className="section">
             <h2>Evolutivos <span className="tag-sip">SIPREM / OTC</span></h2>
             <div style={{ display: 'grid', gap: 10 }}>
-              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} height="short" hasDetail detailTableData={eficTable} />
-              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs meta (Asignacion)" config={cumpProdCfg as never} height="short" hasDetail detailTableData={cumpTable} />
-              <ChartCard id="r-ingbrig" title="Ingreso promedio por brigada" config={ingBrigCfg as never} height="short" hasDetail detailTableData={ingBrigTable} />
-              <ChartCard id="r-costbrig" title="Costo por brigada" config={costBrigCfg as never} height="short" hasDetail detailTableData={costBrigTable} />
+              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} modalConfig={eficModalCfg as never} height="short" hasDetail detailTableData={eficTable} />
+              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs meta (Asignacion)" config={cumpProdCfg as never} modalConfig={cumpProdModalCfg as never} height="short" hasDetail detailTableData={cumpTable} />
+              <ChartCard id="r-ingbrig" title="Prod. Valorizada promedio por brigada" config={ingBrigCfg as never} modalConfig={ingBrigModalCfg as never} height="short" hasDetail detailTableData={ingBrigTable} />
+              <ChartCard id="r-costbrig" title="Costo por brigada" config={costBrigCfg as never} modalConfig={costBrigModalCfg as never} height="short" hasDetail detailTableData={costBrigTable} />
             </div>
           </div>
         </div>

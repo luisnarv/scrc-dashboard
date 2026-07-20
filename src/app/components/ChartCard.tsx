@@ -8,17 +8,20 @@ interface ChartCardProps {
   title: React.ReactNode;
   subtitle?: string;
   config: ChartConfiguration | null;
+  modalConfig?: ChartConfiguration | null;
   height?: 'normal' | 'tall' | 'short';
   headerExtra?: React.ReactNode;
   hasDetail?: boolean;
   detailTableData?: {
     columns: string[];
-    rows: (string | number | null | undefined)[][];
+    rows?: (string | number | null | undefined)[][];
+    hierarchicalRows?: any[];
+    categoryIndex?: number;
   };
   detailActiveFilters?: { label: string; value: string }[];
 }
 
-export default function ChartCard({ id, title, subtitle, config, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters }: ChartCardProps) {
+export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters }: ChartCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
@@ -71,7 +74,8 @@ export default function ChartCard({ id, title, subtitle, config, height = 'norma
           title={title}
           description={subtitle}
           config={config}
-          tableData={detailTableData}
+          modalConfig={modalConfig}
+          tableData={detailTableData as any}
           activeFilters={detailActiveFilters}
         />
       )}

@@ -173,7 +173,7 @@ export default function GerencialPage() {
     data: {
       labels: d.tipoRows.map(r => r.tipo),
       datasets: [
-        { label: 'Ingreso Promedio / Brig', data: d.tipoRows.map(r => r.ingXbrig), backgroundColor: INDIGO + 'CC' },
+        { label: 'Prod. Val. / Brig', data: d.tipoRows.map(r => r.ingXbrig), backgroundColor: INDIGO + 'CC' },
         { label: 'Costo Promedio / Brig', data: d.tipoRows.map(r => r.costXbrig), backgroundColor: '#C62828CC' }
       ]
     },
@@ -185,7 +185,8 @@ export default function GerencialPage() {
   };
 
   const tipoTableData = {
-    columns: ['Tipo de brigada', '# Brigadas', 'Ingreso Total', 'Ingreso / Brig', 'Costo / Brig'],
+    columns: ['Tipo de brigada', '# Brigadas', 'Prod. Valorizada', 'Prod. Val. / Brig', 'Costo / Brig'],
+    categoryIndex: 0,
     rows: d.tipoRows.map(r => [r.tipo, fmtN(r.brigadas), fmtCOP(r.ingreso), fmtCOP(r.ingXbrig), fmtCOP(r.costXbrig)])
   };
 
@@ -225,15 +226,15 @@ export default function GerencialPage() {
           <div style={eyebrow(INDIGO)}><span style={dot(INDIGO)} /> Financiero (P&L)</div>
           <div>
             <div style={bigNum}>{d.cumplFact !== null ? fmtPct(d.cumplFact) : '—'}</div>
-            <div style={kLabel}>Facturación real vs meta del periodo</div>
+            <div style={kLabel}>Prod. Valorizada vs meta del periodo</div>
           </div>
           <div style={sepRow}>
-            <div style={secLbl}>Ingreso real</div>
+            <div style={secLbl}>Producción valorizada</div>
             <div style={secVal}>{fmtCOP(d.ingreso)}</div>
           </div>
           <MetaReal meta={d.metaFact} real={d.ingreso} color={INDIGO} fmt={fmtCOP} />
           <div>
-            <div style={chartCap}>Tendencia · facturación real (12 meses)</div>
+            <div style={chartCap}>Tendencia · producción valorizada (12 meses)</div>
             <Trend data={d.factTrend} labels={d.xlabels} color={INDIGO} fmt={fmtCOP} />
           </div>
         </div>
@@ -251,9 +252,9 @@ export default function GerencialPage() {
         </div>
 
         <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' }}>
-          <div style={secLbl}>Facturación real</div>
+          <div style={secLbl}>Producción valorizada</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: INK, marginTop: 8 }}>{fmtCOP(d.ingreso)}</div>
-          <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>Valor real facturado del periodo</div>
+          <div style={{ fontSize: 11, color: MUT, marginTop: 4 }}>Valor calculado de producción operativa del periodo</div>
         </div>
 
         <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' }}>
@@ -269,7 +270,7 @@ export default function GerencialPage() {
         <div style={{ height: 400 }}>
           <ChartCard 
             id="r-tipos" 
-            title="Ingreso vs Costo Promedio por Tipo de Brigada" 
+            title="Prod. Valorizada vs Costo Promedio por Tipo de Brigada" 
             subtitle="Análisis de rentabilidad unitaria por perfil de cuadrilla"
             config={tipoCfg as never} 
             height="tall" 
