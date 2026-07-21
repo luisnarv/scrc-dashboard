@@ -227,10 +227,30 @@ export default function ResumenPage() {
     };
   };
 
+  const buildTableData = (metric: 'efic' | 'cumpProd' | 'ingXbrig' | 'costXbrig', kind: 'pct' | 'cop') => {
+    const tipos = Array.from(new Set(efMesPorTipo.map((x: any) => String(x.tipo)))) as string[];
+    const columns: string[] = ['Mes', ...tipos];
+    const rows = meses12.map((m: any) => {
+      const row: (string | number)[] = [String(m)];
+      tipos.forEach(tipo => {
+        const v = efMesPorTipo.find((x: any) => x.mes === m && x.tipo === tipo);
+        const val = v ? Number(v[metric] || 0) : 0;
+        row.push(kind === 'cop' ? fmtCOP(val) : val.toFixed(1) + '%');
+      });
+      return row;
+    });
+    return { columns, rows };
+  };
+
   const eficModalCfg = buildModalConfig('efic', 'pct');
   const cumpProdModalCfg = buildModalConfig('cumpProd', 'pct');
   const ingBrigModalCfg = buildModalConfig('ingXbrig', 'cop');
   const costBrigModalCfg = buildModalConfig('costXbrig', 'cop');
+
+  const eficTable = buildTableData('efic', 'pct');
+  const cumpProdTable = buildTableData('cumpProd', 'pct');
+  const ingBrigTable = buildTableData('ingXbrig', 'cop');
+  const costBrigTable = buildTableData('costXbrig', 'cop');
 
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
     { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
@@ -254,9 +274,9 @@ export default function ResumenPage() {
             <h2 style={{ color: CFG.sip, marginBottom: 16 }}>🛠️ [OPERACIÓN]</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Estimaciones basadas en tarifarios y reportes de terreno</div>
             <div style={{ display: 'grid', gap: 16 }}>
-              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} modalConfig={eficModalCfg as never} height="short" hasDetail />
-              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs Asignación" config={cumpProdCfg as never} modalConfig={cumpProdModalCfg as never} height="short" hasDetail />
-              <ChartCard id="r-ingbrig" title="Producción Valorizada (Estimada)" subtitle="Ingreso teórico promedio por brigada" config={ingBrigCfg as never} modalConfig={ingBrigModalCfg as never} height="short" hasDetail />
+              <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} modalConfig={eficModalCfg as never} detailTableData={eficTable} height="short" hasDetail />
+              <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs Asignación" config={cumpProdCfg as never} modalConfig={cumpProdModalCfg as never} detailTableData={cumpProdTable} height="short" hasDetail />
+              <ChartCard id="r-ingbrig" title="Producción Valorizada (Estimada)" subtitle="Ingreso teórico promedio por brigada" config={ingBrigCfg as never} modalConfig={ingBrigModalCfg as never} detailTableData={ingBrigTable} height="short" hasDetail />
             </div>
           </div>
         </div>
