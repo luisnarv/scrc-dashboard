@@ -7,14 +7,18 @@ import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
 import { otcAgg } from '../components/utils/aggregators';
 import ChartCard from '../components/ChartCard';
 import KpiCard from '../components/KpiCard';
-
-const TEAL = 'var(--sip)';
-const INDIGO = 'var(--otc)';
-const INK = 'var(--text-title)';
-const MUT = 'var(--text-muted)';
+import { useTheme } from '../components/ThemeProvider';
 
 export default function GerencialPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
+  const { colors } = useTheme();
+  const TEAL = colors.sip;
+  const INDIGO = colors.otc;
+  const INK = colors.ink;
+  const MUT = colors.mut;
+  const ERR = colors.err;
+  const WARN = colors.warn;
+  const OK = colors.ok;
 
   const d = useMemo(() => {
     if (!raw) return null;
@@ -84,7 +88,7 @@ export default function GerencialPage() {
       labels: d.tipoRows.map(r => r.tipo),
       datasets: [
         { label: 'Prod. Val. (Op.) / Brig', data: d.tipoRows.map(r => r.ingXbrig), backgroundColor: INDIGO + 'CC' },
-        { label: 'Costo Promedio (Op.) / Brig', data: d.tipoRows.map(r => r.costXbrig), backgroundColor: '#C62828CC' }
+        { label: 'Costo Promedio (Op.) / Brig', data: d.tipoRows.map(r => r.costXbrig), backgroundColor: ERR + 'CC' }
       ]
     },
     options: {

@@ -7,8 +7,7 @@ import { otcAgg, otcAggMes, mesAnterior } from '../components/utils/aggregators'
 import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
 import { calcHealth } from '../components/utils/health';
 import ChartCard from '../components/ChartCard';
-
-const CFG = { ok: 'var(--ok)', warn: 'var(--warn)', err: 'var(--err)', otc: 'var(--otc)', sip: 'var(--sip)', neu: 'var(--text-muted)' };
+import { useTheme } from '../components/ThemeProvider';
 
 const baseOpt = {
   responsive: true,
@@ -18,6 +17,9 @@ const baseOpt = {
 
 export default function ResumenPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
+  const { colors } = useTheme();
+
+  const CFG = { ok: colors.ok, warn: colors.warn, err: colors.err, otc: colors.otc, sip: colors.sip, neu: colors.mut };
 
   const data = useMemo<any>(() => {
     if (!raw) return null;
@@ -194,7 +196,7 @@ export default function ResumenPage() {
   // ---- Configs de gráficos (evolutivos) ----
   const line = (label: string, arr: number[], kind: 'pct' | 'cop', color?: string) => ({
     type: 'line' as const,
-    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip), backgroundColor: (kind === 'cop' ? 'var(--otc-bg)' : 'var(--sip-bg)'), fill: true, tension: 0.3 }] },
+    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip), backgroundColor: (color || (kind === 'cop' ? CFG.otc : CFG.sip)) + '33', fill: true, tension: 0.3 }] },
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
   });
 
@@ -211,14 +213,14 @@ export default function ResumenPage() {
 
   const buildModalConfig = (metric: 'efic' | 'cumpProd' | 'ingXbrig' | 'costXbrig', kind: 'pct' | 'cop') => {
     const tipos = Array.from(new Set(efMesPorTipo.map((x: any) => x.tipo)));
-    const colors = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
+    const chartColors = colors.series;
     const datasets = tipos.map((tipo, idx) => {
       const arr = meses12.map((m: any) => {
         const v = efMesPorTipo.find((x: any) => x.mes === m && x.tipo === tipo);
         return v ? Number(v[metric] || 0) : 0;
       });
-      const c = colors[idx % colors.length];
-      return { label: tipo, data: arr, borderColor: c, backgroundColor: 'var(--hover-bg)', fill: false, tension: 0.3 };
+      const c = chartColors[idx % chartColors.length];
+      return { label: tipo, data: arr, borderColor: c, backgroundColor: c + '33', fill: false, tension: 0.3 };
     });
     return {
       type: 'line' as const,
@@ -270,7 +272,7 @@ export default function ResumenPage() {
         
         {/* ---------- IZQUIERDA: OPERACIÓN ---------- */}
         <div>
-          <div className="section" style={{ borderTop: `4px solid ${CFG.sip}`, padding: '20px 24px', background: '#fff', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="section" style={{ borderTop: `4px solid ${CFG.sip}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <h2 style={{ color: CFG.sip, marginBottom: 16 }}>🛠️ [OPERACIÓN]</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Estimaciones basadas en tarifarios y reportes de terreno</div>
             <div style={{ display: 'grid', gap: 16 }}>
@@ -283,7 +285,7 @@ export default function ResumenPage() {
 
         {/* ---------- DERECHA: FINANCIERO ---------- */}
         <div>
-          <div className="section" style={{ borderTop: `4px solid ${CFG.otc}`, padding: '20px 24px', background: '#fff', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="section" style={{ borderTop: `4px solid ${CFG.otc}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 [FINANCIERO]</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales extraídos de la contabilidad (Fuente: OTC)</div>
             <div style={{ display: 'grid', gap: 16 }}>

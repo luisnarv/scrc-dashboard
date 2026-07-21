@@ -6,10 +6,10 @@ import { filtRaw, filtCos, ventanaPrevia } from './components/utils/filters';
 import { otcAgg, otcAggMes, mesAnterior } from './components/utils/aggregators';
 import { fmtCOP, fmtPct, fmtN, deltaPct } from './components/utils/formatters';
 import { calcHealth } from './components/utils/health';
-import KpiCard from './components/KpiCard';
 import HealthScore from './components/HealthScore';
-
-const CFG = { ok: 'var(--ok)', warn: 'var(--warn)', err: 'var(--err)', otc: 'var(--otc)', sip: 'var(--sip)', neu: 'var(--text-muted)' };
+import { useTheme } from './components/ThemeProvider';
+import ChartCard from './components/ChartCard';
+import KpiCard from './components/KpiCard';
 
 const baseOpt = {
   responsive: true,
@@ -19,6 +19,9 @@ const baseOpt = {
 
 export default function ResumenPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
+  const { colors } = useTheme();
+  
+  const CFG = { ok: colors.ok, warn: colors.warn, err: colors.err, otc: colors.otc, sip: colors.sip, neu: colors.mut };
 
   const data = useMemo(() => {
     if (!raw) return null;
@@ -188,7 +191,7 @@ export default function ResumenPage() {
   // ---- Configs de gráficos (evolutivos) ----
   const line = (label: string, arr: number[], kind: 'pct' | 'cop') => ({
     type: 'line' as const,
-    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: kind === 'cop' ? CFG.otc : CFG.sip, backgroundColor: kind === 'cop' ? 'var(--otc-bg)' : 'var(--sip-bg)', fill: true, tension: 0.3 }] },
+    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: kind === 'cop' ? CFG.otc : CFG.sip, backgroundColor: (kind === 'cop' ? CFG.otc : CFG.sip) + '33', fill: true, tension: 0.3 }] },
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
   });
   const eficCfg = line('Eficiencia %', efMes.map(x => x.efic), 'pct');
@@ -230,8 +233,8 @@ export default function ResumenPage() {
         <div className="section" style={{ marginTop: 24 }}>
           <h2>⚠️ Alertas Operativas</h2>
           <div className="sec-sub">Focos de atención prioritaria detectados en la operación de hoy</div>
-          <div style={{ background: nivelAlerta === 'red' ? '#ffebee' : '#fff3e0', borderLeft: `4px solid ${nivelAlerta === 'red' ? '#C62828' : '#F57C00'}`, padding: '16px 20px', borderRadius: '0 8px 8px 0', marginTop: 12 }}>
-            <ul style={{ margin: 0, paddingLeft: 20, color: nivelAlerta === 'red' ? '#b71c1c' : '#e65100', fontWeight: 600 }}>
+          <div style={{ background: nivelAlerta === 'red' ? 'var(--err-bg, var(--hover-bg))' : 'var(--warn-bg, var(--hover-bg))', borderLeft: `4px solid ${nivelAlerta === 'red' ? CFG.err : CFG.warn}`, padding: '16px 20px', borderRadius: '0 8px 8px 0', marginTop: 12 }}>
+            <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-title)', fontWeight: 600 }}>
               {alertas.map((a, i) => <li key={i} style={{ marginBottom: 4 }}>{a}</li>)}
             </ul>
           </div>

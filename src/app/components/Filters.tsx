@@ -35,7 +35,8 @@ export default function Filters() {
     border: '1px solid var(--border)',
     borderRadius: 6,
     fontSize: 12,
-    background: '#fff',
+    background: 'var(--panel)',
+    color: 'var(--text)',
     fontFamily: 'inherit',
     cursor: 'pointer',
   };
@@ -50,7 +51,7 @@ export default function Filters() {
     cursor: 'pointer',
     userSelect: 'none',
     fontWeight: on ? 600 : 400,
-    color: on ? 'var(--text)' : '#333',
+    color: on ? 'var(--text)' : 'var(--text-muted)',
   });
 
   return (
@@ -89,7 +90,7 @@ export default function Filters() {
               position: 'absolute',
               top: 'calc(100% + 4px)',
               left: 0,
-              background: '#fff',
+              background: 'var(--panel)',
               border: '1px solid var(--border)',
               borderRadius: 8,
               boxShadow: '0 8px 24px rgba(20,30,60,.18)',

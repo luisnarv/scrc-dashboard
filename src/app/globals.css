@@ -136,7 +136,7 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 12px;
-  background: var(--card);
+  background: var(--panel);
   color: var(--text-body);
   font-family: inherit;
 }

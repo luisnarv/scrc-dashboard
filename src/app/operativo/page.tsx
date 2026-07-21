@@ -7,14 +7,8 @@ import { fmtPct, fmtN } from '../components/utils/formatters';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
 import ChartCard from '../components/ChartCard';
+import { useTheme } from '../components/ThemeProvider';
 
-const TEAL = 'var(--sip)';
-const INDIGO = 'var(--otc)';
-const OK = 'var(--ok)';
-const WARN = 'var(--warn)';
-const ERR = 'var(--err)';
-const INK = 'var(--text-title)';
-const MUT = 'var(--text-muted)';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -25,24 +19,34 @@ function diasHabilesMes(ym: string): number {
   return c;
 }
 
-const card: React.CSSProperties = { background: '#fff', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' };
+const card: React.CSSProperties = { background: 'var(--panel)', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(20,30,60,.05)' };
 const secH = (c: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: c, margin: '24px 2px 12px' });
 const dot = (c: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: c });
 
 /* Barra de progreso simple con semáforo */
 function ProgBar({ pct, color }: { pct: number; color: string }) {
   return (
-    <span style={{ display: 'block', height: 10, background: '#eef0f5', borderRadius: 5, overflow: 'hidden' }}>
+    <span style={{ display: 'block', height: 10, background: 'var(--hover-bg)', borderRadius: 5, overflow: 'hidden' }}>
       <span style={{ display: 'block', height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: color, borderRadius: 5, transition: 'width .5s' }} />
     </span>
   );
 }
 
-function sem(v: number, good: number, warn: number) { return v >= good ? OK : v >= warn ? WARN : ERR; }
-
 export default function OperativoPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
+  const { colors } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
+
+  const TEAL = colors.sip;
+  const INDIGO = colors.otc;
+  const OK = colors.ok;
+  const WARN = colors.warn;
+  const ERR = colors.err;
+  const INK = colors.ink;
+  const MUT = colors.mut;
+  const chartColors = colors.series;
+
+  const sem = (v: number, good: number, warn: number) => v >= good ? OK : v >= warn ? WARN : ERR;
 
   const d = useMemo(() => {
     if (!raw) return null;
@@ -166,7 +170,7 @@ export default function OperativoPage() {
       data: {
         labels: dias.map(d => d.slice(-2)),
         datasets: [
-          { label: 'Brigadas Operativas', data: dias.map(d => byDay[d].oper), borderColor: INDIGO, backgroundColor: 'var(--otc-bg)', fill: true, tension: 0.3 },
+          { label: 'Brigadas Operativas', data: dias.map(d => byDay[d].oper), borderColor: INDIGO, backgroundColor: INDIGO + '33', fill: true, tension: 0.3 },
           { label: 'Brigadas Disponibles', data: dias.map(d => byDay[d].disp), borderColor: MUT, borderDash: [5, 5], fill: false, tension: 0 },
         ]
       },
@@ -175,15 +179,15 @@ export default function OperativoPage() {
 
     // Gráfico 3: Evolutivo por Tipo de Brigada
     const tiposArr = Object.keys(byTypeDay);
-    const colors = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
     const chartTipos = {
       type: 'line',
       data: {
         labels: dias.map(d => d.slice(-2)),
-        datasets: tiposArr.map((t, i) => ({
+        datasets: tiposArr.map((t, idx) => ({
           label: t,
           data: dias.map(d => byTypeDay[t][d]?.efec || 0),
-          borderColor: colors[i % colors.length],
+          borderColor: chartColors[idx % chartColors.length],
+          backgroundColor: chartColors[idx % chartColors.length] + '33',
           fill: false, tension: 0.3
         }))
       },
@@ -287,8 +291,8 @@ export default function OperativoPage() {
       </div>
 
       {/* Narrativa Automática */}
-      <div style={{ background: '#f8fafc', padding: '14px 18px', borderRadius: 10, marginTop: 12, fontSize: 13, color: '#475569', borderLeft: '3px solid #cbd5e1', lineHeight: 1.5 }}>
-        <strong style={{ color: '#0f172a' }}>⚡ Resumen Diario:</strong> {d.narrativa}
+      <div style={{ background: 'var(--hover-bg)', padding: '14px 18px', borderRadius: 10, marginTop: 12, fontSize: 13, color: 'var(--text)', borderLeft: '3px solid var(--border)', lineHeight: 1.5 }}>
+        <strong style={{ color: 'var(--text-title)' }}>⚡ Resumen Diario:</strong> {d.narrativa}
       </div>
 
       {/* 1 · Resumen Operativo */}

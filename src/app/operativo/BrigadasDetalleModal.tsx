@@ -189,7 +189,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Detalle por brigadas"
         style={{
-          background: '#fff', borderRadius: 16, width: 'min(1180px, 96vw)', maxHeight: '90vh',
+          background: 'var(--bg)', borderRadius: 16, width: 'min(1180px, 96vw)', maxHeight: '90vh',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
         }}
       >
@@ -206,7 +206,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           />
           <button
             onClick={onClose} aria-label="Cerrar"
-            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${LINE}`, background: '#fff', color: MUT, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
+            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
           >×</button>
         </div>
 
@@ -280,9 +280,9 @@ function RowRecursive({
   const open = expanded.has(node.key);
   const isLeaf = !node.children || node.children.length === 0;
   
-  let rowBg = '#fff';
-  if (level === 0) rowBg = open ? '#eef7f5' : zebra ? '#fafbfc' : '#fff';
-  else if (level === 1) rowBg = open ? '#f8fdfc' : '#fff';
+  let rowBg = 'var(--panel)';
+  if (level === 0) rowBg = open ? 'var(--hover-bg)' : zebra ? 'var(--card)' : 'var(--panel)';
+  else if (level === 1) rowBg = open ? 'var(--hover-bg)' : 'var(--panel)';
 
   const chev: React.CSSProperties = {
     display: 'inline-block', width: 16, transition: 'transform .18s',

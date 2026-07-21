@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import DisponibilidadAnalysisModal from './DisponibilidadAnalysisModal';
+import { useTheme } from '../components/ThemeProvider';
 
 const TEAL = 'var(--sip)';
 const INK = 'var(--text-title)';
@@ -19,6 +20,7 @@ const card: React.CSSProperties = {
 
 export default function DisponibilidadSection() {
   const { raw, filters } = useDashboard();
+  const { colors } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
   const [locFilterTipo, setLocFilterTipo] = useState('ALL');
   const [locFilterZona, setLocFilterZona] = useState('ALL');
@@ -101,15 +103,14 @@ export default function DisponibilidadSection() {
   }, [raw, filters.mes, filters.proy, filters.zona, locFilterTipo, locFilterZona]);
 
   const getCellColor = (val: number) => {
-    if (val === 0) return '#f5f6f8';
-    if (val <= 2) return '#b2dfdb';
-    if (val <= 5) return '#4db6ac';
-    return '#00695c';
+    if (val === 0) return 'var(--hover-bg)';
+    if (val <= 2) return colors.sip + '44'; // 26% opacity
+    if (val <= 5) return colors.sip + 'AA'; // 66% opacity
+    return colors.sip;
   };
 
   const getTextColor = (val: number) => {
-    if (val === 0) return MUT;
-    if (val <= 5) return INK;
+    if (val === 0) return 'var(--text-muted)';
     return '#fff';
   };
 

@@ -128,6 +128,24 @@ export default function AnalysisModal({ open, onClose, title, description, confi
     import('chart.js').then(({ Chart, registerables }) => {
       if (!isMounted || !canvasRef.current) return;
       Chart.register(...registerables);
+
+      const isDark = document.body.classList.contains('theme-dark');
+      Chart.defaults.color = isDark ? '#9FB0A4' : '#97999B';
+      Chart.defaults.borderColor = isDark ? 'rgba(234,243,226,0.08)' : '#E0E0E0';
+      Chart.defaults.elements.line.borderWidth = 3;
+      Chart.defaults.elements.point.radius = 5;
+      Chart.defaults.elements.point.hoverRadius = 8;
+      
+      if (!(Chart.defaults.plugins as any).tooltip) (Chart.defaults.plugins as any).tooltip = {};
+      const tooltipOpts = Chart.defaults.plugins.tooltip as any;
+      tooltipOpts.backgroundColor = isDark ? '#1E2C24' : '#FFFFFF';
+      tooltipOpts.titleColor = isDark ? '#EAF3E2' : '#38764C';
+      tooltipOpts.bodyColor = isDark ? '#EAF3E2' : '#3A3A3A';
+      tooltipOpts.borderColor = isDark ? '#33443A' : '#E0E0E0';
+      tooltipOpts.borderWidth = 1;
+      tooltipOpts.padding = 12;
+      tooltipOpts.cornerRadius = 8;
+
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       
       const mCfg = JSON.parse(JSON.stringify(filteredConfig));
@@ -168,16 +186,16 @@ export default function AnalysisModal({ open, onClose, title, description, confi
       <div className="modal-box" style={{ width: '95vw', maxWidth: '1600px', height: '95vh', display: 'flex', flexDirection: 'column' }}>
         
         {/* Encabezado */}
-        <div className="modal-head" style={{ flexShrink: 0, paddingBottom: 16 }}>
+        <div className="modal-head" style={{ flexShrink: 0, paddingBottom: 12 }}>
           <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 4px', color: '#141b2d' }}>{title}</h3>
-            {description && <div className="sub" style={{ fontSize: 13, color: '#8a93a6' }}>{description}</div>}
+            <h3 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 4px', color: 'var(--text-title)' }}>{title}</h3>
+            {description && <div className="sub" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{description}</div>}
             
             {/* Filtros Activos (Etiquetas) */}
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               {activeFilters?.map((f, i) => (
-                <span key={i} style={{ fontSize: 11, background: '#eef0f5', color: '#5d6785', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>
-                  {f.label}: <span style={{ color: '#141b2d' }}>{f.value}</span>
+                <span key={i} style={{ fontSize: 11, background: 'var(--panel)', color: 'var(--text-muted)', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>
+                  {f.label}: <span style={{ color: 'var(--text-title)' }}>{f.value}</span>
                 </span>
               ))}
             </div>
@@ -186,22 +204,22 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             
             {/* Selector de Modos de Vista */}
-            <div style={{ display: 'flex', gap: 4, background: '#f5f7fa', padding: 4, borderRadius: 8 }}>
-              <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
-              <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📊 Ambos</button>
-              <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8 }}>
+              <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
+              <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>🗂 Ambos</button>
+              <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
             </div>
 
-            <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 4px' }} />
+            <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
             <div style={{ display: 'flex', gap: 8 }}>
               {selectedCategories.length > 0 && (
-                <button onClick={() => setSelectedCategories([])} style={{ background: '#fff3e0', border: '1px solid #ffe0b2', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: '#e65100', fontSize: 12, fontWeight: 700 }}>
+                <button onClick={() => setSelectedCategories([])} style={{ background: 'var(--warn-bg, var(--hover-bg))', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--warn)', fontSize: 12, fontWeight: 700 }}>
                   Restablecer Vista
                 </button>
               )}
-              <button title="Exportar PNG (Próximamente)" style={{ background: '#f5f7fa', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: '#8a93a6', fontSize: 12, fontWeight: 600 }}>PNG ↓</button>
-              <button title="Exportar Excel (Próximamente)" style={{ background: '#f5f7fa', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: '#8a93a6', fontSize: 12, fontWeight: 600 }}>XLSX ↓</button>
+              <button title="Exportar PNG (Próximamente)" style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>PNG ⬇</button>
+              <button title="Exportar Excel (Próximamente)" style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>XLSX ⬇</button>
             </div>
             <button className="modal-close" onClick={onClose} title="Cerrar (Esc)">✕</button>
           </div>
@@ -209,31 +227,32 @@ export default function AnalysisModal({ open, onClose, title, description, confi
 
         {/* Custom HTML Legend for Multi-Select */}
         {allCategories.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 16, borderBottom: '1px solid #eef0f5', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 12, flexShrink: 0 }}>
             {allCategories.map((cat, i) => {
               const isActive = selectedCategories.length === 0 || selectedCategories.includes(cat);
-              const COLORS = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
+              const COLORS = ['var(--warn)', 'var(--brand-primary)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)'];
               const color = COLORS[i % COLORS.length];
               return (
                 <button
                   key={cat}
                   onClick={() => toggleCategory(cat)}
                   style={{
-                    background: isActive ? color + '1A' : '#f5f7fa',
-                    border: `1px solid ${isActive ? color : '#e2e8f0'}`,
-                    color: isActive ? color : '#8a93a6',
-                    padding: '4px 10px',
-                    borderRadius: 16,
+                    background: isActive ? 'rgba(143,209,79,0.12)' : 'var(--card)',
+                    border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border)'}`,
+                    color: isActive ? 'var(--text-title)' : 'var(--text-body)',
+                    padding: '6px 14px',
+                    borderRadius: 999,
                     fontSize: 12,
                     fontWeight: 600,
+                    height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    transition: 'all 0.2s'
+                    transition: 'all 0.25s'
                   }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? color : '#cbd5e1' }} />
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? color : 'var(--text-muted)' }} />
                   {cat}
                 </button>
               );
@@ -242,25 +261,20 @@ export default function AnalysisModal({ open, onClose, title, description, confi
         )}
 
         {/* Contenido (Split View) */}
-        <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: 16 }}>
+        <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0, paddingBottom: viewMode === 'split' ? 16 : 0 }}>
+            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
               <canvas ref={canvasRef} />
             </div>
           )}
 
           {viewMode === 'split' && (
-            <div 
-              onMouseDown={() => { dragging.current = true; }}
-              style={{ height: 16, background: '#f8fafc', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', flexShrink: 0, borderRadius: 4 }}
-            >
-              <div style={{ width: 40, height: 4, background: '#cbd5e1', borderRadius: 2 }} />
-            </div>
+            <div style={{ height: 20, flexShrink: 0 }} />
           )}
 
           {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 16px)` : undefined, overflow: 'auto', paddingTop: viewMode === 'split' ? 16 : 0 }}>
+            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto' }}>
               {!filteredTableData ? (
                 <div style={{ padding: 40, textAlign: 'center', color: '#8a93a6' }}>No hay tabla de respaldo configurada para esta vista.</div>
               ) : (
@@ -271,9 +285,9 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                         <th key={i} style={{ 
                           position: 'sticky', top: 0, zIndex: i === 0 ? 3 : 2, 
                           left: i === 0 ? 0 : undefined,
-                          background: '#fff', 
-                          borderBottom: '2px solid #eef0f5', 
-                          borderRight: i === 0 ? '2px solid #eef0f5' : 'none',
+                          background: 'var(--card)', 
+                          borderBottom: '2px solid var(--border)', 
+                          borderRight: i === 0 ? '2px solid var(--border)' : 'none',
                           padding: '12px 16px', 
                           textAlign: i === 0 ? 'left' : 'center', 
                           color: '#5d6785', 
@@ -305,7 +319,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                             }
                           }}
                           style={{ cursor: filteredTableData.categoryIndex !== undefined ? 'pointer' : 'default', transition: 'background 0.2s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-bg)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
                           {row.map((cell, j) => (
@@ -314,11 +328,11 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                               left: j === 0 ? 0 : undefined, 
                               zIndex: j === 0 ? 1 : 0, 
                               background: 'inherit',
-                              backgroundColor: j === 0 ? '#fff' : undefined, // Ensure first column is opaque
-                              borderBottom: '1px solid #f5f7fa', 
-                              borderRight: j === 0 ? '2px solid #eef0f5' : 'none',
+                              backgroundColor: j === 0 ? 'var(--card)' : undefined,
+                              borderBottom: '1px solid var(--border)', 
+                              borderRight: j === 0 ? '2px solid var(--border)' : 'none',
                               padding: '12px 16px', 
-                              color: '#141b2d', 
+                              color: 'var(--text-title)', 
                               textAlign: j === 0 ? 'left' : 'center',
                               fontWeight: j === 0 ? 600 : 400
                             }}>
@@ -350,8 +364,8 @@ function HierarchicalRowComponent({ hRow, onRowClick, categoryIndex }: { hRow: {
           if (hasChildren) setOpen(!open);
           if (onRowClick && categoryIndex !== undefined) onRowClick(String(hRow.row[categoryIndex]));
         }} 
-        style={{ background: open ? '#eef7f5' : 'transparent', cursor: (hasChildren || categoryIndex !== undefined) ? 'pointer' : 'default', transition: 'background 0.2s' }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = '#f8fafc'; }}
+        style={{ background: open ? 'var(--hover-bg)' : 'transparent', cursor: (hasChildren || categoryIndex !== undefined) ? 'pointer' : 'default', transition: 'background 0.2s' }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--hover-bg)'; }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent'; }}
       >
         {hRow.row.map((cell, j) => (
@@ -360,11 +374,11 @@ function HierarchicalRowComponent({ hRow, onRowClick, categoryIndex }: { hRow: {
             left: j === 0 ? 0 : undefined, 
             zIndex: j === 0 ? 1 : 0, 
             background: 'inherit',
-            backgroundColor: j === 0 ? (open ? '#eef7f5' : '#fff') : undefined,
-            borderBottom: '1px solid #f5f7fa', 
-            borderRight: j === 0 ? '2px solid #eef0f5' : 'none',
+            backgroundColor: j === 0 ? (open ? 'var(--hover-bg)' : 'var(--card)') : undefined,
+            borderBottom: '1px solid var(--border)', 
+            borderRight: j === 0 ? '2px solid var(--border)' : 'none',
             padding: '12px 16px', 
-            color: '#141b2d', 
+            color: 'var(--text-title)', 
             textAlign: j === 0 ? 'left' : 'center',
             fontWeight: hasChildren && j === 0 ? 700 : (j === 0 ? 600 : 400)
           }}>
@@ -374,15 +388,15 @@ function HierarchicalRowComponent({ hRow, onRowClick, categoryIndex }: { hRow: {
         ))}
       </tr>
       {open && hRow.children && hRow.children.map((child, k) => (
-        <tr key={k} style={{ background: '#fafbfc' }}>
+        <tr key={k} style={{ background: 'var(--panel)' }}>
           {child.row.map((cell, j) => (
             <td key={j} style={{ 
               position: j === 0 ? 'sticky' : 'static', 
               left: j === 0 ? 0 : undefined, 
               zIndex: j === 0 ? 1 : 0, 
               background: 'inherit',
-              backgroundColor: j === 0 ? '#fafbfc' : undefined,
-              borderBottom: '1px solid #f5f7fa', 
+              backgroundColor: j === 0 ? 'var(--panel)' : undefined,
+              borderBottom: '1px solid var(--border)', 
               borderRight: j === 0 ? '2px solid #eef0f5' : 'none',
               padding: '8px 16px', 
               color: '#5d6785', 

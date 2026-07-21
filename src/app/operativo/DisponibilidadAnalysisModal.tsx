@@ -138,32 +138,30 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={e => e.stopPropagation()}>
         
-        {/* Encabezado fijo superior */}
-        <div style={{ flexShrink: 0, padding: '24px 28px 16px 28px' }}>
+        <div style={{ flexShrink: 0, padding: '24px 28px 12px 28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <h2 style={{ margin: '0 0 4px', fontSize: 24, color: INK, fontWeight: 800 }}>Evolución de Disponibilidad de Brigadas</h2>
             </div>
-
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 4, background: '#f5f7fa', padding: 4, borderRadius: 8 }}>
-                <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
-                <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📊 Ambos</button>
-                <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? '#fff' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? '#141b2d' : '#8a93a6', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8 }}>
+                <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
+                <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>🗂 Ambos</button>
+                <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
               </div>
 
-              <div style={{ width: 1, height: 24, background: '#e2e8f0', margin: '0 4px' }} />
+              <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
               <div style={{ display: 'flex', gap: 8 }}>
                 {selectedCategories.length > 0 && (
-                  <button onClick={() => setSelectedCategories([])} style={{ background: '#fff3e0', border: '1px solid #ffe0b2', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: '#e65100', fontSize: 12, fontWeight: 700 }}>
+                  <button onClick={() => setSelectedCategories([])} style={{ background: 'var(--warn-bg, var(--hover-bg))', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--warn)', fontSize: 12, fontWeight: 700 }}>
                     Restablecer Vista
                   </button>
                 )}
-                <button title="Exportar PNG (Próximamente)" style={{ background: '#f5f7fa', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: '#8a93a6', fontSize: 12, fontWeight: 600 }}>PNG ↓</button>
-                <button title="Exportar Excel (Próximamente)" style={{ background: '#f5f7fa', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: '#8a93a6', fontSize: 12, fontWeight: 600 }}>XLSX ↓</button>
+                <button title="Exportar PNG (Próximamente)" style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>PNG ⬇</button>
+                <button title="Exportar Excel (Próximamente)" style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>XLSX ⬇</button>
               </div>
-              <button onClick={onClose} style={{ background: '#f5f7fa', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: MUT, cursor: 'pointer', fontWeight: 'bold' }}>&times;</button>
+              <button onClick={onClose} style={{ background: 'var(--panel)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: MUT, cursor: 'pointer', fontWeight: 'bold' }}>&times;</button>
             </div>
           </div>
           
@@ -176,21 +174,22 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
                   key={b}
                   onClick={() => toggleCategory(b)}
                   style={{
-                    background: isActive ? color + '1A' : '#f5f7fa',
-                    border: `1px solid ${isActive ? color : '#e2e8f0'}`,
-                    color: isActive ? color : MUT,
-                    padding: '4px 10px',
-                    borderRadius: 16,
+                    background: isActive ? 'rgba(143,209,79,0.12)' : 'var(--card)',
+                    border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border)'}`,
+                    color: isActive ? 'var(--text-title)' : 'var(--text-body)',
+                    padding: '6px 14px',
+                    borderRadius: 999,
                     fontSize: 12,
                     fontWeight: 600,
+                    height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    transition: 'all 0.2s'
+                    transition: 'all 0.25s'
                   }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? color : '#cbd5e1' }} />
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? color : 'var(--text-muted)' }} />
                   {b}
                 </button>
               );
@@ -198,61 +197,59 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
           </div>
         </div>
 
-        {/* Contenedor Split / Vistas */}
         <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '0 28px 24px 28px' }}>
           
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0, paddingBottom: viewMode === 'split' ? 16 : 0 }}>
+            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={LINE} />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: MUT }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: MUT }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(234,243,226,0.08)" />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
                   <Tooltip 
-                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-title)', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
                     itemStyle={{ fontSize: 13, fontWeight: 600 }}
                   />
-                  {visibleBrigadas.map((b, i) => (
-                    <Line 
-                      key={b} 
-                      type="monotone" 
-                      dataKey={b} 
-                      stroke={COLORS[brigadas.indexOf(b) % COLORS.length]} 
-                      strokeWidth={2} 
-                      dot={{ r: 3, strokeWidth: 1 }} 
-                      activeDot={{ r: 6, onClick: () => toggleCategory(b) }} 
-                    />
-                  ))}
+                  {visibleBrigadas.map((b, i) => {
+                    const isActive = selectedCategories.length === 0 || selectedCategories.includes(b);
+                    return (
+                      <Line 
+                        key={b} 
+                        type="monotone" 
+                        dataKey={b} 
+                        stroke={COLORS[brigadas.indexOf(b) % COLORS.length]} 
+                        strokeWidth={3} 
+                        strokeOpacity={isActive ? 1 : 0.45}
+                        dot={{ r: 5, strokeWidth: 0, fill: COLORS[brigadas.indexOf(b) % COLORS.length] }} 
+                        activeDot={{ r: 8, onClick: () => toggleCategory(b) }} 
+                      />
+                    );
+                  })}
                 </LineChart>
               </ResponsiveContainer>
             </div>
           )}
 
           {viewMode === 'split' && (
-            <div 
-              onMouseDown={() => { dragging.current = true; }}
-              style={{ height: 16, background: '#f8fafc', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', flexShrink: 0, borderRadius: 4 }}
-            >
-              <div style={{ width: 40, height: 4, background: '#cbd5e1', borderRadius: 2 }} />
-            </div>
+            <div style={{ height: 20, flexShrink: 0 }} />
           )}
 
           {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 16px)` : undefined, overflow: 'auto', paddingTop: viewMode === 'split' ? 16 : 0, paddingBottom: 16 }}>
+            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12, textAlign: 'center' }}>
                 <thead>
                   <tr>
-                    <th style={{ position: 'sticky', top: 0, left: 0, zIndex: 3, textAlign: 'left', padding: '12px 16px', background: '#fff', borderBottom: `2px solid ${LINE}`, borderRight: `1px solid ${LINE}`, color: MUT, fontWeight: 600 }}>Tipo Brigada</th>
+                    <th style={{ position: 'sticky', top: 0, left: 0, zIndex: 3, textAlign: 'left', padding: '12px 16px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, borderRight: `1px solid var(--border)`, color: MUT, fontWeight: 600 }}>Tipo Brigada</th>
                     {days.map(d => (
-                      <th key={d} style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 4px', background: '#fff', borderBottom: `2px solid ${LINE}`, color: MUT, fontWeight: 600, width: 24 }}>{d}</th>
+                      <th key={d} style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 4px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, color: MUT, fontWeight: 600, width: 24 }}>{d}</th>
                     ))}
-                    <th style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 16px', background: '#fff', borderBottom: `2px solid ${LINE}`, color: INK, fontWeight: 700 }}>Total</th>
+                    <th style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 16px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, color: INK, fontWeight: 700 }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleBrigadas.map(b => (
-                    <tr key={b} onClick={() => toggleCategory(b)} style={{ cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f5f7fa'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                      <td style={{ position: 'sticky', left: 0, zIndex: 1, background: '#fff', textAlign: 'left', padding: '8px 16px', borderBottom: `1px solid ${LINE}`, borderRight: `1px solid ${LINE}`, fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{b}</td>
+                    <tr key={b} onClick={() => toggleCategory(b)} style={{ cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-bg)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <td style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--card)', textAlign: 'left', padding: '8px 16px', borderBottom: `1px solid var(--border)`, borderRight: `1px solid var(--border)`, fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{b}</td>
                       {days.map(d => {
                         const val = matrix[b][d];
                         return (
@@ -269,11 +266,11 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td style={{ position: 'sticky', left: 0, zIndex: 1, background: '#fff', textAlign: 'left', padding: '12px 16px', borderTop: `2px solid ${LINE}`, borderRight: `1px solid ${LINE}`, fontWeight: 700, color: INK }}>Total por día</td>
+                    <td style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--hover-bg)', textAlign: 'left', padding: '12px 16px', borderTop: `2px solid var(--ok)`, borderRight: `1px solid var(--border)`, fontWeight: 700, color: 'var(--text-title)' }}>Total por día</td>
                     {days.map(d => (
-                      <td key={d} style={{ padding: '12px 4px', borderTop: `2px solid ${LINE}`, background: '#fff', fontWeight: 700, color: INK }}>{visibleTotalsByDay[d]}</td>
+                      <td key={d} style={{ padding: '12px 4px', borderTop: `2px solid var(--ok)`, background: 'var(--hover-bg)', fontWeight: 700, color: 'var(--text-title)' }}>{visibleTotalsByDay[d]}</td>
                     ))}
-                    <td style={{ padding: '12px 16px', borderTop: `2px solid ${LINE}`, background: '#fff', fontWeight: 800, color: INK }}>
+                    <td style={{ padding: '12px 16px', borderTop: `2px solid var(--ok)`, background: 'var(--hover-bg)', fontWeight: 800, color: 'var(--text-title)' }}>
                       {Object.values(visibleTotalsByDay).reduce((a, b) => a + b, 0)}
                     </td>
                   </tr>
