@@ -55,7 +55,7 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           {hasDetail && (
             <button
               onClick={() => setModalOpen(true)}
-              style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: '#f5f7fa', color: '#5d6785', border: '1px solid #e2e8f0', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: 'var(--panel)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
               ⤢ Expandir
             </button>

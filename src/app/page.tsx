@@ -9,7 +9,7 @@ import { calcHealth } from './components/utils/health';
 import KpiCard from './components/KpiCard';
 import HealthScore from './components/HealthScore';
 
-const CFG = { ok: '#2E7D32', warn: '#F57C00', err: '#C62828', otc: '#3949AB', sip: '#00897B', neu: '#5d6785' };
+const CFG = { ok: 'var(--ok)', warn: 'var(--warn)', err: 'var(--err)', otc: 'var(--otc)', sip: 'var(--sip)', neu: 'var(--text-muted)' };
 
 const baseOpt = {
   responsive: true,
@@ -188,7 +188,7 @@ export default function ResumenPage() {
   // ---- Configs de gráficos (evolutivos) ----
   const line = (label: string, arr: number[], kind: 'pct' | 'cop') => ({
     type: 'line' as const,
-    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: kind === 'cop' ? CFG.otc : CFG.sip, backgroundColor: (kind === 'cop' ? CFG.otc : CFG.sip) + '22', fill: true, tension: 0.3 }] },
+    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: kind === 'cop' ? CFG.otc : CFG.sip, backgroundColor: kind === 'cop' ? 'var(--otc-bg)' : 'var(--sip-bg)', fill: true, tension: 0.3 }] },
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
   });
   const eficCfg = line('Eficiencia %', efMes.map(x => x.efic), 'pct');

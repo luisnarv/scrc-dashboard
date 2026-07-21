@@ -2,20 +2,20 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
-const TEAL = '#00897B';
-const INK = '#141b2d';
-const MUT = '#8a93a6';
-const LINE = '#e7eaf0';
-const COLORS = ['#00897B', '#E91E63', '#FF9800', '#3F51B5', '#4CAF50', '#9C27B0', '#795548', '#607D8B'];
+const TEAL = 'var(--sip)';
+const INK = 'var(--text-title)';
+const MUT = 'var(--text-muted)';
+const LINE = 'var(--border)';
+const COLORS = ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#97999B', '#B5BD00', '#78BE20', '#509E2F'];
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-  background: 'rgba(20, 27, 45, 0.4)', backdropFilter: 'blur(3px)',
+  background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
 };
 
 const modalStyle: React.CSSProperties = {
-  background: '#fff', borderRadius: 16, width: '95vw', maxWidth: '1600px',
+  background: 'var(--card)', borderRadius: 16, width: '95vw', maxWidth: '1600px',
   height: '95vh', display: 'flex', flexDirection: 'column',
   boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
 };

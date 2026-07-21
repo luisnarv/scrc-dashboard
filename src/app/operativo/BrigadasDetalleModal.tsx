@@ -6,15 +6,15 @@ import { filtRaw } from '../components/utils/filters';
 import { fmtN, fmtCOP } from '../components/utils/formatters';
 
 /* Paleta del dashboard */
-const TEAL = '#00897B';
-const INK = '#141b2d';
-const MUT = '#8a93a6';
-const OK = '#2E7D32';
-const WARN = '#F57C00';
-const ERR = '#C62828';
-const LINE = '#e7eaf0';
+const TEAL = 'var(--sip)';
+const INK = 'var(--text-title)';
+const MUT = 'var(--text-muted)';
+const OK = 'var(--ok)';
+const WARN = 'var(--warn)';
+const ERR = 'var(--err)';
+const LINE = 'var(--border)';
 
-/* ---------- modelo de fila (sirve para brigada y para técnico) ---------- */
+/* ---------- modelo de fila (jerárquico) ---------- */
 interface Row {
   key: string;
   label: string;
@@ -24,7 +24,7 @@ interface Row {
   totVis: number;
   dias: number;   // técnico-días (denominador de los promedios)
   ingreso: number; // Ingreso acumulado
-  tecnicos?: Row[];
+  children?: Row[];
 }
 
 type SortKey =
@@ -69,25 +69,37 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
 
-  /* ------- agregación: por tipo de cuadrilla, con drill-down a técnico ------- */
+  /* ------- agregación: Tipo -> Zona -> Técnico ------- */
   const { brigadas, total, periodo } = useMemo(() => {
     const empty = { brigadas: [] as Row[], total: null as Row | null, periodo: '—' };
     if (!raw) return empty;
     const rows = filtRaw(raw.raw, filters);
 
-    // brigada -> (cedula -> acumulador)
-    const briMap: Record<string, { agg: Row; tecs: Record<string, Row> }> = {};
+    const rootMap: Record<string, Row> = {};
+
     for (const r of rows) {
-      const bKey = String(r.Tipo_Brigada_Mes || '—');
-      const b = (briMap[bKey] ??= {
-        agg: { key: bKey, label: bKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 },
-        tecs: {},
-      });
-      const ced = String(r.Cedula || '');
-      const t = (b.tecs[ced] ??= {
-        key: `${bKey}::${ced}`, label: String(r.Nombre || ced),
-        efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0,
-      });
+      const typeKey = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin Tipo');
+      const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
+      const techKey = String(r.Cedula || '');
+      const techLabel = String(r.Nombre || techKey);
+
+      // Create/Get Type
+      if (!rootMap[typeKey]) rootMap[typeKey] = { key: typeKey, label: typeKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, children: [] };
+      const typeNode = rootMap[typeKey];
+
+      // Create/Get Zone (find inside Type's children)
+      let zoneNode = typeNode.children!.find(c => c.key === `${typeKey}::${zoneKey}`);
+      if (!zoneNode) {
+        zoneNode = { key: `${typeKey}::${zoneKey}`, label: zoneKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, children: [] };
+        typeNode.children!.push(zoneNode);
+      }
+
+      // Create/Get Tech (find inside Zone's children)
+      let techNode = zoneNode.children!.find(c => c.key === `${typeKey}::${zoneKey}::${techKey}`);
+      if (!techNode) {
+        techNode = { key: `${typeKey}::${zoneKey}::${techKey}`, label: techLabel, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 };
+        zoneNode.children!.push(techNode);
+      }
 
       const efec = num(r.Efectivas);
       const fall = num(r.Fallida_Con_Pago);
@@ -95,16 +107,20 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const totVis = efec + fall + perd;
       const ingreso = num(r.Ingresos);
 
-      for (const acc of [b.agg, t]) {
+      for (const acc of [typeNode, zoneNode, techNode]) {
         acc.efec += efec; acc.fall += fall; acc.perd += perd;
-        acc.totVis += totVis; acc.dias += 1; acc.ingreso += ingreso; // cada registro = un técnico-día
+        acc.totVis += totVis; acc.dias += 1; acc.ingreso += ingreso;
       }
     }
 
-    const brigadas = Object.values(briMap).map(({ agg, tecs }) => ({
-      ...agg,
-      tecnicos: Object.values(tecs).sort((a, b) => b.efec - a.efec),
-    }));
+    // Sort children
+    const brigadas = Object.values(rootMap).map(typeNode => {
+      typeNode.children!.forEach(zoneNode => {
+        zoneNode.children!.sort((a, b) => b.efec - a.efec);
+      });
+      typeNode.children!.sort((a, b) => b.efec - a.efec);
+      return typeNode;
+    });
 
     const total: Row = brigadas.reduce((s, b) => {
       (['efec', 'fall', 'perd', 'totVis', 'dias', 'ingreso'] as const)
@@ -112,7 +128,6 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       return s;
     }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 } as Row);
 
-    // etiqueta de periodo (a partir de fechas filtradas)
     const fechas = [...new Set(rows.map(r => String(r.Fecha || '')).filter(Boolean))].sort();
     const periodo = fechas.length ? (fechas.length === 1 ? fechas[0] : `${fechas[0]} … ${fechas[fechas.length - 1]}`) : '—';
 
@@ -152,7 +167,6 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   });
   const arrow = (k: SortKey) => (sort === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
 
-  /* fila de datos reutilizable (brigada o técnico) */
   const dataCells = (r: Row, prom = false) => COLS.map(c => {
     const v = c.prom ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
     const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
@@ -179,16 +193,15 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
         }}
       >
-        {/* encabezado */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderBottom: `1px solid ${LINE}` }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 1.5, color: INK }}>DETALLE POR BRIGADAS</div>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 1.5, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
             <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
-              Tipificación de efectivas y visitas · toca una fila para ver sus técnicos · Periodo <b style={{ color: INK }}>{periodo}</b>
+              Jerarquía: Tipo de Brigada → Zona → Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
           <input
-            value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar brigada…"
+            value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo…"
             style={{ padding: '8px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, width: 190, outline: 'none', color: INK }}
           />
           <button
@@ -197,13 +210,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           >×</button>
         </div>
 
-        {/* tabla */}
         <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
             <thead>
               <tr>
                 <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => clickSort('label')}>
-                  Brigada{arrow('label')}
+                  Agrupación{arrow('label')}
                 </th>
                 {COLS.map(c => (
                   <th key={c.key} style={{ ...th, textAlign: 'right' }} onClick={() => clickSort(c.key)}>
@@ -213,15 +225,17 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               </tr>
             </thead>
             <tbody>
-              {brigadasSort.map((b, i) => {
-                const open = expanded.has(b.key);
-                return (
-                  <BrigadaGroup
-                    key={b.key} b={b} open={open} zebra={i % 2 === 1}
-                    onToggle={() => toggle(b.key)} dataCells={dataCells}
-                  />
-                );
-              })}
+              {brigadasSort.map((b, i) => (
+                <RowRecursive 
+                  key={b.key} 
+                  node={b} 
+                  level={0} 
+                  zebra={i % 2 === 1} 
+                  expanded={expanded} 
+                  onToggle={toggle} 
+                  dataCells={dataCells} 
+                />
+              ))}
               {brigadasSort.length === 0 && (
                 <tr><td colSpan={COLS.length + 1} style={{ ...tdBase, textAlign: 'center', color: MUT, padding: 28 }}>
                   No hay registros para el filtro actual.
@@ -247,9 +261,8 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           </table>
         </div>
 
-        {/* pie */}
         <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11.5, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <span>{brigadasSort.length} brigada(s) · {total ? fmtN(total.dias) : 0} técnico-días</span>
+          <span>{brigadasSort.length} agrupaciones principales · {total ? fmtN(total.dias) : 0} técnico-días</span>
           <span>Prom = valor ÷ técnico-días · Total Visitas = Efectivas + Fallidas + Perdidas</span>
         </div>
       </div>
@@ -257,40 +270,55 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   );
 }
 
-/* ------- fila de brigada + sub-filas de técnico (expandible) ------- */
-function BrigadaGroup({
-  b, open, zebra, onToggle, dataCells,
+/* ------- Fila recursiva ------- */
+function RowRecursive({
+  node, level, zebra, expanded, onToggle, dataCells,
 }: {
-  b: Row; open: boolean; zebra: boolean; onToggle: () => void;
+  node: Row; level: number; zebra: boolean; expanded: Set<string>; onToggle: (k: string) => void;
   dataCells: (r: Row, prom?: boolean) => React.ReactNode;
 }) {
-  const rowBg = open ? '#eef7f5' : zebra ? '#fafbfc' : '#fff';
+  const open = expanded.has(node.key);
+  const isLeaf = !node.children || node.children.length === 0;
+  
+  let rowBg = '#fff';
+  if (level === 0) rowBg = open ? '#eef7f5' : zebra ? '#fafbfc' : '#fff';
+  else if (level === 1) rowBg = open ? '#f8fdfc' : '#fff';
+
   const chev: React.CSSProperties = {
     display: 'inline-block', width: 16, transition: 'transform .18s',
-    transform: open ? 'rotate(90deg)' : 'none', color: TEAL, fontSize: 12,
+    transform: open ? 'rotate(90deg)' : 'none', color: level === 0 ? TEAL : MUT, fontSize: 12,
   };
+
+  const padLeft = level * 24 + 12;
+
   return (
     <>
       <tr
-        onClick={onToggle}
-        style={{ background: rowBg, cursor: 'pointer', borderBottom: `1px solid ${LINE}` }}
+        onClick={() => !isLeaf && onToggle(node.key)}
+        style={{ background: rowBg, cursor: isLeaf ? 'default' : 'pointer', borderBottom: `1px solid ${LINE}` }}
       >
-        <td style={{ padding: '10px 12px', fontSize: 13.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap' }}>
-          <span style={chev}>▶</span>{b.label}
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: MUT }}>
-            {b.tecnicos?.length ?? 0} téc.
-          </span>
+        <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? '#42506b' : INK, whiteSpace: 'nowrap' }}>
+          {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: '#c2c8d4', marginRight: 6 }}>└</span>}
+          {node.label}
+          {!isLeaf && (
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: MUT }}>
+              ({node.children!.length})
+            </span>
+          )}
+          {isLeaf && <span style={{ marginLeft: 8, fontSize: 10.5, color: MUT }}>{fmtN(node.dias)} días</span>}
         </td>
-        {dataCells(b)}
+        {dataCells(node)}
       </tr>
-      {open && b.tecnicos?.map(t => (
-        <tr key={t.key} style={{ background: '#fff', borderBottom: `1px solid ${LINE}` }}>
-          <td style={{ padding: '7px 12px 7px 34px', fontSize: 12.5, color: '#42506b', whiteSpace: 'nowrap' }}>
-            <span style={{ color: '#c2c8d4', marginRight: 6 }}>└</span>{t.label}
-            <span style={{ marginLeft: 8, fontSize: 10.5, color: MUT }}>{fmtN(t.dias)} días</span>
-          </td>
-          {dataCells(t)}
-        </tr>
+      {open && !isLeaf && node.children!.map((child, i) => (
+        <RowRecursive 
+          key={child.key} 
+          node={child} 
+          level={level + 1} 
+          zebra={false} 
+          expanded={expanded} 
+          onToggle={onToggle} 
+          dataCells={dataCells} 
+        />
       ))}
     </>
   );

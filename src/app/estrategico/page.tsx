@@ -8,7 +8,7 @@ import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
 import { calcHealth } from '../components/utils/health';
 import ChartCard from '../components/ChartCard';
 
-const CFG = { ok: '#2E7D32', warn: '#F57C00', err: '#C62828', otc: '#3949AB', sip: '#00897B', neu: '#5d6785' };
+const CFG = { ok: 'var(--ok)', warn: 'var(--warn)', err: 'var(--err)', otc: 'var(--otc)', sip: 'var(--sip)', neu: 'var(--text-muted)' };
 
 const baseOpt = {
   responsive: true,
@@ -194,7 +194,7 @@ export default function ResumenPage() {
   // ---- Configs de gráficos (evolutivos) ----
   const line = (label: string, arr: number[], kind: 'pct' | 'cop', color?: string) => ({
     type: 'line' as const,
-    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip), backgroundColor: (color || (kind === 'cop' ? CFG.otc : CFG.sip)) + '22', fill: true, tension: 0.3 }] },
+    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip), backgroundColor: (kind === 'cop' ? 'var(--otc-bg)' : 'var(--sip-bg)'), fill: true, tension: 0.3 }] },
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
   });
 
@@ -211,14 +211,14 @@ export default function ResumenPage() {
 
   const buildModalConfig = (metric: 'efic' | 'cumpProd' | 'ingXbrig' | 'costXbrig', kind: 'pct' | 'cop') => {
     const tipos = Array.from(new Set(efMesPorTipo.map((x: any) => x.tipo)));
-    const colors = ['#3949AB', '#00796b', '#F57C00', '#C62828', '#8E24AA', '#039BE5', '#43A047', '#E53935'];
+    const colors = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
     const datasets = tipos.map((tipo, idx) => {
       const arr = meses12.map((m: any) => {
         const v = efMesPorTipo.find((x: any) => x.mes === m && x.tipo === tipo);
         return v ? Number(v[metric] || 0) : 0;
       });
       const c = colors[idx % colors.length];
-      return { label: tipo, data: arr, borderColor: c, backgroundColor: c + '22', fill: false, tension: 0.3 };
+      return { label: tipo, data: arr, borderColor: c, backgroundColor: 'var(--hover-bg)', fill: false, tension: 0.3 };
     });
     return {
       type: 'line' as const,

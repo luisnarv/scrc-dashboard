@@ -61,16 +61,16 @@ export function calcHealth(
 
   let estado: string, cls: string, color: string, narr: string;
   if (score >= 95) {
-    estado = '🔵 Excelente'; cls = 'excelente'; color = '#1976D2';
+    estado = '🔵 Excelente'; cls = 'excelente'; color = 'var(--brand-primary)';
     narr = 'El proyecto mantiene una rentabilidad superior a la meta, presenta alta productividad y no registra riesgos significativos.';
   } else if (score >= 80) {
-    estado = '🟢 Saludable'; cls = 'saludable'; color = '#2E7D32';
+    estado = '🟢 Saludable'; cls = 'saludable'; color = 'var(--ok)';
     narr = 'El proyecto presenta resultados positivos tanto financieros como operativos. Se recomienda continuar monitoreando la evolución de costos y cumplimiento.';
   } else if (score >= 60) {
-    estado = '🟡 En observación'; cls = 'observacion'; color = '#F57C00';
+    estado = '🟡 En observación'; cls = 'observacion'; color = 'var(--warn)';
     narr = 'Aunque el proyecto continúa siendo rentable, se evidencia una disminución del margen y/o un incremento en los costos operativos que requieren seguimiento.';
   } else {
-    estado = '🔴 Riesgo Alto'; cls = 'riesgo'; color = '#C62828';
+    estado = '🔴 Riesgo Alto'; cls = 'riesgo'; color = 'var(--err)';
     narr = 'El proyecto presenta deterioro financiero y operativo. Los costos crecen más rápido que los ingresos y existen indicadores críticos que requieren intervención inmediata.';
   }
 

@@ -2,10 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import DisponibilidadAnalysisModal from './DisponibilidadAnalysisModal';
 
-const TEAL = '#00897B';
-const INK = '#141b2d';
-const MUT = '#8a93a6';
-const LINE = '#e7eaf0';
+const TEAL = 'var(--sip)';
+const INK = 'var(--text-title)';
+const MUT = 'var(--text-muted)';
+const LINE = 'var(--border)';
 
 const sectionH: React.CSSProperties = { 
   fontSize: 15, fontWeight: 700, color: INK, display: 'flex', 
@@ -13,18 +13,21 @@ const sectionH: React.CSSProperties = {
   borderLeft: `3px solid ${TEAL}`, paddingLeft: 10 
 };
 const card: React.CSSProperties = { 
-  background: '#fff', borderRadius: 14, padding: '16px 18px', 
-  boxShadow: '0 1px 4px rgba(20,30,60,.07)' 
+  background: 'var(--card)', borderRadius: 14, padding: '16px 18px', 
+  boxShadow: '0 1px 4px rgba(0,0,0,.07)' 
 };
 
 export default function DisponibilidadSection() {
   const { raw, filters } = useDashboard();
   const [modalOpen, setModalOpen] = useState(false);
+  const [locFilterTipo, setLocFilterTipo] = useState('ALL');
+  const [locFilterZona, setLocFilterZona] = useState('ALL');
 
-  const { matrix, days, brigadas, totalsByDay, totalsByBrigada } = useMemo(() => {
-    if (!raw || !raw.disp) return { matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {} };
+  const { matrix, days, brigadas, totalsByDay, totalsByBrigada, availableTipos, availableZonas } = useMemo(() => {
+    if (!raw || !raw.disp) return { matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {}, availableTipos: [], availableZonas: [] };
 
     let data = raw.disp;
+    // Aplicar filtros globales obligatorios
     if (filters.mes && filters.mes.length > 0) {
       data = data.filter(r => r.Fecha && filters.mes.some(m => r.Fecha!.startsWith(m)));
     }
@@ -33,6 +36,22 @@ export default function DisponibilidadSection() {
     }
     if (filters.zona && filters.zona !== 'ALL') {
       data = data.filter(r => r._Zona === filters.zona || r._ZonaDet === filters.zona);
+    }
+
+    // Obtener listas para filtros locales
+    const tiposSet = new Set<string>();
+    const zonasSet = new Set<string>();
+    data.forEach(r => {
+      if (r.Tipo_Brigada) tiposSet.add(r.Tipo_Brigada);
+      if (r._Zona) zonasSet.add(r._Zona);
+    });
+
+    // Aplicar filtros locales
+    if (locFilterTipo !== 'ALL') {
+      data = data.filter(r => r.Tipo_Brigada === locFilterTipo);
+    }
+    if (locFilterZona !== 'ALL') {
+      data = data.filter(r => r._Zona === locFilterZona);
     }
 
     const daySet = new Set<string>();
@@ -74,8 +93,12 @@ export default function DisponibilidadSection() {
       }
     });
 
-    return { matrix, days, brigadas, totalsByDay, totalsByBrigada };
-  }, [raw, filters.mes]);
+    return { 
+      matrix, days, brigadas, totalsByDay, totalsByBrigada, 
+      availableTipos: Array.from(tiposSet).sort(), 
+      availableZonas: Array.from(zonasSet).sort() 
+    };
+  }, [raw, filters.mes, filters.proy, filters.zona, locFilterTipo, locFilterZona]);
 
   const getCellColor = (val: number) => {
     if (val === 0) return '#f5f6f8';
@@ -96,9 +119,30 @@ export default function DisponibilidadSection() {
     <div style={{ marginTop: 24 }}>
       <div style={sectionH}>
         Disponibilidad de Brigadas por Día
+        
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', marginRight: 16 }}>
+          <select 
+            value={locFilterTipo} 
+            onChange={e => setLocFilterTipo(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`, fontSize: 12, outline: 'none' }}
+          >
+            <option value="ALL">Todos los Tipos</option>
+            {availableTipos.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          <select 
+            value={locFilterZona} 
+            onChange={e => setLocFilterZona(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`, fontSize: 12, outline: 'none' }}
+          >
+            <option value="ALL">Todas las Zonas</option>
+            {availableZonas.map(z => <option key={z} value={z}>{z}</option>)}
+          </select>
+        </div>
+
         <button 
           onClick={() => setModalOpen(true)}
-          style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 6, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          style={{ padding: '6px 12px', borderRadius: 6, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
         >
           Ver Evolución →
         </button>

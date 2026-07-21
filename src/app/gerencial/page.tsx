@@ -8,10 +8,10 @@ import { otcAgg } from '../components/utils/aggregators';
 import ChartCard from '../components/ChartCard';
 import KpiCard from '../components/KpiCard';
 
-const TEAL = '#00897B';
-const INDIGO = '#3949AB';
-const INK = '#141b2d';
-const MUT = '#8a93a6';
+const TEAL = 'var(--sip)';
+const INDIGO = 'var(--otc)';
+const INK = 'var(--text-title)';
+const MUT = 'var(--text-muted)';
 
 export default function GerencialPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();

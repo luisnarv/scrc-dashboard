@@ -6,14 +6,15 @@ import { filtRaw } from '../components/utils/filters';
 import { fmtPct, fmtN } from '../components/utils/formatters';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
+import ChartCard from '../components/ChartCard';
 
-const TEAL = '#00897B';
-const INDIGO = '#3949AB';
-const OK = '#2E7D32';
-const WARN = '#F57C00';
-const ERR = '#C62828';
-const INK = '#141b2d';
-const MUT = '#8a93a6';
+const TEAL = 'var(--sip)';
+const INDIGO = 'var(--otc)';
+const OK = 'var(--ok)';
+const WARN = 'var(--warn)';
+const ERR = 'var(--err)';
+const INK = 'var(--text-title)';
+const MUT = 'var(--text-muted)';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -50,19 +51,57 @@ export default function OperativoPage() {
     const rawF = filtRaw(raw.raw, F);
 
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
-    // Para el negocio, "Perdidas" = "Fallidas sin pago" + las perdidas originales (sin precio)
     const fallidas = rawF.reduce((s, r) => s + n(r.Fallida_Con_Pago), 0);
     const perdidas = rawF.reduce((s, r) => s + n(r.Fallida_Sin_Pago) + n(r.Perdidas), 0);
     const visitas = rawF.reduce((s, r) => s + n(r.Visitas), 0);
     const asignado = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
     const brigadasDisp = new Set(rawF.map(r => r.Cedula)).size;
 
-    // días + promedio diario de brigadas activas
-    const dayCed: Record<string, Set<unknown>> = {};
-    rawF.forEach(r => { const f = String(r.Fecha || ''); (dayCed[f] ??= new Set()).add(r.Cedula); });
-    const dias = Object.keys(dayCed);
+    // Agrupación Diaria para Evolutivos y Tendencias
+    const byDay: Record<string, { efec: number, fall: number, perd: number, disp: number, oper: number, brigadas: Set<unknown> }> = {};
+    const byTypeDay: Record<string, Record<string, { efec: number, vis: number }>> = {};
+
+    rawF.forEach(r => {
+      const day = String(r.Fecha || '');
+      if (!day) return;
+      const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin tipo');
+      
+      const e = n(r.Efectivas);
+      const f = n(r.Fallida_Con_Pago);
+      const p = n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+      const v = n(r.Visitas);
+      
+      const bd = (byDay[day] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+      bd.efec += e; bd.fall += f; bd.perd += p;
+      bd.brigadas.add(r.Cedula);
+
+      const btd = (byTypeDay[t] ??= {});
+      const td = (btd[day] ??= { efec: 0, vis: 0 });
+      td.efec += e; td.vis += v;
+    });
+
+    const dias = Object.keys(byDay).sort();
     const diasEjec = dias.length;
-    const brigadasOper = dias.length ? Math.round(dias.reduce((s, f) => s + dayCed[f].size, 0) / dias.length) : 0;
+
+    // Calcular disponibles diarios desde raw.disp (si está disponible)
+    if (raw.disp) {
+      const dispData = raw.disp;
+      dias.forEach(d => {
+        const matchingDisp = dispData.filter(r => r.Fecha === d);
+        const operativas = byDay[d].brigadas.size;
+        // Total activo en el pool de disponibilidad ese día
+        const totalDisp = matchingDisp.reduce((sum, r) => sum + (Number(r.BrigadasActivas) || 0), 0);
+        byDay[d].oper = operativas;
+        byDay[d].disp = totalDisp > 0 ? totalDisp : operativas; // Fallback si no hay meta
+      });
+    } else {
+      dias.forEach(d => {
+        byDay[d].oper = byDay[d].brigadas.size;
+        byDay[d].disp = brigadasDisp;
+      });
+    }
+
+    const brigadasOper = dias.length ? Math.round(dias.reduce((s, f) => s + byDay[f].oper, 0) / dias.length) : 0;
 
     const meses12 = mesList.slice(-12);
     const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
@@ -72,12 +111,84 @@ export default function OperativoPage() {
     const cEfect = asignado ? efect / asignado : 0;
     const cDias = diasHabiles ? diasEjec / diasHabiles : 0;
     const cAsignEjec = asignado ? visitas / asignado : 0;
-
-    // Estado de la operación
     const disponibilidad = brigadasDisp ? brigadasOper / brigadasDisp : 0;
     const totOrd = efect + fallidas + perdidas || 1;
     const efectividad = visitas ? efect / visitas : 0;
     const perdRate = perdidas / totOrd;
+
+    // Deltas de tendencia (último día vs día anterior)
+    let dEfec = null, dFall = null, dDisp = null, ultD = '', antD = '';
+    if (dias.length >= 2) {
+      ultD = dias[dias.length - 1];
+      antD = dias[dias.length - 2];
+      const ult = byDay[ultD];
+      const ant = byDay[antD];
+      if (ant.efec) dEfec = (ult.efec - ant.efec) / ant.efec;
+      if (ant.fall) dFall = (ult.fall - ant.fall) / ant.fall;
+      const dispUlt = ult.disp ? ult.oper / ult.disp : 0;
+      const dispAnt = ant.disp ? ant.oper / ant.disp : 0;
+      dDisp = dispUlt - dispAnt; // Variación porcentual absoluta
+    }
+
+    // Narrativa Automática
+    let narrativa = 'No hay suficientes datos diarios para generar una tendencia.';
+    if (dias.length >= 2 && dEfec !== null) {
+      const maxEfecDay = dias.reduce((a, b) => byDay[a].efec > byDay[b].efec ? a : b);
+      const efecTrend = dEfec > 0.05 ? 'al alza' : dEfec < -0.05 ? 'a la baja' : 'estable';
+      narrativa = `La operación muestra una tendencia ${efecTrend} en efectivas respecto al día anterior. El día de mayor volumen fue el ${maxEfecDay.slice(-2)} con ${fmtN(byDay[maxEfecDay].efec)} efectivas. `;
+      
+      if (disponibilidad < 0.7) narrativa += `La disponibilidad promedio es preocupantemente baja (${fmtPct(disponibilidad)}). `;
+      else narrativa += `La disponibilidad promedio se mantiene en ${fmtPct(disponibilidad)}. `;
+
+      if (perdRate > 0.1) narrativa += `Atención: Hay un volumen alto de órdenes perdidas (${fmtPct(perdRate)}).`;
+    }
+
+    // Configuración de Gráficos (Evolutivos Diarios)
+    const baseOpt = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 10 } } } } };
+    
+    // Gráfico 1: Evolutivo Diario de Órdenes
+    const chartOrd = {
+      type: 'bar',
+      data: {
+        labels: dias.map(d => d.slice(-2)),
+        datasets: [
+          { label: 'Efectivas', data: dias.map(d => byDay[d].efec), backgroundColor: OK },
+          { label: 'Fallidas', data: dias.map(d => byDay[d].fall), backgroundColor: WARN },
+          { label: 'Perdidas', data: dias.map(d => byDay[d].perd), backgroundColor: ERR },
+        ]
+      },
+      options: { ...baseOpt, scales: { x: { stacked: true }, y: { stacked: true } } }
+    };
+
+    // Gráfico 2: Evolutivo Diario de Brigadas
+    const chartBrig = {
+      type: 'line',
+      data: {
+        labels: dias.map(d => d.slice(-2)),
+        datasets: [
+          { label: 'Brigadas Operativas', data: dias.map(d => byDay[d].oper), borderColor: INDIGO, backgroundColor: 'var(--otc-bg)', fill: true, tension: 0.3 },
+          { label: 'Brigadas Disponibles', data: dias.map(d => byDay[d].disp), borderColor: MUT, borderDash: [5, 5], fill: false, tension: 0 },
+        ]
+      },
+      options: { ...baseOpt, scales: { y: { min: 0 } } }
+    };
+
+    // Gráfico 3: Evolutivo por Tipo de Brigada
+    const tiposArr = Object.keys(byTypeDay);
+    const colors = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
+    const chartTipos = {
+      type: 'line',
+      data: {
+        labels: dias.map(d => d.slice(-2)),
+        datasets: tiposArr.map((t, i) => ({
+          label: t,
+          data: dias.map(d => byTypeDay[t][d]?.efec || 0),
+          borderColor: colors[i % colors.length],
+          fill: false, tension: 0.3
+        }))
+      },
+      options: { ...baseOpt, scales: { y: { min: 0 } } }
+    };
 
     // Estado global + alertas accionables
     const alertas: string[] = [];
@@ -87,37 +198,12 @@ export default function OperativoPage() {
     const critico = disponibilidad < 0.30 || efectividad < 0.55 || perdRate > 0.15;
     const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
-    // Detalle por cédula (brigada≈técnico en esta data)
-    type C = { nombre: string; brigada: string; zona: string; asign: number; efec: number; fall: number; perd: number; vis: number; ing: number; dias: Set<string>; horas: number[] };
-    const ced: Record<string, C> = {};
-    rawF.forEach(r => {
-      const k = String(r.Cedula);
-      const c = (ced[k] ??= { nombre: '', brigada: '', zona: '', asign: 0, efec: 0, fall: 0, perd: 0, vis: 0, ing: 0, dias: new Set(), horas: [] });
-      c.nombre = String(r.Nombre || k);
-      c.brigada = String(r.Tipo_Brigada_Operaciones || '—');
-      c.zona = String(r._Zona || r.Zona || '—');
-      c.asign += n(r.Asignacion); c.efec += n(r.Efectivas); c.fall += n(r.Fallida_Con_Pago);
-      c.perd += n(r.Fallida_Sin_Pago) + n(r.Perdidas); c.vis += n(r.Visitas); c.ing += n(r.Ingresos);
-      c.dias.add(String(r.Fecha || ''));
-      const p = Number(r.Primera_Digitacion), u = Number(r.Ultima_Digitacion);
-      if (isFinite(p) && isFinite(u) && u > p) c.horas.push(u - p);
-    });
-    const brigadaRows = Object.values(ced).map(c => {
-      const nd = c.dias.size || 1;
-      return { brigada: c.brigada, zona: c.zona, tecnico: c.nombre, asignadas: Math.round(c.asign), ejecutadas: c.efec, fallidas: c.fall, ingreso: c.ing, productividad: c.efec / nd, efectividad: c.vis ? c.efec / c.vis : 0 };
-    });
-    const tecnicoRows = Object.values(ced).map(c => {
-      const nd = c.dias.size || 1;
-      const horas = c.horas.length ? c.horas.reduce((s, h) => s + h, 0) / c.horas.length : 0;
-      return { tecnico: c.nombre, brigada: c.brigada, asignadas: Math.round(c.asign), ejecutadas: c.efec, fallidas: c.fall, horas, productividad: c.efec / nd, efectividad: c.vis ? c.efec / c.vis : 0 };
-    });
-
     const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} … ${selWin[selWin.length - 1]}`) : '—';
 
     return {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
-      brigadaRows, tecnicoRows, periodoLabel: winLbl,
+      periodoLabel: winLbl, dEfec, dFall, dDisp, narrativa, chartOrd, chartBrig, chartTipos
     };
   }, [raw, filters, mesList]);
 
@@ -127,9 +213,27 @@ export default function OperativoPage() {
 
   const kLbl: React.CSSProperties = { fontSize: 11, color: MUT, textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: 600 };
   const kVal: React.CSSProperties = { fontSize: 30, fontWeight: 700, color: INK, marginTop: 6, fontVariantNumeric: 'tabular-nums', lineHeight: 1 };
-  const kSub: React.CSSProperties = { fontSize: 11, color: MUT, marginTop: 4 };
-  const kpi = (label: string, value: string, sub?: string, accent?: string) => (
-    <div style={card}><div style={kLbl}>{label}</div><div style={{ ...kVal, color: accent || INK }}>{value}</div>{sub && <div style={kSub}>{sub}</div>}</div>
+  const kSub: React.CSSProperties = { fontSize: 11, color: MUT, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 };
+  
+  const TrendIcon = ({ val, invert }: { val: number | null, invert?: boolean }) => {
+    if (val === null) return null;
+    if (Math.abs(val) < 0.01) return <span style={{ color: MUT }}>→</span>;
+    const isUp = val > 0;
+    const isGood = invert ? !isUp : isUp;
+    return <span style={{ color: isGood ? OK : ERR, fontWeight: 700 }}>{isUp ? '↑' : '↓'} {(Math.abs(val) * 100).toFixed(1)}%</span>;
+  };
+
+  const kpi = (label: string, value: string, sub?: string, accent?: string, delta?: number | null, invertDelta?: boolean) => (
+    <div style={card}>
+      <div style={kLbl}>{label}</div>
+      <div style={{ ...kVal, color: accent || INK }}>{value}</div>
+      {(sub || delta !== undefined) && (
+        <div style={kSub}>
+          {delta !== undefined && <TrendIcon val={delta} invert={invertDelta} />}
+          {sub && <span>{sub}</span>}
+        </div>
+      )}
+    </div>
   );
 
   // ---- Cumplimiento (Meta vs Real con barra) ----
@@ -160,7 +264,6 @@ export default function OperativoPage() {
 
   return (
     <>
-      {/* Título + acción de detalle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 12px' }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVO</div>
@@ -172,7 +275,6 @@ export default function OperativoPage() {
         </button>
       </div>
 
-      {/* Banner de estado */}
       <div style={{ ...card, borderLeft: `4px solid ${nivelCfg.c}`, display: 'flex', alignItems: 'center', gap: 14 }}>
         <span style={{ width: 12, height: 12, borderRadius: '50%', background: nivelCfg.c, flexShrink: 0 }} />
         <div>
@@ -184,16 +286,29 @@ export default function OperativoPage() {
         <div style={{ marginLeft: 'auto', fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
       </div>
 
+      {/* Narrativa Automática */}
+      <div style={{ background: '#f8fafc', padding: '14px 18px', borderRadius: 10, marginTop: 12, fontSize: 13, color: '#475569', borderLeft: '3px solid #cbd5e1', lineHeight: 1.5 }}>
+        <strong style={{ color: '#0f172a' }}>⚡ Resumen Diario:</strong> {d.narrativa}
+      </div>
+
       {/* 1 · Resumen Operativo */}
       <div style={secH(TEAL)}><span style={dot(TEAL)} /> Resumen operativo</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
+        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL, d.dDisp, false)}
         {kpi('Brigadas disponibles', fmtN(d.brigadasDisp), 'pool del periodo')}
-        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL)}
         {kpi('Total asignado', fmtN(d.asignado), 'meta de efectivas')}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
-        {kpi('Órdenes efectivas', fmtN(d.efect), undefined, OK)}
-        {kpi('Órdenes fallidas', fmtN(d.fallidas), undefined, WARN)}
+        {kpi('Órdenes efectivas', fmtN(d.efect), undefined, OK, d.dEfec, false)}
+        {kpi('Órdenes fallidas', fmtN(d.fallidas), undefined, WARN, d.dFall, true)}
         {kpi('Órdenes perdidas', fmtN(d.perdidas), undefined, ERR)}
+      </div>
+
+      {/* Evolutivos Diarios (NUEVO) */}
+      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Seguimiento Diario de Operación</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 12 }}>
+        <ChartCard id="op-ord" title="Evolutivo Diario de Órdenes" config={d.chartOrd as never} height="short" hasDetail />
+        <ChartCard id="op-brig" title="Evolutivo Diario de Brigadas" config={d.chartBrig as never} height="short" hasDetail />
+        <ChartCard id="op-tipos" title="Efectivas por Tipo de Brigada" config={d.chartTipos as never} height="short" hasDetail />
       </div>
 
       {/* 2 · Cumplimiento */}
@@ -204,10 +319,9 @@ export default function OperativoPage() {
         {cumplCard('Asignado vs ejecutado', d.asignado, d.visitas, fmtN)}
       </div>
 
-      {/* 3 · Estado de la Operación (un solo panel) */}
+      {/* 3 · Estado de la Operación */}
       <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Estado de la operación</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        {/* Disponibilidad */}
         <div style={card}>
           <div style={kLbl}>Disponibilidad de brigadas</div>
           <div style={{ ...kVal, color: sem(d.disponibilidad * 100, 90, 80) }}>{fmtPct(d.disponibilidad)}</div>
@@ -215,7 +329,6 @@ export default function OperativoPage() {
           <div style={kSub}>{fmtN(d.brigadasOper)} operativas de {fmtN(d.brigadasDisp)} disponibles</div>
         </div>
 
-        {/* Distribución de órdenes */}
         <div style={card}>
           <div style={kLbl}>Distribución de órdenes</div>
           <div style={{ display: 'flex', height: 22, borderRadius: 6, overflow: 'hidden', margin: '12px 0 10px' }}>
@@ -230,7 +343,6 @@ export default function OperativoPage() {
           </div>
         </div>
 
-        {/* Asignado vs Ejecutado */}
         <div style={card}>
           <div style={kLbl}>Asignado vs ejecutado</div>
           <div style={{ ...kVal, color: sem(d.cAsignEjec * 100, 80, 60) }}>{fmtPct(d.cAsignEjec)}</div>

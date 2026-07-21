@@ -212,7 +212,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 16, borderBottom: '1px solid #eef0f5', flexShrink: 0 }}>
             {allCategories.map((cat, i) => {
               const isActive = selectedCategories.length === 0 || selectedCategories.includes(cat);
-              const COLORS = ['#3949AB', '#00796b', '#F57C00', '#C62828', '#8E24AA', '#039BE5', '#43A047', '#E53935'];
+              const COLORS = ['var(--warn)', 'var(--sip)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)', 'var(--brand-primary)'];
               const color = COLORS[i % COLORS.length];
               return (
                 <button
