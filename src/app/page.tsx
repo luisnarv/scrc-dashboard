@@ -170,7 +170,8 @@ export default function ResumenPage() {
       ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas: pSIP.efectivas,
       ingXbrig, costoXbrig, ingElec,
       meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
-      alertas, nivelAlerta
+      alertas, nivelAlerta,
+      pOTC,
     };
   }, [raw, filters, mesList]);
 
@@ -181,7 +182,7 @@ export default function ResumenPage() {
   const {
     health, narrativa, ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas,
     ingElec, meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
-    alertas, nivelAlerta
+    alertas, nivelAlerta, pOTC
   } = data;
 
   // ---- Configs de gráficos (evolutivos) ----
@@ -237,42 +238,43 @@ export default function ResumenPage() {
         </div>
       )}
 
-      {/* ===== KPIS MACRO ===== */}
+      {/* ===== KPIS FINANCIEROS (OTC) ===== */}
+      <div className="section" style={{ marginTop: 24 }}>
+        <h2>💰 Resultado Financiero Real (Fuente: OTC)</h2>
+        <div className="sec-sub">Ventana seleccionada: {winLabel(selWin)}</div>
+        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso real contable." />
+          <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(pOTC.costos || 0)} help="Costo real contable." />
+          <KpiCard cls={pOTC.utilidad && pOTC.utilidad < 0 ? 'err' : 'ok'} lbl="Margen Real" val={fmtCOP(pOTC.utilidad || 0)} help="Ingreso Real - Costo Real." />
+          <KpiCard cls={pOTC.margen && pOTC.margen < 0 ? 'err' : 'ok'} lbl="Margen %" val={pOTC.margen !== null ? fmtPct(pOTC.margen) : '—'} help="Rentabilidad real del periodo." />
+        </div>
+      </div>
+
       <div className="grid-2" style={{ alignItems: 'start', marginTop: 24 }}>
-        
         <div>
-          {/* KPIs del periodo */}
+          {/* Desempeño Operativo */}
           <div className="section">
-            <h2>🎯 Indicadores Clave del Periodo</h2>
-            <div className="sec-sub">Ventana seleccionada: {winLabel(selWin)}</div>
+            <h2>🎯 Desempeño Operativo</h2>
+            <div className="sec-sub">Basado en registros de terreno (Estimación)</div>
             <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Producción Valorizada" val={fmtCOP(ingresoReal)} help="Valor calculado de la producción operativa del periodo." />
+              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." />
               <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '-'} help="Efectivas / Visitas." />
               <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." />
-              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." />
-            </div>
-          </div>
-
-          {/* Ingresos */}
-          <div className="section">
-            <h2>💰 Financiero</h2>
-            <div className="sec-sub">Comparativa de Producción Valorizada vs Ingreso Real</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Producción Valorizada" val={fmtCOP(ingresoReal)} help="Valor calculado de la producción operativa del periodo." />
-              <KpiCard cls="otc" lbl="Ingreso Real" val={fmtCOP(ingElec)} help="Ingreso real facturado de Ingeniería Eléctrica (OTC)." />
+              <KpiCard cls="sip" lbl="Órdenes Efectivas" val={fmtN(efectivas)} help="Órdenes resueltas con éxito." />
             </div>
           </div>
         </div>
 
         <div>
-          {/* Metas */}
+          {/* Comparativo Financiero vs Operativo */}
           <div className="section">
-            <h2>🎯 Metas de Producción</h2>
-            <div className="sec-sub">Meta de efectivas (Asignacion) vs ejecución real</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <KpiCard cls="sip" lbl="Meta (efectivas)" val={fmtN(metaEfec)} help="Suma de Asignacion (meta de efectivas del periodo)." />
-              <KpiCard cls="sip" lbl="Real (efectivas)" val={fmtN(efectivas)} help="Efectivas ejecutadas." />
-              <KpiCard cls="sip" lbl="% Cumplimiento" val={cumpProd !== null ? fmtPct(cumpProd) : '—'} help="Real / Meta." />
+            <h2>⚖️ Comparativo (Producción vs Ingreso)</h2>
+            <div className="sec-sub">Diferencia entre lo ejecutado valorizado y lo facturado real</div>
+            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(ingresoReal)} help="Valor teórico del trabajo realizado en terreno (Tarifario)." />
+              <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso contable facturado." />
+              <KpiCard cls="neu" lbl="Brecha de Ingresos" val={fmtCOP((pOTC.ingresos || 0) - ingresoReal)} help="Diferencia absoluta entre OTC y Operación." />
+              <KpiCard cls="neu" lbl="Desviación %" val={ingresoReal ? fmtPct(((pOTC.ingresos || 0) - ingresoReal) / ingresoReal) : '—'} help="Desviación porcentual." />
             </div>
           </div>
         </div>

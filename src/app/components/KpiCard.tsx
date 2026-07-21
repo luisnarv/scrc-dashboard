@@ -1,5 +1,5 @@
 interface KpiCardProps {
-  cls: 'otc' | 'sip';
+  cls: 'otc' | 'sip' | 'neu' | 'ok' | 'err';
   lbl: string;
   val: string;
   delta?: number | null;

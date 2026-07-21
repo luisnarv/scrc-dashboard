@@ -81,10 +81,10 @@ export default function OperativoPage() {
 
     // Estado global + alertas accionables
     const alertas: string[] = [];
-    if (disponibilidad < 0.85) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
+    if (disponibilidad < 0.40) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
     if (efectividad < 0.65) alertas.push(`Efectividad en ${fmtPct(efectividad)}`);
     if (perdRate > 0.08) alertas.push(`Órdenes perdidas en ${fmtPct(perdRate)} del total`);
-    const critico = disponibilidad < 0.75 || efectividad < 0.55 || perdRate > 0.15;
+    const critico = disponibilidad < 0.30 || efectividad < 0.55 || perdRate > 0.15;
     const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
     // Detalle por cédula (brigada≈técnico en esta data)

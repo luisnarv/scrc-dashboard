@@ -10,7 +10,7 @@ export async function GET() {
              fallida_con_pago as "Fallida_Con_Pago", fallida_sin_pago as "Fallida_Sin_Pago",
              visitas as "Visitas", fact_ajustada as "Ingresos", 
              meta_dia as "Meta_Facturacion", valor_fact_base, valor_produccion, margen_neto,
-             asignacion as "Asignacion", perdidas_cop as "Perdidas_COP"
+             asignacion as "Asignacion", perdidas_cop as "Perdidas_COP", costo_operativo as "Costo_Operativo"
       FROM scr.tecnico_dia
     `);
     
@@ -28,46 +28,25 @@ export async function GET() {
       Tercero: ''
     }));
 
-    // Pre-calcular costos mensuales para distribución
-    const costosPorMes: Record<string, number> = {};
-    costos.forEach(c => {
-      if (c.Categoria === 'COSTO' && c.Mes) {
-        costosPorMes[c.Mes] = (costosPorMes[c.Mes] || 0) + c.Valor;
-      }
-    });
-
-    const conteoPorMes: Record<string, number> = {};
-    rawRes.rows.forEach(r => {
-      const m = r.mes_ym;
-      if (m) conteoPorMes[m] = (conteoPorMes[m] || 0) + 1;
-    });
-
-    const rawRecords = rawRes.rows.map(r => {
-      const m = r.mes_ym;
-      const costoTotalMes = costosPorMes[m] || 0;
-      const filasMes = conteoPorMes[m] || 1;
-      const costoDistribuido = costoTotalMes / filasMes;
-
-      return {
-        Fecha: r.fecha,
-        Cedula: r.cedula,
-        Nombre: r.Nombre,
-        Tipo_Brigada_Operaciones: r.Tipo_Brigada_Operaciones,
-        Tipo_Brigada_Mes: r.Tipo_Brigada_Mes,
-        Zona: r.zona, 
-        Visitas: Number(r.Visitas),
-        Efectivas: Number(r.Efectivas),
-        Fallidas: Number(r.Fallidas),
-        Perdidas: Number(r.Perdidas),
-        Fallida_Con_Pago: Number(r.Fallida_Con_Pago),
-        Fallida_Sin_Pago: Number(r.Fallida_Sin_Pago),
-        Ingresos: Number(r.Ingresos),
-        Meta_Facturacion: Number(r.Meta_Facturacion),
-        Perdidas_COP: Number(r.Perdidas_COP),
-        Costo_Operativo: costoDistribuido,
-        Asignacion: Number(r.Asignacion) || 0
-      };
-    });
+    const rawRecords = rawRes.rows.map(r => ({
+      Fecha: r.fecha,
+      Cedula: r.cedula,
+      Nombre: r.Nombre,
+      Tipo_Brigada_Operaciones: r.Tipo_Brigada_Operaciones,
+      Tipo_Brigada_Mes: r.Tipo_Brigada_Mes,
+      Zona: r.zona, 
+      Visitas: Number(r.Visitas),
+      Efectivas: Number(r.Efectivas),
+      Fallidas: Number(r.Fallidas),
+      Perdidas: Number(r.Perdidas),
+      Fallida_Con_Pago: Number(r.Fallida_Con_Pago),
+      Fallida_Sin_Pago: Number(r.Fallida_Sin_Pago),
+      Ingresos: Number(r.Ingresos),
+      Meta_Facturacion: Number(r.Meta_Facturacion),
+      Perdidas_COP: Number(r.Perdidas_COP),
+      Costo_Operativo: Number(r.Costo_Operativo) || 0,
+      Asignacion: Number(r.Asignacion) || 0
+    }));
 
     // Restauramos categorias originales para el frontend
     const costosFinal = cosRes.rows.map(r => ({
