@@ -8,14 +8,17 @@ import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
 import ChartCard from '../components/ChartCard';
 import { useTheme } from '../components/ThemeProvider';
-
+import { esFestivo } from '../components/utils/holidays';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
   if (!y || !m) return 0;
   const dim = new Date(y, m, 0).getDate();
   let c = 0;
-  for (let day = 1; day <= dim; day++) { if (new Date(y, m - 1, day).getDay() !== 0) c++; }
+  for (let day = 1; day <= dim; day++) { 
+    const date = new Date(y, m - 1, day);
+    if (date.getDay() !== 0 && !esFestivo(date)) c++; 
+  }
   return c;
 }
 
