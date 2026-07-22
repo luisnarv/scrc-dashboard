@@ -316,7 +316,7 @@ export default function OperativoPage() {
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: '#1976D2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(25,118,210,.3)' }}>
             Detalle de Brigadas
           </button>
-          <a href="https://app.powerbi.com/home?route=home%3Flanguage%3Des-MX&language=es-MX&experience=power-bi" target="_blank" rel="noopener noreferrer"
+          <a href="https://app.powerbi.com/view?r=eyJrIjoiNmRkNzk5ZDQtZTI3OS00MzczLWE1OTAtYmE3MGIxZGQxZGJkIiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             Ver Detalle Operativo →
           </a>
