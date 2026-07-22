@@ -122,16 +122,16 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
   });
 
   const getCellColor = (val: number) => {
-    if (val === 0) return '#f5f6f8';
-    if (val <= 2) return '#b2dfdb';
-    if (val <= 5) return '#4db6ac';
-    return '#00695c';
+    if (val === 0) return 'var(--panel)';
+    if (val <= 2) return 'rgba(120, 190, 32, 0.2)';
+    if (val <= 5) return 'rgba(120, 190, 32, 0.6)';
+    return 'var(--ok)'; // Verde primario
   };
 
   const getTextColor = (val: number) => {
-    if (val === 0) return MUT;
-    if (val <= 5) return INK;
-    return '#fff';
+    if (val === 0) return 'var(--text-muted)';
+    if (val <= 2) return 'var(--text-title)'; // Contraste automático (blanco/negro) según el modo
+    return '#ffffff'; // Para fondos oscuros o intensos
   };
 
   return (

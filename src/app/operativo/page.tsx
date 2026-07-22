@@ -66,7 +66,7 @@ export default function OperativoPage() {
 
     // Agrupación Diaria para Evolutivos y Tendencias
     const byDay: Record<string, { efec: number, fall: number, perd: number, disp: number, oper: number, brigadas: Set<unknown> }> = {};
-    const byTypeDay: Record<string, Record<string, { efec: number, vis: number }>> = {};
+    const byTypeDay: Record<string, Record<string, { efec: number, vis: number, fall: number, perd: number }>> = {};
 
     rawF.forEach(r => {
       const day = String(r.Fecha || '');
@@ -83,8 +83,8 @@ export default function OperativoPage() {
       bd.brigadas.add(r.Cedula);
 
       const btd = (byTypeDay[t] ??= {});
-      const td = (btd[day] ??= { efec: 0, vis: 0 });
-      td.efec += e; td.vis += v;
+      const td = (btd[day] ??= { efec: 0, vis: 0, fall: 0, perd: 0 });
+      td.efec += e; td.vis += v; td.fall += f; td.perd += p;
     });
 
     const dias = Object.keys(byDay).sort();
@@ -197,6 +197,39 @@ export default function OperativoPage() {
       options: { ...baseOpt, scales: { y: { min: 0 } } }
     };
 
+    // Tablas Modales
+    const tableDataOrd = {
+      columns: ['Día', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas'],
+      rows: dias.map(d => {
+        const bd = byDay[d];
+        const total = bd.efec + bd.fall + bd.perd;
+        return [d.slice(-2), fmtN(total), fmtN(bd.efec), fmtN(bd.fall), fmtN(bd.perd)];
+      })
+    };
+
+    const tableDataBrig = {
+      columns: ['Día', 'Brigadas Operativas', 'Brigadas Disponibles'],
+      rows: dias.map(d => {
+        const bd = byDay[d];
+        return [d.slice(-2), fmtN(bd.oper), fmtN(bd.disp)];
+      })
+    };
+
+    const tableDataTipos = {
+      columns: ['Efectivas', 'Total Órdenes', '% Efectividad', 'Tipo de Brigada'],
+      rows: tiposArr.map(t => {
+        let tEfec = 0; let tFall = 0; let tPerd = 0;
+        Object.values(byTypeDay[t]).forEach(dayData => {
+          tEfec += dayData.efec;
+          tFall += dayData.fall;
+          tPerd += dayData.perd;
+        });
+        const tTotal = tEfec + tFall + tPerd;
+        const tPct = tTotal > 0 ? (tEfec / tTotal) : 0;
+        return [fmtN(tEfec), fmtN(tTotal), fmtPct(tPct), t];
+      })
+    };
+
     // Estado global + alertas accionables
     const alertas: string[] = [];
     if (disponibilidad < 0.40) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
@@ -205,12 +238,14 @@ export default function OperativoPage() {
     const critico = disponibilidad < 0.30 || efectividad < 0.55 || perdRate > 0.15;
     const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
-    const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} … ${selWin[selWin.length - 1]}`) : '—';
+    const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} – ${selWin[selWin.length - 1]}`) : '—';
 
     return {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
-      periodoLabel: winLbl, dEfec, dFall, dDisp, narrativa, chartOrd, chartBrig, chartTipos
+      periodoLabel: winLbl, dEfec, dFall, dDisp, narrativa, 
+      chartOrd, chartBrig, chartTipos,
+      tableDataOrd, tableDataBrig, tableDataTipos
     };
   }, [raw, filters, mesList]);
 
@@ -276,10 +311,16 @@ export default function OperativoPage() {
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVO</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
-        <button onClick={() => setModalOpen(true)}
-          style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)' }}>
-          Ver Detalle Operativo →
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={() => setModalOpen(true)}
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: '#1976D2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(25,118,210,.3)' }}>
+            Detalle de Brigadas
+          </button>
+          <a href="https://app.powerbi.com/home?route=home%3Flanguage%3Des-MX&language=es-MX&experience=power-bi" target="_blank" rel="noopener noreferrer"
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            Ver Detalle Operativo →
+          </a>
+        </div>
       </div>
 
       <div style={{ ...card, borderLeft: `4px solid ${nivelCfg.c}`, display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -313,9 +354,9 @@ export default function OperativoPage() {
       {/* Evolutivos Diarios (NUEVO) */}
       <div style={secH(TEAL)}><span style={dot(TEAL)} /> Seguimiento Diario de Operación</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 12 }}>
-        <ChartCard id="op-ord" title="Evolutivo Diario de Órdenes" config={d.chartOrd as never} height="short" hasDetail />
-        <ChartCard id="op-brig" title="Evolutivo Diario de Brigadas" config={d.chartBrig as never} height="short" hasDetail />
-        <ChartCard id="op-tipos" title="Efectivas por Tipo de Brigada" config={d.chartTipos as never} height="short" hasDetail />
+        <ChartCard id="op-ord" title="Evolutivo Diario de Órdenes" config={d.chartOrd as never} height="short" hasDetail detailTableData={d.tableDataOrd as any} />
+        <ChartCard id="op-brig" title="Evolutivo Diario de Brigadas" config={d.chartBrig as never} height="short" hasDetail detailTableData={d.tableDataBrig as any} />
+        <ChartCard id="op-tipos" title="Efectivas por Tipo de Brigada" config={d.chartTipos as never} height="short" hasDetail detailTableData={d.tableDataTipos as any} />
       </div>
 
       {/* 2 · Cumplimiento */}
