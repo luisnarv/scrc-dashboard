@@ -13,7 +13,10 @@ export const THEME_COLORS = {
     err: '#C0392B',
     ink: '#38764C',
     mut: '#97999B',
-    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#97999B']
+    // 10 slots: con 10 tipos de brigada el ciclo idx % length repetía el gris
+    // en las posiciones 4 y 9. Ambas pasan a verde.
+    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#BCD08A',
+             '#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9CB86E']
   },
   dark: {
     sip: '#8FD14F',
@@ -23,7 +26,8 @@ export const THEME_COLORS = {
     err: '#C0392B',
     ink: '#EAF3E2',
     mut: '#9FB0A4',
-    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9FB0A4']
+    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#BCD08A',
+             '#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9CB86E']
   }
 };
 
