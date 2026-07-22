@@ -86,6 +86,16 @@ export interface MesRecord {
   Perdidas?: number | string;
   Visitas?: number | string;
   Ingresos_COP?: number | string;
+  Cantidad_NIC?: number | string;
+  Total_Suspension?: number | string;
+  Total_Mantiene_Susp?: number | string;
+  Total_Reconexion?: number | string;
+  Total_Pagos?: number | string;
+  Total_Imposibilidades?: number | string;
+  Total_Resistencia?: number | string;
+  Total_PQR?: number | string;
+  Dias_Laborados?: number | string;
+  Eficacia?: number | string;
   [key: string]: unknown;
 }
 
@@ -100,6 +110,22 @@ export interface DispDiariaRecord {
   [key: string]: unknown;
 }
 
+export interface EvolutivoRecord {
+  Mes: string;
+  TipoBrigada: string;
+  Cantidad_NIC: number;
+  Total_Ordenes: number;
+  Total_Suspension: number;
+  Total_Mantiene_Susp: number;
+  Total_Reconexion: number;
+  Total_Pagos: number;
+  Total_Imposibilidades: number;
+  Total_Resistencia: number;
+  Total_PQR: number;
+  Eficacia: number;
+  [key: string]: unknown;
+}
+
 export interface RawData {
   raw: RawRecord[];
   costos: CostoRecord[];
@@ -107,6 +133,7 @@ export interface RawData {
   det: OrdenDetalle[];
   mes: MesRecord[];
   disp: DispDiariaRecord[];
+  evolutivo: EvolutivoRecord[];
 }
 
 export interface Filters {

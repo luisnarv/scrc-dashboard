@@ -70,10 +70,16 @@ export async function GET() {
 
     // 4. Tecnico Mes (Resumen Mensual)
     const mesRes = await query(`
-      SELECT mes_ym as "Mes_YM", cedula as "Cedula", tecnico as "Tecnico", 
+      SELECT mes_ym as "Mes_YM", cedula as "Cedula", tecnico as "Tecnico", supervisor as "Supervisor", 
+             contratista as "Contratista", vehiculo as "Vehiculo", 
              tipo_brigada_mes as "Tipo_Brigada_Mes", ordenes as "Ordenes", 
              efectivas as "Efectivas", fallidas as "Fallidas", perdidas as "Perdidas", 
-             visitas as "Visitas", ingresos_cop as "Ingresos_COP"
+             visitas as "Visitas", ingresos_cop as "Ingresos_COP",
+             cantidad_nic as "Cantidad_NIC", total_suspension as "Total_Suspension",
+             total_mantiene_susp as "Total_Mantiene_Susp", total_reconexion as "Total_Reconexion",
+             total_pagos as "Total_Pagos", total_imposibilidades as "Total_Imposibilidades",
+             total_resistencia as "Total_Resistencia", total_pqr as "Total_PQR",
+             dias_laborados as "Dias_Laborados", eficacia as "Eficacia"
       FROM scr.tecnico_mes
     `);
 
@@ -84,8 +90,22 @@ export async function GET() {
       ORDER BY fecha, tipo_brigada
     `);
 
+    // 6. Evolutivo Brigada Mes
+    const evolutivoRes = await query(`
+      SELECT mes_ym as "Mes", tipo_brigada as "TipoBrigada", cantidad_nic as "Cantidad_NIC",
+             total_ordenes as "Total_Ordenes", total_suspension as "Total_Suspension",
+             total_mantiene_susp as "Total_Mantiene_Susp", total_reconexion as "Total_Reconexion",
+             total_pagos as "Total_Pagos", total_imposibilidades as "Total_Imposibilidades",
+             total_resistencia as "Total_Resistencia", total_pqr as "Total_PQR",
+             eficacia as "Eficacia"
+      FROM scr.evolutivo_brigada_mes
+    `);
+
     // Retornamos todo el JSON compacto
-    return NextResponse.json({ rawRecords, costos: costosFinal, emps, mesRecords: mesRes.rows, dispDiaria: dispRes.rows });
+    return NextResponse.json({ 
+      rawRecords, costos: costosFinal, emps, mesRecords: mesRes.rows, 
+      dispDiaria: dispRes.rows, evolutivo: evolutivoRes.rows 
+    });
   } catch (error) {
     console.error('DB Error:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });

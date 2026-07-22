@@ -7,9 +7,13 @@ export default function Header() {
 
   return (
     <header className="dash-header">
-      <div>
-        <h1>📊 Dashboard Ejecutivo SCRC</h1>
-        <div className="sub">Gerencia · Direcciones · Líderes operativos — Producción operativa (SIPREM) &amp; Realidad financiera (OTC)</div>
+      <div className="brand">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/ises_symbol.avif" alt="ISES" className="brand-logo" />
+        <div>
+          <h1>Dashboard Ejecutivo SCRC</h1>
+          <div className="sub">Gerencia · Direcciones · Líderes operativos — Producción operativa (SIPREM) &amp; Realidad financiera (OTC)</div>
+        </div>
       </div>
       <button 
         onClick={toggleTheme}

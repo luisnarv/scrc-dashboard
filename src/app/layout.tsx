@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Header from './components/Header';
-import Filters from './components/Filters';
+import DashboardGate from './components/DashboardGate';
 import { DashboardProvider } from './components/DashboardProvider';
 import { ThemeProvider } from './components/ThemeProvider';
 export const metadata: Metadata = {
@@ -19,9 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <DashboardProvider>
             <div className="wrap">
-              <Header />
-              <Filters />
-              <main>{children}</main>
+              <DashboardGate>{children}</DashboardGate>
             </div>
           </DashboardProvider>
         </ThemeProvider>

@@ -64,8 +64,13 @@ export default function AnalysisModal({ open, onClose, title, description, confi
     setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
   };
 
+  const isDatasetCategory = activeConfig?.data?.datasets && activeConfig.data.datasets.length > 1;
+
   const allCategories = useMemo(() => {
     if (!activeConfig) return [];
+    if (isDatasetCategory) {
+      return activeConfig.data.datasets.map((d: any) => String(d.label));
+    }
     if (activeConfig.type === 'bar' && activeConfig.data.labels) {
       return activeConfig.data.labels.map(String);
     }
@@ -73,7 +78,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
       return activeConfig.data.datasets.map((d: any) => String(d.label));
     }
     return [];
-  }, [activeConfig]);
+  }, [activeConfig, isDatasetCategory]);
 
   const filteredConfig = useMemo(() => {
     if (!activeConfig) return null;
@@ -81,8 +86,8 @@ export default function AnalysisModal({ open, onClose, title, description, confi
     const clone = JSON.parse(JSON.stringify(activeConfig));
     
     if (clone.data && clone.data.datasets) {
-      if (clone.type === 'line' || (clone.type !== 'bar' && clone.data.datasets.some((d: any) => selectedCategories.includes(d.label)))) {
-        clone.data.datasets = clone.data.datasets.filter((d: any) => selectedCategories.includes(d.label));
+      if (isDatasetCategory || clone.type === 'line' || (clone.type !== 'bar' && clone.data.datasets.some((d: any) => selectedCategories.includes(String(d.label))))) {
+        clone.data.datasets = clone.data.datasets.filter((d: any) => selectedCategories.includes(String(d.label)));
       } else if (clone.type === 'bar' && clone.data.labels) {
         const indices = clone.data.labels
           .map((label: string, i: number) => selectedCategories.includes(String(label)) ? i : -1)

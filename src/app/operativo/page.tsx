@@ -230,6 +230,50 @@ export default function OperativoPage() {
       })
     };
 
+    // Gráfico 4: Evolutivo Mensual por Tipo de Brigada
+    const evMeses = Array.from(new Set((raw.evolutivo || []).map(e => e.Mes))).sort();
+    const evTipos = Array.from(new Set((raw.evolutivo || []).map(e => e.TipoBrigada))).sort();
+    
+    const chartEvolutivo = {
+      type: 'bar',
+      data: {
+        labels: evMeses,
+        datasets: evTipos.map((t, idx) => ({
+          label: t,
+          data: evMeses.map(m => {
+            const row = (raw.evolutivo || []).find(e => e.Mes === m && e.TipoBrigada === t);
+            return row ? row.Total_Ordenes : 0;
+          }),
+          backgroundColor: chartColors[idx % chartColors.length],
+        }))
+      },
+      options: { ...baseOpt, scales: { x: { stacked: true }, y: { stacked: true } } }
+    };
+
+      const tableDataEvolutivo = (() => {
+        const currentMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
+        const tecCurrent = currentMes ? (raw.mes || []).filter(e => e.Mes_YM === currentMes) : (raw.mes || []);
+
+        return {
+          columns: ['Tipo de Brigada', 'Técnico', 'Cuentas', 'Total Órdenes Ejecutadas', 'Total Suspensión', 'Total Se Mantiene Suspensión', 'Total Reconexión', 'Total Pagos', 'Total Imposibilidades', 'Total Resistencias', 'Días Laborados en Total', 'Eficacia'],
+          categoryIndex: 0,
+          rows: tecCurrent.map(t => [
+            t.Tipo_Brigada_Mes,
+            t.Tecnico || 'Desconocido',
+            fmtN(t.Cantidad_NIC),
+            fmtN(t.Visitas),
+            fmtN(t.Total_Suspension),
+            fmtN(t.Total_Mantiene_Susp),
+            fmtN(t.Total_Reconexion),
+            fmtN(t.Total_Pagos),
+            fmtN(t.Total_Imposibilidades),
+            fmtN(t.Total_Resistencia),
+            fmtN(t.Dias_Laborados),
+            fmtPct(Number(t.Eficacia) || 0)
+          ])
+        };
+      })();
+
     // Estado global + alertas accionables
     const alertas: string[] = [];
     if (disponibilidad < 0.40) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
@@ -244,8 +288,9 @@ export default function OperativoPage() {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
       periodoLabel: winLbl, dEfec, dFall, dDisp, narrativa, 
-      chartOrd, chartBrig, chartTipos,
-      tableDataOrd, tableDataBrig, tableDataTipos
+      chartOrd, chartBrig, chartTipos, chartEvolutivo,
+      tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
+      evolutivo: raw.evolutivo
     };
   }, [raw, filters, mesList]);
 
@@ -357,6 +402,12 @@ export default function OperativoPage() {
         <ChartCard id="op-ord" title="Evolutivo Diario de Órdenes" config={d.chartOrd as never} height="short" hasDetail detailTableData={d.tableDataOrd as any} />
         <ChartCard id="op-brig" title="Evolutivo Diario de Brigadas" config={d.chartBrig as never} height="short" hasDetail detailTableData={d.tableDataBrig as any} />
         <ChartCard id="op-tipos" title="Efectivas por Tipo de Brigada" config={d.chartTipos as never} height="short" hasDetail detailTableData={d.tableDataTipos as any} />
+      </div>
+
+      {/* Evolutivo Mensual por Tipo de Brigada */}
+      <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Evolutivo Mensual por Tipo de Brigada</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', marginBottom: 20 }}>
+        <ChartCard id="op-evolutivo" title="Órdenes Mensuales por Tipo de Brigada" config={d.chartEvolutivo as never} height="normal" hasDetail detailTableData={d.tableDataEvolutivo as any} />
       </div>
 
       {/* 2 · Cumplimiento */}
