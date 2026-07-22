@@ -1,21 +1,37 @@
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
+
+const envPath = path.join(__dirname, '.env.local');
+const envFile = fs.readFileSync(envPath, 'utf8');
+
+let url = '';
+envFile.split('\n').forEach(line => {
+  if (line.trim().startsWith('POSTGRES_URL=')) {
+    url = line.split('=')[1].trim().replace(/['"]/g, '');
+  }
+});
+
+console.log('Testing connection to:', url ? url.replace(/:[^:@]+@/, ':***@') : 'UNDEFINED');
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.chpgdjwmpeygylqlgmgh:Scr1043122351*@aws-0-ca-central-1.pooler.supabase.com:6543/postgres',
+  connectionString: url,
   ssl: { rejectUnauthorized: false }
 });
 
-async function run() {
+async function test() {
   try {
-    const resRaw = await pool.query("SELECT COUNT(*) FROM scr.tecnico_dia WHERE mes_ym = '2026-06'");
-    console.log('Count 2026-06:', resRaw.rows);
-
-    const resRaw2 = await pool.query("SELECT * FROM scr.tecnico_dia WHERE mes_ym = '2026-06' LIMIT 1");
-    console.log('Sample 2026-06:', resRaw2.rows);
-  } catch(e) {
-    console.error(e);
+    const res = await pool.query(`
+      SELECT table_schema, table_name 
+      FROM information_schema.tables 
+      WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+    `);
+    console.log('Tablas encontradas en la BD:');
+    res.rows.forEach(r => console.log(` - ${r.table_schema}.${r.table_name}`));
+  } catch (err) {
+    console.error('Error conectando a BD:', err.message);
   } finally {
-    pool.end();
+    await pool.end();
   }
 }
-run();
+test();

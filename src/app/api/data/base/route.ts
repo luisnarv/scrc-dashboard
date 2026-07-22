@@ -11,13 +11,13 @@ export async function GET() {
              visitas as "Visitas", fact_ajustada as "Ingresos", 
              meta_dia as "Meta_Facturacion", valor_fact_base, valor_produccion, margen_neto,
              asignacion as "Asignacion", perdidas_cop as "Perdidas_COP", costo_operativo as "Costo_Operativo"
-      FROM scr.tecnico_dia
+      FROM dbanalitica.tecnico_dia
     `);
     
     // 2. Costos OTC
     const cosRes = await query(`
       SELECT mes_ym as "Mes", zona as "Zona", cuenta_mayor as "Categoria", es_ingreso, valor as "Valor"
-      FROM scr.costos_otc
+      FROM dbanalitica.costos_otc
     `);
     
     const costos = cosRes.rows.map(r => ({
@@ -60,7 +60,7 @@ export async function GET() {
     // 3. Empleados
     const empRes = await query(`
       SELECT mes_ym, empleado as "Empleado", valor_total as "Valor_Total", en_brigadas as "EnBrigadas", cedula_brigada as "Cedula"
-      FROM scr.costos_empleado
+      FROM dbanalitica.costos_empleado
     `);
     const emps = empRes.rows.map(r => ({
       Empleado: r.Empleado,
@@ -80,12 +80,12 @@ export async function GET() {
              total_pagos as "Total_Pagos", total_imposibilidades as "Total_Imposibilidades",
              total_resistencia as "Total_Resistencia", total_pqr as "Total_PQR",
              dias_laborados as "Dias_Laborados", eficacia as "Eficacia"
-      FROM scr.tecnico_mes
+      FROM dbanalitica.tecnico_mes
     `);
 
     const dispRes = await query(`
       SELECT fecha::text as "Fecha", tipo_brigada as "Tipo_Brigada", zona as "Zona", COUNT(DISTINCT cedula) as "BrigadasActivas"
-      FROM scr.tecnico_dia
+      FROM dbanalitica.tecnico_dia
       GROUP BY fecha, tipo_brigada, zona
       ORDER BY fecha, tipo_brigada
     `);
@@ -98,7 +98,7 @@ export async function GET() {
              total_pagos as "Total_Pagos", total_imposibilidades as "Total_Imposibilidades",
              total_resistencia as "Total_Resistencia", total_pqr as "Total_PQR",
              eficacia as "Eficacia"
-      FROM scr.evolutivo_brigada_mes
+      FROM dbanalitica.evolutivo_brigada_mes
     `);
 
     // Retornamos todo el JSON compacto
