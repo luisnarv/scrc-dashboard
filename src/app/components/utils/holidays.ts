@@ -11,6 +11,10 @@ export function getFestivosColombia(year: number): string[] {
     '12-25', // Navidad
   ];
   
+  if (year >= 2026) {
+    fijos.push('07-13'); // Nuevo festivo a partir de 2026
+  }
+
   fijos.forEach(f => festivos.push(`${year}-${f}`));
 
   // Helper para mover al próximo lunes (Ley Emiliani)
