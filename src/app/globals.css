@@ -27,23 +27,29 @@
 }
 
 .theme-dark {
-  --bg: #14201A;
-  --panel: #1E2C24;
-  --card: #1E2C24;
-  --border: #33443A;
-  --text-title: #EAF3E2;
-  --text-body: #D5DDCF;
-  --text-muted: #9FB0A4;
-  --brand-primary: #8FD14F;
-  --brand-grad: linear-gradient(135deg, #509E2F 0%, #38764C 100%);
-  --brand-grad-text: #EAF3E2;
-  
-  --sip: #8FD14F;
-  --otc: #509E2F;
-  --sip-bg: #1A281F;
-  --otc-bg: #19231D;
-  --hover-bg: #2A3B31;
-  --th-bg: #2A3B31;
+  --bg: #0A1A2F;
+  --panel: #102A4A;
+  --card: #0F2744;
+  --border: #1E3A5F;
+  --text-title: #F2F7FF;
+  --text-body: #C9DAEE;
+  --text-muted: #85A3C4;
+  --brand-primary: #3B8AD9;
+  --brand-grad: linear-gradient(135deg, #3B8AD9 0%, #1E5FA8 100%);
+  --brand-grad-text: #F2F7FF;
+
+  --sip: #4A9EE8;
+  --otc: #2BD98C;
+  --sip-bg: #0F2744;
+  --otc-bg: #0D2340;
+  --hover-bg: #16345C;
+  --th-bg: #16345C;
+
+  /* El semaforo de :root esta calibrado para fondo claro; sobre navy
+     pierde contraste, asi que el tema oscuro lo re-tonaliza. */
+  --ok: #2BD98C;
+  --warn: #F0C040;
+  --err: #FF5A5F;
 }
 
 * { box-sizing: border-box; }
@@ -230,6 +236,10 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .alerta.rojo { background: #ffebee; border-color: #ffcdd2; color: #b71c1c; }
 .alerta.amarillo { background: #fff8e1; border-color: #ffecb3; color: #e65100; }
 .alerta.verde { background: #e8f5e9; border-color: #c8e6c9; color: #1b5e20; }
+/* Modo oscuro: los pasteles claros se veian como bloques claros. */
+.theme-dark .alerta.rojo { background: rgba(255,90,95,0.15); border-color: rgba(255,90,95,0.35); color: #ffb3b5; }
+.theme-dark .alerta.amarillo { background: rgba(240,192,64,0.15); border-color: rgba(240,192,64,0.35); color: #f5d78a; }
+.theme-dark .alerta.verde { background: rgba(43,217,140,0.15); border-color: rgba(43,217,140,0.35); color: #8fe6bd; }
 .alerta .icono { font-size: 16px; }
 
 /* Driver */

@@ -13,9 +13,16 @@ const sectionH: React.CSSProperties = {
   alignItems: 'center', gap: 8, margin: '22px 0 10px', 
   borderLeft: `3px solid ${TEAL}`, paddingLeft: 10 
 };
-const card: React.CSSProperties = { 
-  background: 'var(--card)', borderRadius: 14, padding: '16px 18px', 
-  boxShadow: '0 1px 4px rgba(0,0,0,.07)' 
+const card: React.CSSProperties = {
+  background: 'var(--card)', borderRadius: 14, padding: '16px 18px',
+  boxShadow: '0 1px 4px rgba(0,0,0,.07)'
+};
+// Sin background/color explicitos el select cae al estilo nativo del
+// navegador (blanco) y es lo unico que no sigue el tema.
+const selectStyle: React.CSSProperties = {
+  padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`,
+  fontSize: 12, outline: 'none',
+  background: 'var(--panel)', color: 'var(--text-body)', fontFamily: 'inherit'
 };
 
 export default function DisponibilidadSection() {
@@ -123,18 +130,18 @@ export default function DisponibilidadSection() {
         
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', marginRight: 16 }}>
           <select 
-            value={locFilterTipo} 
+            value={locFilterTipo}
             onChange={e => setLocFilterTipo(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`, fontSize: 12, outline: 'none' }}
+            style={selectStyle}
           >
             <option value="ALL">Todos los Tipos</option>
             {availableTipos.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
 
           <select 
-            value={locFilterZona} 
+            value={locFilterZona}
             onChange={e => setLocFilterZona(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`, fontSize: 12, outline: 'none' }}
+            style={selectStyle}
           >
             <option value="ALL">Todas las Zonas</option>
             {availableZonas.map(z => <option key={z} value={z}>{z}</option>)}

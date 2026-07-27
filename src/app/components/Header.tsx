@@ -1,6 +1,7 @@
 'use client';
 
 import { useTheme } from './ThemeProvider';
+import SyncStatus from './SyncStatus';
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -15,7 +16,9 @@ export default function Header() {
           <div className="sub">Gerencia · Direcciones · Líderes operativos — Producción operativa (SIPREM) &amp; Realidad financiera (OTC)</div>
         </div>
       </div>
-      <button 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <SyncStatus />
+        <button
         onClick={toggleTheme}
         aria-label="Alternar tema claro/oscuro"
         style={{
@@ -35,6 +38,7 @@ export default function Header() {
       >
         {theme === 'light' ? '🌙 Modo Oscuro' : '☀️ Modo Claro'}
       </button>
+      </div>
     </header>
   );
 }

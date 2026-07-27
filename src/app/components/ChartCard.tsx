@@ -34,18 +34,18 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
       Chart.register(...registerables);
 
       const isDark = document.body.classList.contains('theme-dark');
-      Chart.defaults.color = isDark ? '#9FB0A4' : '#97999B';
-      Chart.defaults.borderColor = isDark ? 'rgba(234,243,226,0.08)' : '#E0E0E0';
+      Chart.defaults.color = isDark ? '#85A3C4' : '#97999B';
+      Chart.defaults.borderColor = isDark ? 'rgba(242,247,255,0.10)' : '#E0E0E0';
       Chart.defaults.elements.line.borderWidth = 3;
       Chart.defaults.elements.point.radius = 5;
       Chart.defaults.elements.point.hoverRadius = 8;
       
       if (!(Chart.defaults.plugins as any).tooltip) (Chart.defaults.plugins as any).tooltip = {};
       const tooltipOpts = Chart.defaults.plugins.tooltip as any;
-      tooltipOpts.backgroundColor = isDark ? '#1E2C24' : '#FFFFFF';
-      tooltipOpts.titleColor = isDark ? '#EAF3E2' : '#38764C';
-      tooltipOpts.bodyColor = isDark ? '#EAF3E2' : '#3A3A3A';
-      tooltipOpts.borderColor = isDark ? '#33443A' : '#E0E0E0';
+      tooltipOpts.backgroundColor = isDark ? '#0F2744' : '#FFFFFF';
+      tooltipOpts.titleColor = isDark ? '#F2F7FF' : '#38764C';
+      tooltipOpts.bodyColor = isDark ? '#C9DAEE' : '#3A3A3A';
+      tooltipOpts.borderColor = isDark ? '#1E3A5F' : '#E0E0E0';
       tooltipOpts.borderWidth = 1;
       tooltipOpts.padding = 12;
       tooltipOpts.cornerRadius = 8;

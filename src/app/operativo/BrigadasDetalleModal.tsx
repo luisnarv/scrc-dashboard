@@ -245,12 +245,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             {total && (
               <tfoot>
                 <tr style={{ position: 'sticky', bottom: 0 }}>
-                  <td style={{ ...tdBase, fontWeight: 800, color: INK, background: '#f4f6fa', borderTop: `2px solid ${TEAL}` }}>Total</td>
+                  <td style={{ ...tdBase, fontWeight: 800, color: INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>Total</td>
                   {COLS.map(c => {
                     const v = c.prom ? promValue(total, c.key) : num((total as unknown as Record<string, number>)[c.key]);
                     const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
                     return (
-                      <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: INK, background: '#f4f6fa', borderTop: `2px solid ${TEAL}` }}>
+                      <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>
                         {displayVal}
                       </td>
                     );
@@ -298,7 +298,7 @@ function RowRecursive({
         style={{ background: rowBg, cursor: isLeaf ? 'default' : 'pointer', borderBottom: `1px solid ${LINE}` }}
       >
         <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? '#42506b' : INK, whiteSpace: 'nowrap' }}>
-          {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: '#c2c8d4', marginRight: 6 }}>└</span>}
+          {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: 'var(--border)', marginRight: 6 }}>└</span>}
           {node.label}
           {!isLeaf && (
             <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: MUT }}>

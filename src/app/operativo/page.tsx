@@ -9,6 +9,7 @@ import DisponibilidadSection from './DisponibilidadSection';
 import ChartCard from '../components/ChartCard';
 import { useTheme } from '../components/ThemeProvider';
 import { esFestivo } from '../components/utils/holidays';
+import MapModal from '../components/MapModal';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -37,8 +38,9 @@ function ProgBar({ pct, color }: { pct: number; color: string }) {
 
 export default function OperativoPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const TEAL = colors.sip;
   const INDIGO = colors.otc;
@@ -90,25 +92,47 @@ export default function OperativoPage() {
     const dias = Object.keys(byDay).sort();
     const diasEjec = dias.length;
 
-    // Calcular disponibles diarios desde raw.disp (si está disponible)
     if (raw.disp) {
       const dispData = raw.disp;
+      
+      const DISPONIBLES_TYPES = [
+        'brigada minicanasta',
+        'brigada canasta',
+        'pesada mt-at',
+        'brigada pesada mt-at',
+        'gestor integral multi',
+        'scr disponible',
+        'scr pesada disponibilidad'
+      ];
+      const isDisponible = (tb?: string) => tb ? DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase()) : false;
+
       dias.forEach(d => {
-        const matchingDisp = dispData.filter(r => r.Fecha === d);
+        const matchingDisp = dispData.filter((r: any) => {
+          if (r.Fecha !== d) return false;
+          if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
+          if (F.zona !== 'ALL' && r._Zona !== F.zona && r._ZonaDet !== F.zona) return false;
+          return true;
+        });
+        
         const operativas = byDay[d].brigadas.size;
-        // Total activo en el pool de disponibilidad ese día
-        const totalDisp = matchingDisp.reduce((sum, r) => sum + (Number(r.BrigadasActivas) || 0), 0);
-        byDay[d].oper = operativas;
-        byDay[d].disp = totalDisp > 0 ? totalDisp : operativas; // Fallback si no hay meta
+        
+        // Pool Disponible = solo las 4 categorías que tienen concepto de pool
+        const totalDisp = matchingDisp
+          .filter((r: any) => isDisponible(r.Tipo_Brigada))
+          .reduce((sum: number, r: any) => sum + (Number(r.BrigadasActivas) || 0), 0);
+        
+        byDay[d].oper = operativas; // Mantenemos todas las que trabajaron como operativas
+        byDay[d].disp = totalDisp;  // Este es el Pool 
       });
     } else {
       dias.forEach(d => {
         byDay[d].oper = byDay[d].brigadas.size;
-        byDay[d].disp = brigadasDisp;
+        byDay[d].disp = 0;
       });
     }
 
     const brigadasOper = dias.length ? Math.round(dias.reduce((s, f) => s + byDay[f].oper, 0) / dias.length) : 0;
+    const brigadasDispPool = dias.length ? Math.round(dias.reduce((s, f) => s + byDay[f].disp, 0) / dias.length) : 0;
 
     const meses12 = mesList.slice(-12);
     const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
@@ -118,13 +142,13 @@ export default function OperativoPage() {
     const cEfect = asignado ? efect / asignado : 0;
     const cDias = diasHabiles ? diasEjec / diasHabiles : 0;
     const cAsignEjec = asignado ? visitas / asignado : 0;
-    const disponibilidad = brigadasDisp ? brigadasOper / brigadasDisp : 0;
     const totOrd = efect + fallidas + perdidas || 1;
     const efectividad = visitas ? efect / visitas : 0;
     const perdRate = perdidas / totOrd;
+    const disponibilidad = brigadasDispPool ? brigadasOper / brigadasDispPool : 0;
 
     // Deltas de tendencia (último día vs día anterior)
-    let dEfec = null, dFall = null, dDisp = null, ultD = '', antD = '';
+    let dEfec = null, dFall = null, dOper = null, dDisp = null, ultD = '', antD = '';
     if (dias.length >= 2) {
       ultD = dias[dias.length - 1];
       antD = dias[dias.length - 2];
@@ -132,9 +156,8 @@ export default function OperativoPage() {
       const ant = byDay[antD];
       if (ant.efec) dEfec = (ult.efec - ant.efec) / ant.efec;
       if (ant.fall) dFall = (ult.fall - ant.fall) / ant.fall;
-      const dispUlt = ult.disp ? ult.oper / ult.disp : 0;
-      const dispAnt = ant.disp ? ant.oper / ant.disp : 0;
-      dDisp = dispUlt - dispAnt; // Variación porcentual absoluta
+      if (ant.oper) dOper = (ult.oper - ant.oper) / ant.oper;
+      if (ant.disp) dDisp = (ult.disp - ant.disp) / ant.disp;
     }
 
     // Narrativa Automática
@@ -285,9 +308,9 @@ export default function OperativoPage() {
     const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} – ${selWin[selWin.length - 1]}`) : '—';
 
     return {
-      efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasOper, diasEjec, diasHabiles,
+      efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
-      periodoLabel: winLbl, dEfec, dFall, dDisp, narrativa, 
+      periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, narrativa,
       chartOrd, chartBrig, chartTipos, chartEvolutivo,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
       evolutivo: raw.evolutivo
@@ -356,14 +379,18 @@ export default function OperativoPage() {
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVO</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => setModalOpen(true)}
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: '#1976D2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(25,118,210,.3)' }}>
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? '#3b82f6' : '#1976D2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 1px 3px rgba(25,118,210,${theme === 'dark' ? 0.1 : 0.3})` }}>
             Detalle de Brigadas
           </button>
           <a href="https://app.powerbi.com/view?r=eyJrIjoiNmRkNzk5ZDQtZTI3OS00MzczLWE1OTAtYmE3MGIxZGQxZGJkIiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,137,123,.3)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-            Ver Detalle Operativo →
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            Ver Detalle Operativo (Norte-Centro) ↗
+          </a>
+          <a href="https://app.powerbi.com/view?r=eyJrIjoiMTUwMDYxNTAtMDRkMC00MmE5LTk2Y2QtNTI4ZDQ3OGQyNDg1IiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? '#14b8a6' : '#0f766e', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            Ver Detalle Operativo (Sur) ↗
           </a>
         </div>
       </div>
@@ -387,8 +414,8 @@ export default function OperativoPage() {
       {/* 1 · Resumen Operativo */}
       <div style={secH(TEAL)}><span style={dot(TEAL)} /> Resumen operativo</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
-        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL, d.dDisp, false)}
-        {kpi('Brigadas disponibles', fmtN(d.brigadasDisp), 'pool del periodo')}
+        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL, d.dOper, false)}
+        {kpi('Pool de disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO, d.dDisp, false)}
         {kpi('Total asignado', fmtN(d.asignado), 'meta de efectivas')}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
         {kpi('Órdenes efectivas', fmtN(d.efect), undefined, OK, d.dEfec, false)}
@@ -407,7 +434,17 @@ export default function OperativoPage() {
       {/* Evolutivo Mensual por Tipo de Brigada */}
       <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Evolutivo Mensual por Tipo de Brigada</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', marginBottom: 20 }}>
-        <ChartCard id="op-evolutivo" title="Órdenes Mensuales por Tipo de Brigada" config={d.chartEvolutivo as never} height="normal" hasDetail detailTableData={d.tableDataEvolutivo as any} />
+        <ChartCard 
+          id="op-evolutivo" 
+          title="Órdenes Mensuales por Tipo de Brigada" 
+          config={d.chartEvolutivo as never} 
+          height="normal" 
+          hasDetail 
+          detailTableData={d.tableDataEvolutivo as any} 
+          headerExtra={
+            <button onClick={() => setMapOpen(true)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer', marginLeft: 10 }}>🗺️ Ver en Mapa</button>
+          }
+        />
       </div>
 
       {/* 2 · Cumplimiento */}
@@ -422,10 +459,15 @@ export default function OperativoPage() {
       <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Estado de la operación</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         <div style={card}>
-          <div style={kLbl}>Disponibilidad de brigadas</div>
-          <div style={{ ...kVal, color: sem(d.disponibilidad * 100, 90, 80) }}>{fmtPct(d.disponibilidad)}</div>
-          <div style={{ margin: '10px 0 6px' }}><ProgBar pct={d.disponibilidad * 100} color={sem(d.disponibilidad * 100, 90, 80)} /></div>
-          <div style={kSub}>{fmtN(d.brigadasOper)} operativas de {fmtN(d.brigadasDisp)} disponibles</div>
+          <div style={kLbl}>Pool de Disponibles</div>
+          <div style={{ ...kVal, color: INDIGO }}>{fmtN(d.brigadasDispPool)}</div>
+          <div style={kSub}>Plantilla teórica del periodo</div>
+        </div>
+
+        <div style={card}>
+          <div style={kLbl}>Total Operativas</div>
+          <div style={{ ...kVal, color: TEAL }}>{fmtN(d.brigadasOper)}</div>
+          <div style={kSub}>Promedio que trabajó por día</div>
         </div>
 
         <div style={card}>
@@ -453,6 +495,13 @@ export default function OperativoPage() {
       <DisponibilidadSection />
 
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
+      {mapOpen && <MapModal onClose={() => setMapOpen(false)} filtrosBase={{
+        // El endpoint del mapa filtra por UN mes (LIKE mes%); tomamos el mas
+        // reciente seleccionado, igual que el resto de esta vista. Sin seleccion -> ALL.
+        mes: filters.mes.length ? filters.mes[filters.mes.length - 1] : 'ALL',
+        zona: filters.zona,
+        proy: filters.proy,
+      }} />}
     </>
   );
 }

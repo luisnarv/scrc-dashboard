@@ -135,18 +135,18 @@ export default function AnalysisModal({ open, onClose, title, description, confi
       Chart.register(...registerables);
 
       const isDark = document.body.classList.contains('theme-dark');
-      Chart.defaults.color = isDark ? '#9FB0A4' : '#97999B';
-      Chart.defaults.borderColor = isDark ? 'rgba(234,243,226,0.08)' : '#E0E0E0';
+      Chart.defaults.color = isDark ? '#85A3C4' : '#97999B';
+      Chart.defaults.borderColor = isDark ? 'rgba(242,247,255,0.10)' : '#E0E0E0';
       Chart.defaults.elements.line.borderWidth = 3;
       Chart.defaults.elements.point.radius = 5;
       Chart.defaults.elements.point.hoverRadius = 8;
       
       if (!(Chart.defaults.plugins as any).tooltip) (Chart.defaults.plugins as any).tooltip = {};
       const tooltipOpts = Chart.defaults.plugins.tooltip as any;
-      tooltipOpts.backgroundColor = isDark ? '#1E2C24' : '#FFFFFF';
-      tooltipOpts.titleColor = isDark ? '#EAF3E2' : '#38764C';
-      tooltipOpts.bodyColor = isDark ? '#EAF3E2' : '#3A3A3A';
-      tooltipOpts.borderColor = isDark ? '#33443A' : '#E0E0E0';
+      tooltipOpts.backgroundColor = isDark ? '#0F2744' : '#FFFFFF';
+      tooltipOpts.titleColor = isDark ? '#F2F7FF' : '#38764C';
+      tooltipOpts.bodyColor = isDark ? '#C9DAEE' : '#3A3A3A';
+      tooltipOpts.borderColor = isDark ? '#1E3A5F' : '#E0E0E0';
       tooltipOpts.borderWidth = 1;
       tooltipOpts.padding = 12;
       tooltipOpts.cornerRadius = 8;
@@ -281,7 +281,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           {(viewMode === 'table' || viewMode === 'split') && (
             <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto' }}>
               {!filteredTableData ? (
-                <div style={{ padding: 40, textAlign: 'center', color: '#8a93a6' }}>No hay tabla de respaldo configurada para esta vista.</div>
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No hay tabla de respaldo configurada para esta vista.</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, textAlign: 'center' }}>
                   <thead>
@@ -295,7 +295,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                           borderRight: i === 0 ? '2px solid var(--border)' : 'none',
                           padding: '12px 16px', 
                           textAlign: i === 0 ? 'left' : 'center', 
-                          color: '#5d6785', 
+                          color: 'var(--text-muted)',
                           textTransform: 'uppercase',
                           fontSize: 12
                         }}>
@@ -401,15 +401,15 @@ function HierarchicalRowComponent({ hRow, onRowClick, categoryIndex }: { hRow: {
               zIndex: j === 0 ? 1 : 0, 
               background: 'inherit',
               backgroundColor: j === 0 ? 'var(--panel)' : undefined,
-              borderBottom: '1px solid var(--border)', 
-              borderRight: j === 0 ? '2px solid #eef0f5' : 'none',
-              padding: '8px 16px', 
-              color: '#5d6785', 
+              borderBottom: '1px solid var(--border)',
+              borderRight: j === 0 ? '2px solid var(--border)' : 'none',
+              padding: '8px 16px',
+              color: 'var(--text-muted)',
               fontSize: 12,
               textAlign: j === 0 ? 'left' : 'center',
               paddingLeft: j === 0 ? 32 : 16
             }}>
-              {j === 0 ? <><span style={{ color: '#c2c8d4', marginRight: 6 }}>└</span>{cell}</> : cell}
+              {j === 0 ? <><span style={{ color: 'var(--border)', marginRight: 6 }}>└</span>{cell}</> : cell}
             </td>
           ))}
         </tr>

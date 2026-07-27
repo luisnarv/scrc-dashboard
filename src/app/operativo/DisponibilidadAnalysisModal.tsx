@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
+import { useTheme } from '../components/ThemeProvider';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 const TEAL = 'var(--sip)';
 const INK = 'var(--text-title)';
 const MUT = 'var(--text-muted)';
 const LINE = 'var(--border)';
-const COLORS = ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#97999B', '#B5BD00', '#78BE20', '#509E2F'];
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -22,6 +22,8 @@ const modalStyle: React.CSSProperties = {
 
 export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () => void }) {
   const { raw, filters } = useDashboard();
+  // Antes era un array fijo con los verdes del tema claro: sobre navy no leian.
+  const COLORS = useTheme().colors.series;
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'chart' | 'split' | 'table'>('split');
   const [splitRatio, setSplitRatio] = useState(60);
@@ -203,7 +205,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
             <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(234,243,226,0.08)" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
                   <Tooltip 

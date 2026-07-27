@@ -1,9 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 
-import type { RawData, RawRecord, CostoRecord, EmpleadoRecord, OrdenDetalle, Filters } from './utils/types';
+import type { RawData, RawRecord, CostoRecord, Filters } from './utils/types';
 import { normProy, normZonaDet } from './utils/filters';
+import { dashboardRepo } from '../lib/cache/repository';
+import type { MonthPayload, MonthsMeta } from '../lib/cache/types';
 
 interface DashboardContextValue {
   raw: RawData | null;
@@ -13,153 +15,218 @@ interface DashboardContextValue {
   proyList: string[];
   zonaList: string[];
   fechaList: string[];
-  loading: boolean;
+  loading: boolean;      // solo hasta que el mes actual esta en pantalla
+  syncing: boolean;      // sincronizacion de meses previos en 2do plano
+  lastSync: number | null;
   error: string | null;
+  refresh: () => Promise<void>;   // pull-to-refresh: fuerza red para lo visible
 }
 
 const DashboardContext = createContext<DashboardContextValue>({
   raw: null,
   filters: { proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' },
   setFilters: () => {},
-  mesList: [],
-  proyList: [],
-  zonaList: [],
-  fechaList: [],
-  loading: true,
-  error: null,
+  mesList: [], proyList: [], zonaList: [], fechaList: [],
+  loading: true, syncing: false, lastSync: null, error: null,
+  refresh: async () => {},
 });
 
-export function useDashboard() {
-  return useContext(DashboardContext);
-}
-
-
+export function useDashboard() { return useContext(DashboardContext); }
 
 const PROYS_VAL = ['Norte-Centro', 'Sur'];
 
+// Mismo umbral que antes: descarta meses cargados a medias por el ETL.
 function mesesValidos(counts: Record<string, number>): string[] {
   const vals = Object.values(counts);
   if (!vals.length) return [];
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
   const umbral = Math.max(10, avg * 0.05);
-  return Object.entries(counts)
-    .filter(([, c]) => c >= umbral)
-    .map(([m]) => m);
+  return Object.entries(counts).filter(([, c]) => c >= umbral).map(([m]) => m).sort();
+}
+
+// Normaliza zonas/proyecto de un mes una sola vez, al entrar en memoria.
+function normalizeMonth(p: MonthPayload): MonthPayload {
+  p.rawRecords.forEach((rec: RawRecord) => {
+    const proj = normProy(rec.Zona);
+    const z = normZonaDet(rec.Zona);
+    if (proj) rec._Proyecto = proj;
+    rec._Zona = z || proj || undefined;
+    const dz = normZonaDet(rec.Zona_Detalle || rec.Zona);
+    rec._ZonaDet = dz || rec._Zona;
+  });
+  p.costos.forEach((rec: CostoRecord) => {
+    const proj = normProy(rec.Zona) || normProy(rec.Proyecto);
+    const z = normZonaDet(rec.Zona) || normZonaDet(rec.Proyecto);
+    if (proj) rec._Proyecto = proj;
+    rec._Zona = z || proj || undefined;
+    rec._ZonaDet = rec._Zona;
+  });
+  p.dispDiaria.forEach((rec: any) => {
+    const proj = normProy(rec.Zona);
+    const z = normZonaDet(rec.Zona);
+    if (proj) rec._Proyecto = proj;
+    rec._Zona = z || proj || undefined;
+    rec._ZonaDet = rec._Zona;
+  });
+  return p;
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [raw, setRaw] = useState<RawData | null>(null);
+  const [monthsData, setMonthsData] = useState<Record<string, MonthPayload>>({});
+  const [evolutivo, setEvolutivo] = useState<MonthsMeta['evolutivo']>([]);
+  const [mesList, setMesList] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' });
-  const [mesList, setMesList] = useState<string[]>([]);
   const [proyList, setProyList] = useState<string[]>([]);
   const [zonaList, setZonaList] = useState<string[]>([]);
   const [fechaList, setFechaList] = useState<string[]>([]);
+
+  const versionsRef = useRef<Record<string, string | null>>({});
+  const loadingMonths = useRef<Set<string>>(new Set());
 
   const setFilters = useCallback((f: Partial<Filters>) => {
     setFiltersState(prev => ({ ...prev, ...f }));
   }, []);
 
-  useEffect(() => {
-    fetch('/api/data/base')
-      .then(res => {
-        if (!res.ok) throw new Error('Error de conexión a la Base de Datos PostgreSQL');
-        return res.json();
-      })
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        const { rawRecords, costos, emps, mesRecords = [], dispDiaria = [], evolutivo = [] } = data;
-        const det: OrdenDetalle[] = []; // No se carga completo por volumen, se solicitará on-demand
-
-        // Normalize zones ya se hizo parcialmente en el backend, 
-        // pero repasamos para consistencia con el código existente
-        rawRecords.forEach((rec: RawRecord) => {
-          const p = normProy(rec.Zona);
-          const z = normZonaDet(rec.Zona);
-          if (p) rec._Proyecto = p;
-          rec._Zona = z || p || undefined;
-          const dz = normZonaDet(rec.Zona_Detalle || rec.Zona);
-          rec._ZonaDet = dz || rec._Zona;
-        });
-        costos.forEach((rec: CostoRecord) => {
-          const p = normProy(rec.Zona) || normProy(rec.Proyecto);
-          const z = normZonaDet(rec.Zona) || normZonaDet(rec.Proyecto);
-          if (p) rec._Proyecto = p;
-          rec._Zona = z || p || undefined;
-          rec._ZonaDet = rec._Zona;
-        });
-
-        dispDiaria.forEach((rec: any) => {
-          const p = normProy(rec.Zona);
-          const z = normZonaDet(rec.Zona);
-          if (p) rec._Proyecto = p;
-          rec._Zona = z || p || undefined;
-          rec._ZonaDet = rec._Zona;
-        });
-
-        const rawData: RawData = { raw: rawRecords, costos, emps, det, mes: mesRecords, disp: dispDiaria, evolutivo };
-        setRaw(rawData);
-
-        // Build filters
-        const proys = PROYS_VAL.filter(
-          p => rawRecords.some((r: RawRecord) => r._Proyecto === p) || costos.some((r: CostoRecord) => r._Proyecto === p)
-        );
-        setProyList(proys);
-
-        const mRawC: Record<string, number> = {};
-        const mCosC: Record<string, number> = {};
-        rawRecords.forEach((r: RawRecord) => {
-          const m = String(r.Fecha || '').slice(0, 7);
-          if (m) mRawC[m] = (mRawC[m] || 0) + 1;
-        });
-        costos.forEach((r: CostoRecord) => {
-          if (r.Mes) mCosC[String(r.Mes)] = (mCosC[String(r.Mes)] || 0) + 1;
-        });
-        const mR = new Set(mesesValidos(mRawC));
-        const mC = new Set(mesesValidos(mCosC));
-        const meses = [...new Set([...mR, ...mC])].sort();
-        setMesList(meses);
-
-        const mesDef = meses[meses.length - 1];
-        const newFilters: Filters = { proy: 'ALL', zona: 'ALL', mes: mesDef ? [mesDef] : [] , fecha: 'ALL' };
-        setFiltersState(newFilters);
-
-        const fechas = [...new Set(
-          rawRecords.filter((r: RawRecord) => !mesDef || String(r.Fecha || '').startsWith(mesDef)).map((r: RawRecord) => r.Fecha)
-        )].filter((x): x is string => !!x).sort();
-        setFechaList(fechas);
-
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(String(err));
-        setLoading(false);
-      });
+  const mergeMonth = useCallback((mes: string, payload: MonthPayload) => {
+    setMonthsData(prev => ({ ...prev, [mes]: normalizeMonth(payload) }));
+    setLastSync(Date.now());
+    setError(null); // llego dato bueno -> se sale del estado "sin conexion"
   }, []);
 
-  // Actualiza zona list cuando cambia proyecto o raw
+  // Carga bajo demanda de un mes (cache-first). Evita duplicados concurrentes.
+  const loadMonth = useCallback(async (mes: string, force = false) => {
+    if (loadingMonths.current.has(mes)) return;
+    loadingMonths.current.add(mes);
+    try {
+      const res = await dashboardRepo.getMonth(mes, { force, serverVersion: versionsRef.current[mes] ?? null });
+      mergeMonth(mes, res.payload);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      loadingMonths.current.delete(mes);
+    }
+  }, [mergeMonth]);
+
+  // Aplica metadatos (lista de meses + evolutivo + versiones).
+  const applyMeta = useCallback((meta: MonthsMeta) => {
+    const counts: Record<string, number> = {};
+    const versions: Record<string, string | null> = {};
+    meta.months.forEach(m => { counts[m.mes] = m.count; versions[m.mes] = m.version ?? null; });
+    versionsRef.current = versions;
+    const lista = mesesValidos(counts);
+    setMesList(lista);
+    setEvolutivo(meta.evolutivo);
+    return lista;
+  }, []);
+
+  // ---- Arranque: meta -> mes actual -> sync en 2do plano ----
+  useEffect(() => {
+    let cancel = false;
+
+    (async () => {
+      try {
+        // 1) Metadatos (cache-first): sabemos que meses hay y cual es el actual.
+        const { data: meta } = await dashboardRepo.getMonthsMeta();
+        if (cancel) return;
+        const lista = applyMeta(meta);
+        const actual = lista[lista.length - 1];
+        if (!actual) { setLoading(false); return; }
+        dashboardRepo.setCurrentMonth(actual);
+
+        // 2) Mes actual (cache-first): apenas llega, se muestra.
+        setFiltersState(prev => ({ ...prev, mes: [actual] }));
+        const res = await dashboardRepo.getMonth(actual, { serverVersion: versionsRef.current[actual] ?? null });
+        if (cancel) return;
+        mergeMonth(actual, res.payload);
+        setLoading(false);
+
+        // 3) Resto de meses (recientes primero) en segundo plano, progresivo.
+        const previos = lista.filter(m => m !== actual).reverse();
+        if (previos.length) {
+          setSyncing(true);
+          await dashboardRepo.syncMonths(previos, versionsRef.current);
+          if (!cancel) setSyncing(false);
+        }
+      } catch (e) {
+        if (!cancel) { setError(String(e)); setLoading(false); }
+      }
+    })();
+
+    // 4) Suscripcion: datos que llegan en 2do plano (sync o revalidacion SWR).
+    const unsub = dashboardRepo.subscribe((ev) => {
+      if (cancel) return;
+      if (ev.type === 'month') {
+        mergeMonth(ev.mes, ev.result.payload);
+      } else if (ev.type === 'meta') {
+        // La lista/versiones cambiaron (ETL recargo algo): re-sincroniza lo movido.
+        const prevVersions = { ...versionsRef.current };
+        const lista = applyMeta(ev.data);
+        const cambiados = lista.filter(m => prevVersions[m] !== versionsRef.current[m]);
+        if (cambiados.length) dashboardRepo.syncMonths(cambiados, versionsRef.current);
+      }
+    });
+
+    return () => { cancel = true; unsub(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Carga bajo demanda cuando el usuario selecciona meses aun no cargados.
+  useEffect(() => {
+    if (loading) return;
+    filters.mes.forEach(m => { if (!(m in monthsData)) loadMonth(m); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.mes, loading]);
+
+  // Pull-to-refresh: fuerza red para los meses visibles + metadatos.
+  const refresh = useCallback(async () => {
+    try { const { data } = await dashboardRepo.getMonthsMeta({ force: true }); applyMeta(data); } catch { /* seguimos con cache */ }
+    const objetivo = filters.mes.length ? filters.mes : (mesList.length ? [mesList[mesList.length - 1]] : []);
+    await Promise.all(objetivo.map(m => loadMonth(m, true)));
+  }, [filters.mes, mesList, applyMeta, loadMonth]);
+
+  // ---- Derivar RawData a partir de los meses cargados ----
+  const raw: RawData | null = useMemo(() => {
+    const meses = Object.values(monthsData);
+    if (!meses.length) return null;
+    return {
+      raw: meses.flatMap(m => m.rawRecords),
+      costos: meses.flatMap(m => m.costos),
+      emps: meses.flatMap(m => m.emps),
+      det: [],
+      mes: meses.flatMap(m => m.mesRecords),
+      disp: meses.flatMap(m => m.dispDiaria),
+      evolutivo,
+    };
+  }, [monthsData, evolutivo]);
+
+  // Listas de filtros derivadas de lo cargado (se amplian con el sync).
   useEffect(() => {
     if (!raw) return;
-    const { raw: rawRecords, costos } = raw;
+    const proys = PROYS_VAL.filter(
+      p => raw.raw.some(r => r._Proyecto === p) || raw.costos.some(r => r._Proyecto === p)
+    );
+    setProyList(proys);
+  }, [raw]);
 
-    const filteredRaw = filters.proy === 'ALL' ? rawRecords : rawRecords.filter(r => r._Proyecto === filters.proy);
-    const filteredCos = filters.proy === 'ALL' ? costos : costos.filter(r => r._Proyecto === filters.proy);
+  useEffect(() => {
+    if (!raw) return;
+    const filteredRaw = filters.proy === 'ALL' ? raw.raw : raw.raw.filter(r => r._Proyecto === filters.proy);
+    const filteredCos = filters.proy === 'ALL' ? raw.costos : raw.costos.filter(r => r._Proyecto === filters.proy);
     const zonaSet = new Set<string>();
     filteredRaw.forEach(r => { if (r._Zona) zonaSet.add(r._Zona); });
     filteredCos.forEach(r => { if (r._Zona) zonaSet.add(String(r._Zona)); });
-    const zonas = [...zonaSet].sort();
-    setZonaList(zonas);
+    setZonaList([...zonaSet].sort());
   }, [raw, filters.proy]);
 
-  // Actualiza fecha list según los meses seleccionados ([] = todos)
   useEffect(() => {
     if (!raw) return;
     const sel = filters.mes;
     const fechas = [...new Set(
-      raw.raw
-        .filter(r => sel.length === 0 || sel.includes(String(r.Fecha || '').slice(0, 7)))
-        .map(r => r.Fecha)
+      raw.raw.filter(r => sel.length === 0 || sel.includes(String(r.Fecha || '').slice(0, 7))).map(r => r.Fecha)
     )].filter((x): x is string => !!x).sort();
     setFechaList(fechas);
     if (filters.fecha !== 'ALL') setFilters({ fecha: 'ALL' });
@@ -167,7 +234,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [raw, filters.mes]);
 
   return (
-    <DashboardContext.Provider value={{ raw, filters, setFilters, mesList, proyList, zonaList, fechaList, loading, error }}>
+    <DashboardContext.Provider value={{
+      raw, filters, setFilters, mesList, proyList, zonaList, fechaList,
+      loading, syncing, lastSync, error, refresh,
+    }}>
       {children}
     </DashboardContext.Provider>
   );

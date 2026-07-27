@@ -16,7 +16,12 @@ export default function DashboardGate({ children }: { children: ReactNode }) {
 
   if (loading) return <LoadingScreen />;
 
-  if (error) {
+  const hayDatos = !!raw && raw.raw.length > 0;
+
+  // Offline-first: un error solo tapa la pantalla si NO hay datos en cache.
+  // Con datos cacheados seguimos mostrando el dashboard; el aviso de "sin
+  // conexion" lo da el indicador del Header (SyncStatus).
+  if (error && !hayDatos) {
     return (
       <div className="load-screen">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -27,8 +32,7 @@ export default function DashboardGate({ children }: { children: ReactNode }) {
     );
   }
 
-  const sinDatos = !raw || raw.raw.length === 0;
-  if (sinDatos) {
+  if (!hayDatos) {
     return (
       <div className="load-screen">
         {/* eslint-disable-next-line @next/next/no-img-element */}

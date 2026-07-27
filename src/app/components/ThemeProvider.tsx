@@ -19,15 +19,17 @@ export const THEME_COLORS = {
              '#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9CB86E']
   },
   dark: {
-    sip: '#8FD14F',
-    otc: '#509E2F',
-    ok: '#509E2F',
-    warn: '#B5BD00',
-    err: '#C0392B',
-    ink: '#EAF3E2',
-    mut: '#9FB0A4',
-    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#BCD08A',
-             '#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9CB86E']
+    sip: '#4A9EE8',
+    otc: '#2BD98C',
+    ok: '#2BD98C',
+    warn: '#F0C040',
+    err: '#FF5A5F',
+    ink: '#F2F7FF',
+    mut: '#85A3C4',
+    // Serie propia del tema navy: los verdes del tema claro pierden
+    // separacion sobre #0A1A2F. Se cicla igual que en light.
+    series: ['#3A87CC', '#17A86B', '#9A6DC4', '#C87340', '#12A0AC',
+             '#AD8B26', '#3A87CC', '#17A86B', '#9A6DC4', '#C87340']
   }
 };
 
