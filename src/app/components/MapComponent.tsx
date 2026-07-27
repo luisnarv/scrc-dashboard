@@ -6,13 +6,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
+import { claveBarrio, normBarrio } from './utils/barrio';
 
 // Auto-zoom removido para no sacar de foco al usuario.
-
-// Normaliza para cruzar barrio (BD) con nombre (GeoJSON): mayusculas, sin
-// tildes y sin espacios sobrantes. Antes solo hacia toUpperCase, asi que un
-// "URBANIZACION" con tilde no casaba con "URBANIZACION" sin tilde.
-const normBarrio = (s: any) => String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
 // ---- Capa de puntos por NIC, imperativa y en canvas ----
 // Un solo LayerGroup con L.circleMarker por punto. Evita crear 19.5k elementos
@@ -52,44 +48,121 @@ const popupNic = (e: any) => {
     </div>`;
 };
 
-const llenarGrupo = (group: L.LayerGroup, pts: any[], renderer: L.Canvas) => {
-  for (const e of pts) {
-    if (e.la == null || e.lo == null) continue;
-    L.circleMarker([e.la, e.lo], {
-      radius: 4, color: '#fff', weight: 0.5, fillOpacity: 0.85,
-      fillColor: colorEfectividad(e), renderer,
-      // Clic en un punto abre su popup pero NO cuenta como "clic afuera".
-      bubblingMouseEvents: false,
-    }).bindPopup(popupNic(e)).addTo(group);
+  // Detecta clic en el fondo del mapa (fuera de un barrio) para restablecer la
+  // seleccion. Si se hace clic cerca de un NIC, abre su popup.
+  function MapInteractionHandler({ allNicPoints, onReset }: { allNicPoints: any[]; onReset?: () => void }) {
+    const map = useMapEvents({
+      click: (e) => {
+        const clickPt = map.latLngToContainerPoint(e.latlng);
+        let best: any = null, bestD = Infinity;
+        for (const p of allNicPoints) {
+          if (p.la == null || p.lo == null) continue;
+          if (Math.abs(p.la - e.latlng.lat) > 0.004 || Math.abs(p.lo - e.latlng.lng) > 0.004) continue;
+          const pt = map.latLngToContainerPoint([p.la, p.lo]);
+          const d = clickPt.distanceTo(pt);
+          if (d < bestD) { bestD = d; best = p; }
+        }
+        
+        if (bestD <= 9 && best) {
+          L.popup({ autoPan: false })
+            .setLatLng([best.la, best.lo])
+            .setContent(popupNic(best))
+            .openOn(map);
+        } else {
+          onReset?.();
+        }
+      }
+    });
+    return null;
   }
-};
 
-// Detecta clic en el fondo del mapa (fuera de un barrio) para restablecer la
-// seleccion. Los barrios hacen stopPropagation, asi que este solo dispara afuera.
-function ClickReset({ onReset }: { onReset?: () => void }) {
-  useMapEvents({ click: () => onReset?.() });
-  return null;
-}
-
-const NicLayer = createLayerComponent<L.LayerGroup, { points: any[]; children?: React.ReactNode }>(
-  (props, ctx) => {
-    const renderer = L.canvas({ padding: 0.5 });
-    const group = L.layerGroup();
-    (group as any).__renderer = renderer;
-    llenarGrupo(group, props.points, renderer);
-    return { instance: group, context: ctx };
-  },
-  (group, props, prev) => {
-    if (props.points !== prev.points) {
-      group.clearLayers();
-      llenarGrupo(group, props.points, (group as any).__renderer);
+  const CanvasHeatLayer = L.Layer.extend({
+    initialize: function(points: any[], options: any) {
+      this.points = points;
+      L.setOptions(this, options);
+    },
+    onAdd: function(map: L.Map) {
+      this._map = map;
+      this._canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
+      this._canvas.style.pointerEvents = 'none';
+      map.getPane('overlayPane')?.appendChild(this._canvas);
+      map.on('move viewreset resize zoom', this._update, this);
+      this._update();
+    },
+    onRemove: function(map: L.Map) {
+      map.getPane('overlayPane')?.removeChild(this._canvas);
+      map.off('move viewreset resize zoom', this._update, this);
+    },
+    setPoints: function(points: any[]) {
+      this.points = points;
+      this._update();
+    },
+    _update: function() {
+      if (!this._map || !this._canvas) return;
+      const map = this._map;
+      const size = map.getSize();
+      const bounds = map.getBounds();
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(this._canvas, topLeft);
+      
+      this._canvas.width = size.x;
+      this._canvas.height = size.y;
+      
+      const ctx = this._canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, size.x, size.y);
+      
+      const R = 26;
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of this.points) {
+        if (p.la == null || p.lo == null) continue;
+        if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+        
+        const pt = map.latLngToContainerPoint([p.la, p.lo]);
+        const col = colorEfectividad(p);
+        const hexA = (hex: string, alpha: number) => {
+          let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+          return `rgba(${r},${g},${b},${alpha})`;
+        };
+        
+        const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, R);
+        grad.addColorStop(0, hexA(col, 0.2));
+        grad.addColorStop(0.5, hexA(col, 0.08));
+        grad.addColorStop(1, hexA(col, 0));
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, R, 0, 2 * Math.PI); ctx.fill();
+      }
+      
+      ctx.globalCompositeOperation = 'source-over';
+      for (const p of this.points) {
+        if (p.la == null || p.lo == null) continue;
+        if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+        
+        const pt = map.latLngToContainerPoint([p.la, p.lo]);
+        const col = colorEfectividad(p);
+        const hexA = (hex: string, alpha: number) => {
+          let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+          return `rgba(${r},${g},${b},${alpha})`;
+        };
+        ctx.fillStyle = hexA(col, 0.55);
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.3, 0, 2 * Math.PI); ctx.fill();
+      }
     }
-  }
-);
+  });
+
+  const ContinuousHeatLayer = createLayerComponent<L.Layer, { points: any[]; children?: React.ReactNode }>(
+    (props, ctx) => {
+      const layer = new CanvasHeatLayer(props.points, {});
+      return { instance: layer, context: ctx };
+    },
+    (layer, props, prev) => {
+      if (props.points !== prev.points) {
+        (layer as any).setPoints(props.points);
+      }
+    }
+  );
 
 export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, statsBarrios, selectedBarrio = 'ALL', selectedMuni = 'ALL', onSelectBarrio, onReset }: { points: any[], geoMuni: any, geoBarrios: any, geoZonas?: any, statsBarrios?: any[], selectedBarrio?: string, selectedMuni?: string, onSelectBarrio?: (muni: string, barrio: string) => void, onReset?: () => void }) {
-  const normStr = (s?: string) => (s || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
   const statsMap = React.useMemo(() => {
     const map = new Map();
     if (statsBarrios) {
@@ -111,7 +184,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
           else color = '#ef4444'; // Rojo (Riesgo alto / muy baja efectividad)
         }
         
-        const key = `${normStr(s.municipio)}|${normStr(s.barrio)}`;
+        const key = claveBarrio(s.municipio, s.barrio);
         map.set(key, { color, total, efectivas, fallidas, perdidas, motivos: s.motivos, observaciones: s.observaciones });
       }
     }
@@ -122,7 +195,6 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
     if (!geoBarrios?.features) return centroids;
     for (const feat of geoBarrios.features) {
       const bName = normBarrio(feat.properties?.nombre);
-      const mName = normBarrio(feat.properties?.municipio);
       if (!bName) continue;
       
       let pts: any[] = [];
@@ -144,7 +216,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
           if (lon < minLon) minLon = lon;
           if (lon > maxLon) maxLon = lon;
         }
-        centroids.set(`${mName}|${bName}`, [(minLat + maxLat) / 2, (minLon + maxLon) / 2]);
+        centroids.set(claveBarrio(feat.properties?.municipio, feat.properties?.nombre), [(minLat + maxLat) / 2, (minLon + maxLon) / 2]);
       }
     }
     return centroids;
@@ -162,9 +234,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
       
       if (lat == null || lon == null) {
         if (!p.ba) continue;
-        const bName = normBarrio(p.ba);
-        const mName = normBarrio(p.mu);
-        const center = centroidesBarrio.get(`${mName}|${bName}`);
+        const center = centroidesBarrio.get(claveBarrio(p.mu, p.ba));
         if (!center) continue;
         
         lat = center[0];
@@ -220,8 +290,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
   
   const getStyleBarrio = (feature: any) => {
     const bName = normBarrio(feature.properties?.nombre);
-    const mName = normBarrio(feature.properties?.municipio);
-    const key = `${mName}|${bName}`;
+    const key = claveBarrio(feature.properties?.municipio, feature.properties?.nombre);
     if (bName && statsMap.has(key)) {
       const s = statsMap.get(key);
       if (s.total > 0) {
@@ -249,8 +318,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
 
   const onEachFeature = (feature: any, layer: any) => {
     const bName = normBarrio(feature.properties?.nombre);
-    const mName = normBarrio(feature.properties?.municipio);
-    const key = `${mName}|${bName}`;
+    const key = claveBarrio(feature.properties?.municipio, feature.properties?.nombre);
 
     // El clic no burbujea al mapa (no cuenta como "clic afuera"/reset).
     layer.options.bubblingMouseEvents = false;
@@ -383,10 +451,11 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
     });
   };
 
-  return (
-    <MapContainer preferCanvas center={[10.96854, -74.78132]} zoom={12} style={{ height: '100%', width: '100%' }}>
-      <ClickReset onReset={onReset} />
-      <LayersControl position="topright">
+    const allPts = [...nicPoints, ...nicPointsNoGps];
+    return (
+      <MapContainer preferCanvas center={[10.96854, -74.78132]} zoom={12} style={{ height: '100%', width: '100%' }}>
+        <MapInteractionHandler allNicPoints={allPts} onReset={onReset} />
+        <LayersControl position="topright">
         <LayersControl.BaseLayer checked name="Mapa Claro">
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -434,17 +503,15 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
           </LayersControl.Overlay>
         )}
 
-        {/* Sin clustering: cada NIC es un punto visible a cualquier zoom (se ven
-            desde lejos). Capa imperativa en canvas -> soporta el volumen sin
-            congelar al re-filtrar. */}
+        {/* Capa imperativa de Canvas Custom: soporta el renderizado "Lighter" de heatmaps. */}
         {nicPoints.length > 0 && (
           <LayersControl.Overlay checked name="NIC con orden (Puntos GPS)">
-            <NicLayer points={nicPoints} />
+            <ContinuousHeatLayer points={nicPoints} />
           </LayersControl.Overlay>
         )}
         {nicPointsNoGps.length > 0 && (
           <LayersControl.Overlay checked name="NIC sin GPS (Ubicados por Barrio)">
-            <NicLayer points={nicPointsNoGps} />
+            <ContinuousHeatLayer points={nicPointsNoGps} />
           </LayersControl.Overlay>
         )}
       </LayersControl>

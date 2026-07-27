@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { normBarrio, normBase } from './utils/barrio';
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false });
 
@@ -66,17 +67,17 @@ export default function MapModal({ onClose, filtrosBase }: MapModalProps) {
   // Un predicado por filtro. Se componen para el filtrado y, dejando fuera el
   // propio, para calcular las opciones disponibles de cada select (cascada).
   const dia = (r: any) => String(Number(String(r.fe).slice(-2)) || '');
-  // Barrio/municipio se comparan NORMALIZADOS (sin tildes, mayusculas): al hacer
-  // clic en un poligono, su nombre (GeoJSON) puede diferir del texto de la BD.
-  const norm = (s: any) => String(s || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Barrio/municipio usan la MISMA homologacion que el heatmap (normBarrio quita
+  // prefijos como "BARRIO"): al clicar un poligono, su nombre (GeoJSON) puede
+  // diferir del texto de la BD ("BARRIO ABAJO" vs "ABAJO").
   const preds: Record<string, (r: any) => boolean> = {
     es: r => fEstado === 'ALL' || r.es === fEstado,
     zo: r => fZona === 'ALL' || r.zo === fZona,
     ac: r => fAccion === 'ALL' || r.ac === fAccion,
     su: r => fSubaccion === 'ALL' || r.su === fSubaccion,
     te: r => fTecnico === 'ALL' || r.te === fTecnico,
-    mu: r => fMuni === 'ALL' || norm(r.mu) === norm(fMuni),
-    ba: r => fBarrio === 'ALL' || norm(r.ba) === norm(fBarrio),
+    mu: r => fMuni === 'ALL' || normBase(r.mu) === normBase(fMuni),
+    ba: r => fBarrio === 'ALL' || normBarrio(r.ba) === normBarrio(fBarrio),
     to: r => fTipo === 'ALL' || r.to === fTipo,
     dia: r => fDia === 'ALL' || dia(r) === fDia,
   };

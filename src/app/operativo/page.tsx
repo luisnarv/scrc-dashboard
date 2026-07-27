@@ -388,7 +388,7 @@ export default function OperativoPage() {
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: TEAL, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             Ver Detalle Operativo (Norte-Centro) ↗
           </a>
-          <a href="https://app.powerbi.com/view?r=eyJrIjoiMTUwMDYxNTAtMDRkMC00MmE5LTk2Y2QtNTI4ZDQ3OGQyNDg1IiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
+          <a href="https://app.powerbi.com/view?r=eyJrIjoiMTU3ZjE4ZmItMWZjMy00ZjBkLTlkNGMtODQ1YTMwMmZlMDQ2IiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? '#14b8a6' : '#0f766e', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             Ver Detalle Operativo (Sur) ↗
           </a>

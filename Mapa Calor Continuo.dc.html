@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;background:#0a0d13;}
+    ::-webkit-scrollbar{width:8px;height:8px;}
+    ::-webkit-scrollbar-thumb{background:#2a3646;border-radius:8px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    a{color:#38bdf8;text-decoration:none;}
+    a:hover{color:#7dd3fc;}
+  </style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;width:100%;background:#0a0d13;color:#e6ebf2;font-family:'IBM Plex Sans',system-ui,sans-serif;overflow:hidden;">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:13px 20px;border-bottom:1px solid #1a2330;background:#0d1119;flex-shrink:0;">
+    <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#0ea5e9,#22d3ee);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#04121a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+    </div>
+    <div>
+      <div style="font-size:10px;letter-spacing:0.18em;color:#5f7085;font-weight:600;">MAPA DE CALOR CONTINUO · ATLÁNTICO</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;line-height:1.15;margin-top:1px;">Concentración de órdenes</div>
+    </div>
+    <div style="flex:1;"></div>
+    <button onClick="{{ onCopy }}" style="{{ copyStyle }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+      {{ copyLabel }}
+    </button>
+    <button onClick="{{ onReset }}" style="padding:10px 16px;border-radius:10px;border:1px solid #24303f;background:#111823;color:#9fb0c3;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      Limpiar filtros ({{ activeTotal }})
+    </button>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:2px;padding:0 18px;border-bottom:1px solid #1a2330;background:#0d1119;flex-shrink:0;overflow-x:auto;">
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="10">
+      <button onClick="{{ g.onToggleOpen }}" style="{{ g.tabStyle }}">
+        <span>{{ g.label }}</span>
+        <sc-if value="{{ g.hasActive }}" hint-placeholder-val="{{ false }}">
+          <span style="min-width:17px;height:17px;padding:0 5px;border-radius:6px;background:#22d3ee;color:#04121a;font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ g.activeCount }}</span>
+        </sc-if>
+      </button>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid #1a2330;background:#0b0f16;flex-shrink:0;min-height:59px;overflow-x:auto;">
+    <span style="font-size:11px;color:#5f7085;font-weight:600;flex-shrink:0;margin-right:4px;">{{ tabLabel }}</span>
+    <sc-for list="{{ tabOptions }}" as="o" hint-placeholder-count="6">
+      <button onClick="{{ o.onClick }}" style="{{ o.pillStyle }}">
+        <span>{{ o.label }}</span>
+        <span style="{{ o.countStyle }}">{{ o.count }}</span>
+      </button>
+    </sc-for>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+    <div style="flex:1;position:relative;min-width:0;background:radial-gradient(125% 125% at 60% 20%,#0e141d 0%,#0a0d13 72%);">
+      <canvas ref="{{ canvasRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
+
+      <div style="position:absolute;left:16px;top:16px;width:236px;display:flex;flex-direction:column;gap:9px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div style="padding:10px 12px;border-radius:11px;background:rgba(13,17,25,0.86);border:1px solid #1e2836;backdrop-filter:blur(9px);">
+              <div style="font-size:9px;letter-spacing:0.1em;color:#63748a;font-weight:700;">{{ k.label }}</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;line-height:1.1;margin-top:2px;color:{{ k.color }};">{{ k.value }}</div>
+              <div style="font-size:9.5px;color:#5f7085;">{{ k.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ zoneCards }}" as="z" hint-placeholder-count="4">
+          <div style="padding:10px 12px;border-radius:11px;background:rgba(13,17,25,0.82);border:1px solid {{ z.border }};backdrop-filter:blur(9px);">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:12.5px;font-weight:600;">{{ z.label }}</span>
+              <span style="font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:700;color:{{ z.color }};">{{ z.rate }}%</span>
+            </div>
+            <div style="height:4px;border-radius:3px;background:#1a2431;margin-top:7px;overflow:hidden;">
+              <div style="height:100%;width:{{ z.rate }}%;background:{{ z.color }};border-radius:3px;"></div>
+            </div>
+            <div style="font-size:10px;color:#63748a;margin-top:5px;">{{ z.total }} órdenes · riesgo {{ z.risk }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="position:absolute;right:16px;bottom:14px;display:flex;align-items:center;gap:9px;padding:8px 13px;background:rgba(10,13,19,0.78);border:1px solid #1e2836;border-radius:10px;font-size:11.5px;color:#8593a5;backdrop-filter:blur(8px);">
+        <span style="width:7px;height:7px;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee;"></span>
+        Intensidad = concentración de órdenes · color = estado
+      </div>
+    </div>
+
+    <div style="width:334px;flex-shrink:0;border-left:1px solid #1a2330;background:#0c1017;overflow-y:auto;padding:17px;display:flex;flex-direction:column;gap:16px;">
+      <div>
+        <button onClick="{{ det.onToggle }}" style="{{ det.btnStyle }}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+          <span>{{ det.label }} · {{ visible }}</span>
+          <span style="{{ det.chevStyle }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </button>
+        <sc-if value="{{ det.open }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 14px 15px;border:1px solid #24303f;border-top:none;border-radius:0 0 11px 11px;background:#0b0f16;display:flex;flex-direction:column;gap:14px;">
+            <sc-for list="{{ detailSections }}" as="sec" hint-placeholder-count="6">
+              <div>
+                <div style="font-size:9.5px;letter-spacing:0.14em;font-weight:700;color:#5f7085;margin-bottom:8px;">{{ sec.title }}</div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <sc-for list="{{ sec.rows }}" as="r" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="flex:1;min-width:0;font-size:11.5px;color:#dbe3ed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.label }}</span>
+                      <span style="width:40px;height:5px;border-radius:4px;background:#161f2b;overflow:hidden;flex-shrink:0;">
+                        <span style="display:block;height:100%;width:{{ r.pct }}%;background:{{ r.barColor }};border-radius:4px;"></span>
+                      </span>
+                      <span style="font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;color:{{ r.color }};width:32px;text-align:right;flex-shrink:0;">{{ r.count }}</span>
+                      <span style="font-size:10px;color:#63748a;width:28px;text-align:right;flex-shrink:0;">{{ r.pct }}%</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <div>
+        <div style="font-size:10.5px;letter-spacing:0.14em;color:#5f7085;font-weight:600;margin-bottom:11px;">CARGA POR TÉCNICO</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <sc-for list="{{ techCards }}" as="t" hint-placeholder-count="6">
+            <button onClick="{{ t.onClick }}" style="{{ t.cardStyle }}">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:29px;height:29px;border-radius:9px;background:{{ t.avatarBg }};color:{{ t.avatarFg }};font-family:'Space Grotesk',sans-serif;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ t.initials }}</span>
+                <span style="flex:1;min-width:0;">
+                  <span style="display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ t.name }}</span>
+                  <span style="display:block;font-size:10.5px;color:#63748a;margin-top:1px;">{{ t.zone }}</span>
+                </span>
+                <span style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:{{ t.color }};">{{ t.count }}</span>
+              </div>
+              <div style="display:flex;gap:2px;margin-top:9px;height:5px;border-radius:3px;overflow:hidden;background:#161f2b;">
+                <sc-for list="{{ t.segments }}" as="s" hint-placeholder-count="3">
+                  <span style="height:100%;width:{{ s.pct }}%;background:{{ s.color }};"></span>
+                </sc-for>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:10.5px;letter-spacing:0.14em;color:#5f7085;font-weight:600;margin-bottom:11px;">BARRIOS CRÍTICOS</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <sc-for list="{{ hotBarrios }}" as="b" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;background:#0e141d;border:1px solid #182230;">
+              <span style="width:5px;height:24px;border-radius:3px;background:{{ b.color }};flex-shrink:0;"></span>
+              <span style="flex:1;min-width:0;">
+                <span style="display:block;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ b.name }}</span>
+                <span style="display:block;font-size:10.5px;color:#63748a;">{{ b.municipio }} · riesgo {{ b.risk }}</span>
+              </span>
+              <span style="font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:700;color:{{ b.color }};">{{ b.failPct }}%</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid #1a2330;background:#0d1119;flex-shrink:0;flex-wrap:wrap;">
+    <span style="font-size:10.5px;letter-spacing:0.14em;color:#5f7085;font-weight:700;flex-shrink:0;">ESTADO</span>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <sc-for list="{{ stateOptions }}" as="o" hint-placeholder-count="4">
+        <button onClick="{{ o.onClick }}" style="{{ o.pillStyle }}">
+          <span>{{ o.label }}</span>
+          <span style="{{ o.countStyle }}">{{ o.count }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <span style="width:1px;height:22px;background:#1e2836;"></span>
+    <span style="font-size:10.5px;letter-spacing:0.14em;color:#5f7085;font-weight:700;flex-shrink:0;">ZONA DE RIESGO</span>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <sc-for list="{{ riskOptions }}" as="o" hint-placeholder-count="3">
+        <button onClick="{{ o.onClick }}" style="{{ o.pillStyle }}">
+          <span>{{ o.label }}</span>
+          <span style="{{ o.countStyle }}">{{ o.count }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="display:flex;align-items:center;gap:9px;font-size:11.5px;color:#8593a5;">
+      <b style="font-family:'Space Grotesk',sans-serif;font-size:13px;color:#e6ebf2;">{{ visible }}</b> de {{ totalAll }} órdenes en vista
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: {}, tab: 'tecnico', detailOpen: false, copied: null };
+
+  ST = { Efectiva: '#34d399', Fallida: '#fbbf24', Perdida: '#f87171', Pendiente: '#a78bfa' };
+  RISK = { Alto: '#f87171', Medio: '#fbbf24', Bajo: '#34d399' };
+
+  GROUPS = [
+    { key: 'riesgo',    label: 'Zona de riesgo', dot: '#f87171' },
+    { key: 'estado',    label: 'Estado',         dot: '#34d399' },
+    { key: 'zona',      label: 'Zona',           dot: '#22d3ee' },
+    { key: 'accion',    label: 'Acción',         dot: '#38bdf8' },
+    { key: 'subaccion', label: 'Subacción',      dot: '#818cf8' },
+    { key: 'tecnico',   label: 'Técnico',        dot: '#a78bfa' },
+    { key: 'municipio', label: 'Municipio',      dot: '#2dd4bf' },
+    { key: 'barrio',    label: 'Barrio',         dot: '#5eead4' },
+    { key: 'tipo',      label: 'Tipo de orden',  dot: '#fb923c' },
+    { key: 'dia',       label: 'Día',            dot: '#94a3b8' },
+  ];
+
+  SUB = {
+    'Suspensión': ['Corte en poste', 'Corte en acometida', 'Retiro de medidor'],
+    'Reconexión': ['Reconexión en poste', 'Reconexión en acometida'],
+    'Normalización': ['Cambio de medidor', 'Sellado de caja', 'Ajuste de acometida'],
+    'Inspección': ['Verificación de carga', 'Revisión de sellos'],
+  };
+  ACC = ['Suspensión', 'Reconexión', 'Normalización', 'Inspección'];
+  TIPOS = ['Cartera', 'Pérdidas no técnicas', 'Mantenimiento', 'Nuevo servicio'];
+  DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  TECS = [
+    { name: 'Brigada 04 · J. Mendoza', zone: 'Norte' },
+    { name: 'Brigada 07 · L. Barrios', zone: 'Centro' },
+    { name: 'Brigada 11 · A. Cervantes', zone: 'Sur' },
+    { name: 'Brigada 15 · D. Rodríguez', zone: 'Metropolitana' },
+    { name: 'Brigada 18 · M. Fontalvo', zone: 'Centro' },
+    { name: 'Brigada 22 · R. Guerrero', zone: 'Sur' },
+  ];
+
+  BARRIOS = [
+    { name: 'Salgar',            municipio: 'Puerto Colombia', zona: 'Metropolitana', risk: 'Bajo',  x: 172, y: 242, sp: 30, w: [0.74, 0.14, 0.05, 0.07] },
+    { name: 'Pradomar',          municipio: 'Puerto Colombia', zona: 'Metropolitana', risk: 'Bajo',  x: 148, y: 276, sp: 26, w: [0.78, 0.11, 0.04, 0.07] },
+    { name: 'Villa Country',     municipio: 'Barranquilla',    zona: 'Norte',  risk: 'Bajo',  x: 546, y: 158, sp: 30, w: [0.82, 0.09, 0.03, 0.06] },
+    { name: 'Riomar',            municipio: 'Barranquilla',    zona: 'Norte',  risk: 'Bajo',  x: 584, y: 206, sp: 26, w: [0.80, 0.10, 0.04, 0.06] },
+    { name: 'Alto Prado',        municipio: 'Barranquilla',    zona: 'Norte',  risk: 'Bajo',  x: 516, y: 208, sp: 30, w: [0.79, 0.11, 0.03, 0.07] },
+    { name: 'El Golf',           municipio: 'Barranquilla',    zona: 'Norte',  risk: 'Medio', x: 492, y: 246, sp: 24, w: [0.72, 0.16, 0.05, 0.07] },
+    { name: 'El Prado',          municipio: 'Barranquilla',    zona: 'Centro', risk: 'Medio', x: 504, y: 300, sp: 28, w: [0.70, 0.17, 0.06, 0.07] },
+    { name: 'Centro Histórico',  municipio: 'Barranquilla',    zona: 'Centro', risk: 'Alto',  x: 566, y: 302, sp: 26, w: [0.58, 0.22, 0.12, 0.08] },
+    { name: 'Boston',            municipio: 'Barranquilla',    zona: 'Centro', risk: 'Medio', x: 540, y: 348, sp: 26, w: [0.68, 0.18, 0.07, 0.07] },
+    { name: 'Barrio Abajo',      municipio: 'Barranquilla',    zona: 'Centro', risk: 'Alto',  x: 478, y: 332, sp: 22, w: [0.55, 0.24, 0.13, 0.08] },
+    { name: 'La Luz',            municipio: 'Barranquilla',    zona: 'Sur',    risk: 'Alto',  x: 468, y: 432, sp: 30, w: [0.52, 0.26, 0.14, 0.08] },
+    { name: 'Simón Bolívar',     municipio: 'Barranquilla',    zona: 'Sur',    risk: 'Alto',  x: 526, y: 456, sp: 32, w: [0.50, 0.27, 0.15, 0.08] },
+    { name: 'El Bosque',         municipio: 'Barranquilla',    zona: 'Sur',    risk: 'Medio', x: 578, y: 480, sp: 26, w: [0.64, 0.20, 0.08, 0.08] },
+    { name: 'Rebolo',            municipio: 'Barranquilla',    zona: 'Sur',    risk: 'Alto',  x: 444, y: 492, sp: 24, w: [0.48, 0.28, 0.16, 0.08] },
+    { name: 'Villa Muñoz',       municipio: 'Soledad',         zona: 'Metropolitana', risk: 'Alto',  x: 500, y: 604, sp: 30, w: [0.54, 0.25, 0.13, 0.08] },
+    { name: 'Salamanca',         municipio: 'Soledad',         zona: 'Metropolitana', risk: 'Medio', x: 556, y: 612, sp: 26, w: [0.62, 0.21, 0.09, 0.08] },
+    { name: 'Ferrocarril',       municipio: 'Soledad',         zona: 'Metropolitana', risk: 'Alto',  x: 588, y: 638, sp: 22, w: [0.51, 0.26, 0.15, 0.08] },
+    { name: 'Mundo Feliz',       municipio: 'Galapa',          zona: 'Metropolitana', risk: 'Medio', x: 330, y: 502, sp: 26, w: [0.66, 0.19, 0.08, 0.07] },
+    { name: 'La Esmeralda',      municipio: 'Galapa',          zona: 'Metropolitana', risk: 'Medio', x: 352, y: 540, sp: 22, w: [0.64, 0.20, 0.09, 0.07] },
+    { name: 'Malambo Centro',    municipio: 'Malambo',         zona: 'Metropolitana', risk: 'Alto',  x: 654, y: 664, sp: 24, w: [0.53, 0.25, 0.14, 0.08] },
+    { name: 'La Magdalena',      municipio: 'Malambo',         zona: 'Metropolitana', risk: 'Medio', x: 688, y: 682, sp: 20, w: [0.61, 0.22, 0.09, 0.08] },
+  ];
+
+  ZONAS_POLY = [
+    { key: 'PtoColombia', zona: 'Metropolitana', label: 'Puerto Colombia', lp: [172, 330], poly: [[126,230],[184,204],[228,222],[248,258],[226,294],[164,304],[122,278],[112,252]] },
+    { key: 'Norte',  zona: 'Norte',  label: 'Norte',  lp: [430, 138], poly: [[478,166],[512,132],[562,112],[598,146],[610,196],[600,240],[566,262],[510,258],[476,228],[466,196]] },
+    { key: 'Centro', zona: 'Centro', label: 'Centro', lp: [386, 282], poly: [[462,276],[520,264],[578,270],[612,306],[602,354],[566,384],[508,392],[464,366],[442,320]] },
+    { key: 'Sur',    zona: 'Sur',    label: 'Sur',    lp: [340, 400], poly: [[418,412],[478,392],[552,394],[606,424],[624,478],[598,536],[540,562],[472,566],[430,528],[404,470]] },
+    { key: 'Galapa', zona: 'Metropolitana', label: 'Galapa', lp: [284, 596], poly: [[296,468],[344,452],[382,472],[400,508],[380,552],[330,568],[290,548],[276,506]] },
+    { key: 'Soledad',zona: 'Metropolitana', label: 'Soledad',lp: [452, 700], poly: [[446,578],[504,566],[566,572],[608,600],[618,640],[586,668],[512,676],[456,656],[434,616]] },
+    { key: 'Malambo',zona: 'Metropolitana', label: 'Malambo',lp: [744, 662], poly: [[616,638],[664,632],[706,650],[716,684],[690,706],[634,708],[608,684]] },
+  ];
+
+  sea = [[0,0],[566,0],[548,44],[430,96],[292,152],[150,204],[40,248],[0,262]];
+  river = [[560,44],[628,26],[678,74],[712,168],[736,308],[762,470],[772,620],[756,720],[662,720],[652,596],[632,462],[606,318],[578,172]];
+  islands = [[700,120],[840,150],[900,300],[870,470],[790,470],[760,300],[726,180]];
+  urban = [
+    [[466,116],[566,102],[612,152],[624,244],[606,306],[634,420],[640,566],[624,650],[720,660],[730,708],[430,716],[414,600],[396,472],[418,378],[434,300],[448,196]],
+    [[112,222],[236,196],[258,254],[228,302],[142,312],[100,268]],
+    [[272,458],[356,442],[404,494],[386,558],[318,576],[268,540]],
+  ];
+  roads = [
+    [[558,124],[590,262],[612,420],[634,600],[648,690]],
+    [[470,140],[440,300],[418,450],[430,590],[452,690]],
+    [[168,252],[300,214],[420,178],[496,150]],
+    [[452,470],[368,502],[300,520]],
+    [[476,300],[600,318]],
+    [[470,406],[606,430]],
+    [[500,566],[604,600]],
+  ];
+
+  orders = this.generate();
+
+  seeded(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  generate() {
+    const rnd = this.seeded(778201);
+    const states = ['Efectiva', 'Fallida', 'Perdida', 'Pendiente'];
+    const out = []; let id = 0;
+    for (const b of this.BARRIOS) {
+      const n = 46 + Math.floor(rnd() * 44);
+      for (let i = 0; i < n; i++) {
+        const r = rnd();
+        let acc = 0, estado = 'Efectiva';
+        for (let k = 0; k < 4; k++) { acc += b.w[k]; if (r < acc) { estado = states[k]; break; } }
+        const accion = this.ACC[Math.floor(rnd() * this.ACC.length)];
+        const subs = this.SUB[accion];
+        const pool = this.TECS.filter(t => t.zone === b.zona);
+        const tec = (pool.length ? pool : this.TECS)[Math.floor(rnd() * (pool.length || this.TECS.length))];
+        out.push({
+          id: id++,
+          x: b.x + (rnd() + rnd() + rnd() - 1.5) * b.sp,
+          y: b.y + (rnd() + rnd() + rnd() - 1.5) * b.sp * 0.72,
+          riesgo: b.risk, estado, zona: b.zona, accion,
+          subaccion: subs[Math.floor(rnd() * subs.length)],
+          tecnico: tec.name, municipio: b.municipio, barrio: b.name,
+          tipo: this.TIPOS[Math.floor(rnd() * this.TIPOS.length)],
+          dia: this.DIAS[Math.floor(rnd() * this.DIAS.length)],
+        });
+      }
+    }
+    return out;
+  }
+
+  optionsFor(key) {
+    if (key === 'riesgo') return ['Alto', 'Medio', 'Bajo'];
+    if (key === 'estado') return ['Efectiva', 'Fallida', 'Perdida', 'Pendiente'];
+    if (key === 'zona') return ['Norte', 'Centro', 'Sur', 'Metropolitana'];
+    if (key === 'accion') return this.ACC;
+    if (key === 'subaccion') return this.ACC.flatMap(a => this.SUB[a]);
+    if (key === 'tecnico') return this.TECS.map(t => t.name);
+    if (key === 'municipio') return ['Barranquilla', 'Soledad', 'Malambo', 'Galapa', 'Puerto Colombia'];
+    if (key === 'barrio') return this.BARRIOS.map(b => b.name);
+    if (key === 'tipo') return this.TIPOS;
+    return this.DIAS;
+  }
+
+  sel(key) { return this.state.sel[key] || []; }
+  matches(o, skip) {
+    for (const g of this.GROUPS) {
+      if (g.key === skip) continue;
+      const s = this.sel(g.key);
+      if (s.length && !s.includes(o[g.key])) return false;
+    }
+    return true;
+  }
+  filtered() { return this.orders.filter(o => this.matches(o, null)); }
+
+  toggle(key, val) {
+    this.setState(st => {
+      const cur = st.sel[key] || [];
+      const next = cur.includes(val) ? cur.filter(v => v !== val) : cur.concat([val]);
+      const sel = { ...st.sel };
+      if (next.length) sel[key] = next; else delete sel[key];
+      return { sel };
+    });
+  }
+
+  hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+  rateColor(r) { return r >= 78 ? '#34d399' : r >= 64 ? '#fbbf24' : '#f87171'; }
+  pointInPoly(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  onCopy = async () => {
+    try {
+      const r = await fetch(location.pathname, { cache: 'no-store' });
+      await navigator.clipboard.writeText(await r.text());
+      this.setState({ copied: 'ok' });
+    } catch (e) {
+      this.setState({ copied: 'err' });
+    }
+    clearTimeout(this._ct);
+    this._ct = setTimeout(() => this.setState({ copied: null }), 2400);
+  };
+
+  setCanvas = (node) => {
+    this.canvas = node;
+    if (node && !this._ro) {
+      this._ro = new ResizeObserver(() => this.draw());
+      this._ro.observe(node.parentElement);
+      requestAnimationFrame(() => this.draw());
+    }
+  };
+
+  componentDidMount() {
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.draw());
+    requestAnimationFrame(() => this.draw());
+  }
+  componentDidUpdate() { this.draw(); }
+  componentWillUnmount() { if (this._ro) this._ro.disconnect(); clearTimeout(this._ct); }
+
+  tracePoly(ctx, poly, M) {
+    ctx.beginPath();
+    poly.forEach((p, i) => { const [x, y] = M(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.closePath();
+  }
+
+  draw() {
+    const c = this.canvas; if (!c) return;
+    const parent = c.parentElement; if (!parent) return;
+    const pts = this.filtered();
+    const dpr = window.devicePixelRatio || 1;
+    const W = parent.clientWidth, H = parent.clientHeight;
+    if (W < 4 || H < 4) return;
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const LW = 1000, LH = 720;
+    const s = Math.min(W / LW, H / LH) * 0.95;
+    const ox = (W - LW * s) / 2, oy = (H - LH * s) / 2;
+    const M = (x, y) => [ox + x * s, oy + y * s];
+
+    const [bx, by] = M(0, 0);
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(bx, by, LW * s, LH * s, 18 * s); ctx.clip();
+    ctx.fillStyle = '#0d131d';
+    ctx.fillRect(bx, by, LW * s, LH * s);
+
+    this.tracePoly(ctx, this.sea, M);
+    ctx.fillStyle = '#101d2b'; ctx.fill();
+
+    this.tracePoly(ctx, this.islands, M);
+    ctx.fillStyle = '#111a1c'; ctx.fill();
+
+    this.tracePoly(ctx, this.river, M);
+    ctx.fillStyle = '#101d2b'; ctx.fill();
+    ctx.strokeStyle = 'rgba(56,189,248,0.2)'; ctx.lineWidth = 1.4; ctx.stroke();
+
+    for (const u of this.urban) {
+      this.tracePoly(ctx, u, M);
+      ctx.fillStyle = '#141c28'; ctx.fill();
+      ctx.strokeStyle = 'rgba(148,163,184,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(148,163,184,0.07)';
+    ctx.lineWidth = Math.max(1.4, 3 * s); ctx.lineCap = 'round';
+    for (const rd of this.roads) {
+      ctx.beginPath();
+      rd.forEach((p, i) => { const [x, y] = M(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke();
+    }
+
+    // capa de calor
+    ctx.globalCompositeOperation = 'lighter';
+    const R = 26;
+    for (const o of pts) {
+      const [sx, sy] = M(o.x, o.y);
+      const col = this.ST[o.estado];
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R);
+      g.addColorStop(0, this.hexA(col, 0.2));
+      g.addColorStop(0.5, this.hexA(col, 0.08));
+      g.addColorStop(1, this.hexA(col, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(sx, sy, R, 0, 7); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const o of pts) {
+      const [sx, sy] = M(o.x, o.y);
+      ctx.fillStyle = this.hexA(this.ST[o.estado], 0.55);
+      ctx.beginPath(); ctx.arc(sx, sy, 1.3, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+
+    // contornos de zona
+    ctx.lineJoin = 'round';
+    const selZ = this.sel('zona');
+    for (const z of this.ZONAS_POLY) {
+      const dim = selZ.length && !selZ.includes(z.zona);
+      const inZ = pts.filter(o => this.pointInPoly(o.x, o.y, z.poly));
+      const eff = inZ.filter(o => o.estado === 'Efectiva').length;
+      const rate = inZ.length ? Math.round(eff / inZ.length * 100) : 0;
+      const col = inZ.length ? this.rateColor(rate) : '#475569';
+      this.tracePoly(ctx, z.poly, M);
+      ctx.setLineDash([9, 7]); ctx.lineWidth = 2;
+      ctx.strokeStyle = this.hexA(col, dim ? 0.2 : 0.62);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (const z of this.ZONAS_POLY) {
+      const dim = selZ.length && !selZ.includes(z.zona);
+      const inZ = pts.filter(o => this.pointInPoly(o.x, o.y, z.poly));
+      const eff = inZ.filter(o => o.estado === 'Efectiva').length;
+      const rate = inZ.length ? Math.round(eff / inZ.length * 100) : 0;
+      const col = inZ.length ? this.rateColor(rate) : '#475569';
+      this.chip(ctx, M(z.lp[0], z.lp[1]), z.label, inZ.length ? rate + '%' : '—', col, dim ? 0.35 : 1, s);
+    }
+  }
+
+  chip(ctx, pos, name, val, color, alpha, s) {
+    const fs = Math.max(11, 13.5 * s);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `600 ${fs}px 'Space Grotesk',sans-serif`;
+    const nw = ctx.measureText(name).width;
+    ctx.font = `700 ${fs}px 'Space Grotesk',sans-serif`;
+    const vw = ctx.measureText(val).width;
+    const w = 19 + nw + 9 + vw + 13, h = fs + 13;
+    const x = pos[0] - w / 2, y = pos[1] - h / 2;
+    ctx.fillStyle = 'rgba(9,12,18,0.86)';
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.fill();
+    ctx.strokeStyle = this.hexA(color, 0.5); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(x + 12, y + h / 2, 3.2, 0, 7); ctx.fill();
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#e6ebf2';
+    ctx.font = `600 ${fs}px 'Space Grotesk',sans-serif`;
+    ctx.fillText(name, x + 19, y + h / 2 + 0.5);
+    ctx.fillStyle = color; ctx.font = `700 ${fs}px 'Space Grotesk',sans-serif`;
+    ctx.fillText(val, x + 19 + nw + 9, y + h / 2 + 0.5);
+    ctx.restore();
+  }
+
+  buildGroups() {
+    const S = this.state;
+    return this.GROUPS.map(g => {
+      const chosen = this.sel(g.key);
+      const base = this.orders.filter(o => this.matches(o, g.key));
+      const counts = {};
+      base.forEach(o => { counts[o[g.key]] = (counts[o[g.key]] || 0) + 1; });
+      const options = this.optionsFor(g.key).map(v => {
+        const active = chosen.includes(v);
+        const count = counts[v] || 0;
+        const accent = g.key === 'estado' ? this.ST[v] : g.key === 'riesgo' ? this.RISK[v] : g.dot;
+        return {
+          label: v, count, active,
+          onClick: () => this.toggle(g.key, v),
+          pillStyle: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:9px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;white-space:nowrap;flex-shrink:0;border:1px solid ${active ? this.hexA(accent, 0.7) : '#1e2836'};background:${active ? this.hexA(accent, 0.15) : '#0e141d'};color:${active ? '#e6ebf2' : '#93a1b3'};`,
+          countStyle: `font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;color:${active ? accent : '#5f7085'};`,
+        };
+      });
+      const isOpen = S.tab === g.key;
+      return {
+        key: g.key, label: g.label, options,
+        hasActive: chosen.length > 0, activeCount: chosen.length,
+        onToggleOpen: () => this.setState({ tab: g.key }),
+        tabStyle: `display:flex;align-items:center;gap:7px;padding:15px 15px;border:none;background:transparent;border-bottom:2px solid ${isOpen ? '#22d3ee' : 'transparent'};color:${isOpen ? '#e6ebf2' : chosen.length ? '#9fb0c3' : '#63748a'};font-family:inherit;font-size:13px;font-weight:${isOpen ? 600 : 500};cursor:pointer;white-space:nowrap;flex-shrink:0;`,
+      };
+    });
+  }
+
+  buildDetail(pts) {
+    const T = pts.length || 1;
+    const sect = (title, key, colorFn, limit) => {
+      const c = {};
+      pts.forEach(o => { c[o[key]] = (c[o[key]] || 0) + 1; });
+      const rows = Object.keys(c).sort((a, b) => c[b] - c[a]).slice(0, limit).map(v => {
+        const col = colorFn(v);
+        return { label: v, count: c[v], pct: Math.round(c[v] / T * 100), color: col, barColor: this.hexA(col, 0.85) };
+      });
+      return { title, rows };
+    };
+    return [
+      sect('ESTADO', 'estado', v => this.ST[v] || '#38bdf8', 4),
+      sect('ZONA DE RIESGO', 'riesgo', v => this.RISK[v] || '#38bdf8', 3),
+      sect('ACCIÓN', 'accion', () => '#38bdf8', 4),
+      sect('SUBACCIÓN', 'subaccion', () => '#818cf8', 5),
+      sect('TIPO DE ORDEN', 'tipo', () => '#fb923c', 4),
+      sect('DÍA', 'dia', () => '#94a3b8', 6),
+    ];
+  }
+
+  renderVals() {
+    const pts = this.filtered();
+    const cnt = k => pts.filter(o => o.estado === k).length;
+    const eff = cnt('Efectiva'), fal = cnt('Fallida'), per = cnt('Perdida');
+    const pc = n => (pts.length ? Math.round(n / pts.length * 100) : 0);
+    const activeTotal = Object.values(this.state.sel).reduce((a, v) => a + v.length, 0);
+
+    const groups = this.buildGroups();
+    const tabG = groups.find(g => g.key === this.state.tab) || groups[0];
+    const open = this.state.detailOpen;
+
+    const zoneCards = ['Norte', 'Centro', 'Sur', 'Metropolitana'].map(z => {
+      const inZ = pts.filter(o => o.zona === z);
+      const e = inZ.filter(o => o.estado === 'Efectiva').length;
+      const r = inZ.length ? Math.round(e / inZ.length * 100) : 0;
+      const score = { Alto: 0, Medio: 0, Bajo: 0 };
+      inZ.forEach(o => { score[o.riesgo]++; });
+      const dom = Object.keys(score).sort((a, b) => score[b] - score[a])[0];
+      const col = this.rateColor(r);
+      return { label: z, rate: r, total: inZ.length, color: col, border: this.hexA(col, 0.3), risk: inZ.length ? dom.toLowerCase() : '—' };
+    });
+
+    const techCards = this.TECS.map(t => {
+      const mine = pts.filter(o => o.tecnico === t.name);
+      const e = mine.filter(o => o.estado === 'Efectiva').length;
+      const r = mine.length ? Math.round(e / mine.length * 100) : 0;
+      const col = mine.length ? this.rateColor(r) : '#475569';
+      const active = this.sel('tecnico').includes(t.name);
+      const parts = t.name.split('·')[1].trim().replace(/\./g, '').split(' ');
+      const segments = ['Efectiva', 'Fallida', 'Perdida', 'Pendiente'].map(k => ({
+        color: this.ST[k], pct: mine.length ? mine.filter(o => o.estado === k).length / mine.length * 100 : 0,
+      })).filter(x => x.pct > 0);
+      return {
+        name: t.name, zone: t.zone, count: mine.length, color: col, segments,
+        initials: (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase(),
+        avatarBg: this.hexA(col, 0.16), avatarFg: col,
+        onClick: () => this.toggle('tecnico', t.name),
+        cardStyle: `display:block;width:100%;text-align:left;padding:11px 12px;border-radius:12px;cursor:pointer;font-family:inherit;color:#e6ebf2;transition:all .13s;border:1px solid ${active ? this.hexA(col, 0.5) : '#182230'};background:${active ? this.hexA(col, 0.07) : '#0e141d'};`,
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    const hotBarrios = this.BARRIOS.map(b => {
+      const mine = pts.filter(o => o.barrio === b.name);
+      const bad = mine.filter(o => o.estado === 'Fallida' || o.estado === 'Perdida').length;
+      const p = mine.length ? Math.round(bad / mine.length * 100) : 0;
+      return { name: b.name, municipio: b.municipio, risk: b.risk.toLowerCase(), failPct: p, total: mine.length, color: p >= 34 ? '#f87171' : p >= 22 ? '#fbbf24' : '#34d399' };
+    }).filter(b => b.total > 0).sort((a, b) => b.failPct - a.failPct).slice(0, 6);
+
+    return {
+      canvasRef: this.setCanvas,
+      groups, tabLabel: tabG.label.toUpperCase(), tabOptions: tabG.options,
+      stateOptions: groups.find(g => g.key === 'estado').options,
+      riskOptions: groups.find(g => g.key === 'riesgo').options,
+      visible: pts.length, totalAll: this.orders.length, activeTotal,
+      onReset: () => this.setState({ sel: {} }),
+      onCopy: this.onCopy,
+      copyLabel: this.state.copied === 'ok' ? '¡Código copiado!' : this.state.copied === 'err' ? 'No se pudo copiar' : 'Copiar código',
+      copyStyle: `display:flex;align-items:center;gap:9px;padding:10px 16px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;transition:all .15s;border:1px solid ${this.state.copied === 'ok' ? '#34d399' : this.state.copied === 'err' ? '#f87171' : '#38bdf8'};background:${this.state.copied === 'ok' ? 'rgba(52,211,153,0.14)' : this.state.copied === 'err' ? 'rgba(248,113,113,0.14)' : 'rgba(56,189,248,0.14)'};color:${this.state.copied === 'ok' ? '#34d399' : this.state.copied === 'err' ? '#f87171' : '#7dd3fc'};`,
+      kpis: [
+        { label: 'TOTAL ÓRDENES', value: pts.length, sub: 'en vista', color: '#e6ebf2' },
+        { label: 'EFECTIVAS', value: pc(eff) + '%', sub: eff + ' órdenes', color: this.ST.Efectiva },
+        { label: 'FALLIDAS', value: pc(fal) + '%', sub: fal + ' órdenes', color: this.ST.Fallida },
+        { label: 'PERDIDAS', value: pc(per) + '%', sub: per + ' órdenes', color: this.ST.Perdida },
+      ],
+      zoneCards, techCards, hotBarrios,
+      detailSections: this.buildDetail(pts),
+      det: {
+        open,
+        onToggle: () => this.setState({ detailOpen: !open }),
+        label: open ? 'Ocultar detalle' : 'Ver detalle',
+        btnStyle: `display:flex;align-items:center;gap:8px;width:100%;padding:10px 13px;border:none;border-radius:${open ? '11px 11px 0 0' : '11px'};cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;background:${open ? '#12212e' : 'rgba(13,17,25,0.86)'};color:${open ? '#7dd3fc' : '#c8d3e0'};`,
+        chevStyle: `display:flex;margin-left:auto;transition:transform .16s;transform:rotate(${open ? 180 : 0}deg);`,
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
