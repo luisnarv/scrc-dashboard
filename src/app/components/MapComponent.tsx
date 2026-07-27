@@ -152,7 +152,7 @@ const popupNic = (e: any) => {
 
   const ContinuousHeatLayer = createLayerComponent<L.Layer, { points: any[]; children?: React.ReactNode }>(
     (props, ctx) => {
-      const layer = new CanvasHeatLayer(props.points, {});
+      const layer = new (CanvasHeatLayer as any)(props.points, {});
       return { instance: layer, context: ctx };
     },
     (layer, props, prev) => {
