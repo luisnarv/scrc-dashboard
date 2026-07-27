@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { query } from '../../../lib/db';
 
+export const revalidate = 3600; // Caché de 1 hora para evitar consultas pesadas repetidas
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mes = searchParams.get('mes');
@@ -12,8 +14,10 @@ export async function GET(request: Request) {
   const values: any[] = [];
 
   if (mes && mes !== 'ALL') {
-    values.push(mes + '%');
-    filterClauses.push(`fecha_cierre::text LIKE $${values.length}`);
+    values.push(`${mes}-01`);
+    filterClauses.push(`fecha_cierre >= $${values.length}::date`);
+    values.push(`${mes}-01`);
+    filterClauses.push(`fecha_cierre < $${values.length}::date + interval '1 month'`);
   }
   if (zona && zona !== 'ALL') {
     values.push(`%${zona}%`);
@@ -41,20 +45,15 @@ export async function GET(request: Request) {
     const statsRes = await query(statsQuery, values);
 
     // Puntos GPS: una fila por ORDEN del mes (para que los filtros del modal
-    // sigan operando), pero con la coordenada del NIC rellenada por COALESCE
-    // -> maxima cobertura. El mapa colapsa a un punto por NIC en el cliente.
-    // coord_nic toma la ubicacion conocida del NIC en CUALQUIER fecha.
+    // sigan operando). El ETL ya rellena latitud/longitud por NIC en la propia
+    // orden (~97% cobertura), asi que se lee directo -sin el CTE coord_nic que
+    // escaneaba toda la tabla (~1 s)-. Las pocas ordenes sin coord llegan con
+    // la/lo nulos y el cliente las ubica en el centroide de su barrio.
     const ptsQuery = `
-      WITH coord_nic AS (
-        SELECT DISTINCT ON (nic) nic, latitud, longitud
-        FROM dbanalitica.ordenes
-        WHERE nic IS NOT NULL AND latitud IS NOT NULL AND longitud IS NOT NULL
-        ORDER BY nic, fecha_cierre DESC NULLS LAST
-      )
       SELECT
         o.nic as "nic",
-        COALESCE(o.latitud, c.latitud) as "la",
-        COALESCE(o.longitud, c.longitud) as "lo",
+        o.latitud as "la",
+        o.longitud as "lo",
         o.accion as "ac",
         o.subaccion as "su",
         o.tecnico as "te",
@@ -63,10 +62,8 @@ export async function GET(request: Request) {
         o.zona as "zo",
         o.estado as "es",
         o.tipo_os as "to",
-        o.fecha_cierre::text as "fe",
-        o.observacion as "ob"
+        o.fecha_cierre::text as "fe"
       FROM dbanalitica.ordenes o
-      LEFT JOIN coord_nic c ON c.nic = o.nic
       ${whereFilters}
     `;
     const ptsRes = await query(ptsQuery, values);

@@ -1,12 +1,12 @@
 'use client';
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON, LayersControl, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, LayersControl, useMapEvents, useMap } from 'react-leaflet';
 import { createLayerComponent } from '@react-leaflet/core';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
-import { claveBarrio, normBarrio } from './utils/barrio';
+import { canonBarrio, normBarrio, normBase } from './utils/barrio';
 
 // Auto-zoom removido para no sacar de foco al usuario.
 
@@ -22,35 +22,10 @@ const colorEfectividad = (e: any) => {
   return '#ef4444';
 };
 
-const popupNic = (e: any) => {
-  let obsHtml = '';
-  if (e.observaciones && e.observaciones.length > 0) {
-    obsHtml = '<div style="margin-top: 8px; max-height: 120px; overflow-y: auto; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 4px;">';
-    for (const ob of e.observaciones) {
-      const colorEstado = ob.estado === 'Efectiva' ? '#16a34a' : (ob.estado === 'Fallida' ? '#ca8a04' : '#dc2626');
-      obsHtml += `<div style="margin-bottom: 8px;">
-        <strong style="color: ${colorEstado};">${ob.fecha} - ${ob.subaccion || ob.estado}:</strong>
-        <div style="margin-top: 4px; padding: 6px 8px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #475569; font-style: italic; line-height: 1.3;">"${ob.texto || 'Sin observación'}"</div>
-      </div>`;
-    }
-    obsHtml += '</div>';
-  }
-
-  return `
-    <div style="font-family: var(--font-sans); font-size: 13px; width: 220px;">
-      <strong style="color: var(--primary);">NIC:</strong> ${e.nic ?? 'Sin NIC'}<br/>
-      <strong>Ubicación:</strong> ${e.mu ?? ''} - ${e.ba ?? ''}<br/>
-      <strong>Órdenes del mes:</strong> ${e.total}<br/>
-      <span style="color:#16a34a;"><strong>Efectivas:</strong> ${e.efectivas}</span><br/>
-      <span style="color:#ca8a04;"><strong>Fallidas:</strong> ${e.fallidas}</span><br/>
-      <span style="color:#dc2626;"><strong>Perdidas:</strong> ${e.perdidas}</span>
-      ${obsHtml}
-    </div>`;
-};
-
-  // Detecta clic en el fondo del mapa (fuera de un barrio) para restablecer la
-  // seleccion. Si se hace clic cerca de un NIC, abre su popup.
-  function MapInteractionHandler({ allNicPoints, onReset }: { allNicPoints: any[]; onReset?: () => void }) {
+  // Detecta clic en el fondo del mapa (fuera de un barrio). Si el clic cae cerca
+  // de un NIC se notifica a MapModal (onSelectNic) para pintar su detalle en el
+  // panel derecho; si cae en vacio, se restablece la seleccion (onReset).
+  function MapInteractionHandler({ allNicPoints, onReset, onSelectNic }: { allNicPoints: any[]; onReset?: () => void; onSelectNic?: (nic: any) => void }) {
     const map = useMapEvents({
       click: (e) => {
         const clickPt = map.latLngToContainerPoint(e.latlng);
@@ -62,12 +37,9 @@ const popupNic = (e: any) => {
           const d = clickPt.distanceTo(pt);
           if (d < bestD) { bestD = d; best = p; }
         }
-        
+
         if (bestD <= 9 && best) {
-          L.popup({ autoPan: false })
-            .setLatLng([best.la, best.lo])
-            .setContent(popupNic(best))
-            .openOn(map);
+          onSelectNic?.(best);
         } else {
           onReset?.();
         }
@@ -79,6 +51,8 @@ const popupNic = (e: any) => {
   const CanvasHeatLayer = L.Layer.extend({
     initialize: function(points: any[], options: any) {
       this.points = points;
+      this.drawGlow = options.drawGlow !== false;
+      this.drawDots = options.drawDots !== false;
       L.setOptions(this, options);
     },
     onAdd: function(map: L.Map) {
@@ -112,47 +86,51 @@ const popupNic = (e: any) => {
       if (!ctx) return;
       ctx.clearRect(0, 0, size.x, size.y);
       
-      const R = 26;
-      ctx.globalCompositeOperation = 'lighter';
-      for (const p of this.points) {
-        if (p.la == null || p.lo == null) continue;
-        if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
-        
-        const pt = map.latLngToContainerPoint([p.la, p.lo]);
-        const col = colorEfectividad(p);
-        const hexA = (hex: string, alpha: number) => {
-          let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-          return `rgba(${r},${g},${b},${alpha})`;
-        };
-        
-        const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, R);
-        grad.addColorStop(0, hexA(col, 0.2));
-        grad.addColorStop(0.5, hexA(col, 0.08));
-        grad.addColorStop(1, hexA(col, 0));
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, R, 0, 2 * Math.PI); ctx.fill();
+      if (this.drawGlow) {
+        const R = 26;
+        ctx.globalCompositeOperation = 'lighter';
+        for (const p of this.points) {
+          if (p.la == null || p.lo == null) continue;
+          if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+          
+          const pt = map.latLngToContainerPoint([p.la, p.lo]);
+          const col = colorEfectividad(p);
+          const hexA = (hex: string, alpha: number) => {
+            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+          };
+          
+          const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, R);
+          grad.addColorStop(0, hexA(col, 0.2));
+          grad.addColorStop(0.5, hexA(col, 0.08));
+          grad.addColorStop(1, hexA(col, 0));
+          ctx.fillStyle = grad;
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, R, 0, 2 * Math.PI); ctx.fill();
+        }
       }
       
-      ctx.globalCompositeOperation = 'source-over';
-      for (const p of this.points) {
-        if (p.la == null || p.lo == null) continue;
-        if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
-        
-        const pt = map.latLngToContainerPoint([p.la, p.lo]);
-        const col = colorEfectividad(p);
-        const hexA = (hex: string, alpha: number) => {
-          let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-          return `rgba(${r},${g},${b},${alpha})`;
-        };
-        ctx.fillStyle = hexA(col, 0.55);
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.3, 0, 2 * Math.PI); ctx.fill();
+      if (this.drawDots) {
+        ctx.globalCompositeOperation = 'source-over';
+        for (const p of this.points) {
+          if (p.la == null || p.lo == null) continue;
+          if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+          
+          const pt = map.latLngToContainerPoint([p.la, p.lo]);
+          const col = colorEfectividad(p);
+          const hexA = (hex: string, alpha: number) => {
+            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+          };
+          ctx.fillStyle = hexA(col, 0.90);
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 4.0, 0, 2 * Math.PI); ctx.fill();
+        }
       }
     }
   });
 
-  const ContinuousHeatLayer = createLayerComponent<L.Layer, { points: any[]; children?: React.ReactNode }>(
+  const ContinuousHeatLayer = createLayerComponent<L.Layer, { points: any[]; drawGlow?: boolean; drawDots?: boolean; children?: React.ReactNode }>(
     (props, ctx) => {
-      const layer = new (CanvasHeatLayer as any)(props.points, {});
+      const layer = new (CanvasHeatLayer as any)(props.points, { drawGlow: props.drawGlow, drawDots: props.drawDots });
       return { instance: layer, context: ctx };
     },
     (layer, props, prev) => {
@@ -162,34 +140,99 @@ const popupNic = (e: any) => {
     }
   );
 
-export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, statsBarrios, selectedBarrio = 'ALL', selectedMuni = 'ALL', onSelectBarrio, onReset }: { points: any[], geoMuni: any, geoBarrios: any, geoZonas?: any, statsBarrios?: any[], selectedBarrio?: string, selectedMuni?: string, onSelectBarrio?: (muni: string, barrio: string) => void, onReset?: () => void }) {
-  const statsMap = React.useMemo(() => {
-    const map = new Map();
-    if (statsBarrios) {
-      for (const s of statsBarrios) {
-        if (!s.barrio || !s.municipio) continue;
-        const total = Number(s.total) || 0;
-        const efectivas = Number(s.efectivas) || 0;
-        const fallidas = Number(s.fallidas) || 0;
-        const perdidas = Number(s.perdidas) || 0;
-        
-        let color = '#d1d5db'; // Gris por defecto si no hay o hay 0
-        if (total > 0) {
-          const efectividad = efectivas / total;
-          // Escala de color más granular según % de efectividad
-          if (efectividad >= 0.85) color = '#22c55e'; // Verde fuerte (Muy bueno)
-          else if (efectividad >= 0.70) color = '#84cc16'; // Verde lima (Bueno)
-          else if (efectividad >= 0.50) color = '#eab308'; // Amarillo (Regular)
-          else if (efectividad >= 0.30) color = '#f97316'; // Naranja (Riesgo medio)
-          else color = '#ef4444'; // Rojo (Riesgo alto / muy baja efectividad)
-        }
-        
-        const key = claveBarrio(s.municipio, s.barrio);
-        map.set(key, { color, total, efectivas, fallidas, perdidas, motivos: s.motivos, observaciones: s.observaciones });
+function BoundsUpdater({ geoBarrios, geoMuni, geoZonas }: { geoBarrios: any, geoMuni: any, geoZonas: any }) {
+  const map = useMap();
+  React.useEffect(() => {
+    let bounds = L.latLngBounds([]);
+    let hasBounds = false;
+
+    // Solo reencuadramos cuando hay una SELECCION explicita: barrio > municipio >
+    // zona. Sin seleccion NO se hace nada, de modo que al cargar el mapa conserva
+    // su centro/zoom configurado y no se mueve de la ubicacion por defecto.
+    if (geoBarrios?.features?.length === 1) {
+       bounds.extend(L.geoJSON(geoBarrios).getBounds());
+       hasBounds = true;
+    } else if (geoMuni?.features?.length === 1) {
+       bounds.extend(L.geoJSON(geoMuni).getBounds());
+       hasBounds = true;
+    } else if (geoZonas?.features?.length) {
+       bounds.extend(L.geoJSON(geoZonas).getBounds());
+       hasBounds = true;
+    }
+
+    if (hasBounds && bounds.isValid()) {
+      map.flyToBounds(bounds, { padding: [20, 20], maxZoom: 15, duration: 1.5 });
+    }
+  }, [geoBarrios, geoMuni, geoZonas, map]);
+  return null;
+}
+
+export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZonas, statsBarrios, selectedBarrio = 'ALL', selectedMuni = 'ALL', selectedZona = 'ALL', onSelectBarrio, onReset, onSelectNic }: { points: any[], mes?: string, geoMuni: any, geoBarrios: any, geoZonas?: any, statsBarrios?: any[], selectedBarrio?: string, selectedMuni?: string, selectedZona?: string, onSelectBarrio?: (muni: string, barrio: string) => void, onReset?: () => void, onSelectNic?: (nic: any) => void }) {
+  // Nombres de barrio UNICOS en el GeoJSON (aparecen en un solo municipio). Para
+  // ellos se cruza SOLO por nombre, porque el municipio de la BD suele venir mal
+  // (ej. "Santa Helena": la BD la pone en BARANOA pero geograficamente es de
+  // BARRANQUILLA). Los nombres repetidos entre municipios si exigen municipio.
+  const nombresUnicos = React.useMemo(() => {
+    const porNombre = new Map<string, Set<string>>();
+    if (geoBarrios?.features) {
+      for (const f of geoBarrios.features) {
+        const n = normBarrio(f.properties?.nombre);
+        if (!n) continue;
+        let set = porNombre.get(n);
+        if (!set) { set = new Set(); porNombre.set(n, set); }
+        set.add(normBase(f.properties?.municipio));
       }
     }
+    const unicos = new Set<string>();
+    porNombre.forEach((munis, n) => { if (munis.size === 1) unicos.add(n); });
+    return unicos;
+  }, [geoBarrios]);
+
+  // Clave de cruce: solo-nombre si es unico en el GeoJSON, sino municipio|nombre.
+  //  keyGeo: lado GeoJSON (nombre canonico, SIN homologacion).
+  //  keyDB : lado BD (aplica HOMOLOGACION_BARRIO al texto de LOCALIDAD/BARRIO).
+  // Cuando un barrio de la BD homologa al nombre del poligono, ambos producen la
+  // misma clave y cruzan.
+  const keyGeo = React.useCallback((municipio?: string, nombre?: string) => {
+    const n = normBarrio(nombre);
+    return nombresUnicos.has(n) ? n : `${normBase(municipio)}|${n}`;
+  }, [nombresUnicos]);
+  const keyDB = React.useCallback((municipio?: string, barrio?: string) => {
+    const c = canonBarrio(barrio);
+    return nombresUnicos.has(c) ? c : `${normBase(municipio)}|${c}`;
+  }, [nombresUnicos]);
+
+  const colorEfectiv = (efectivas: number, total: number) => {
+    if (total <= 0) return '#d1d5db';
+    const ef = efectivas / total;
+    if (ef >= 0.85) return '#22c55e';
+    if (ef >= 0.70) return '#84cc16';
+    if (ef >= 0.50) return '#eab308';
+    if (ef >= 0.30) return '#f97316';
+    return '#ef4444';
+  };
+
+  const statsMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    if (statsBarrios) {
+      for (const s of statsBarrios) {
+        if (!s.barrio) continue;
+        const key = keyDB(s.municipio, s.barrio);
+        let e = map.get(key);
+        if (!e) { e = { total: 0, efectivas: 0, fallidas: 0, perdidas: 0, motivos: {}, bas: new Set<string>() }; map.set(key, e); }
+        e.total += Number(s.total) || 0;
+        e.efectivas += Number(s.efectivas) || 0;
+        e.fallidas += Number(s.fallidas) || 0;
+        e.perdidas += Number(s.perdidas) || 0;
+        if (s.motivos) for (const [m, c] of Object.entries(s.motivos)) e.motivos[m] = (e.motivos[m] || 0) + (Number(c) || 0);
+        // Guardamos los nombres de barrio de la BD que caen en este poligono
+        // para poder pedir SUS observaciones on-demand al abrir el popup.
+        if (s.barrio) e.bas.add(String(s.barrio));
+      }
+      map.forEach((e) => { e.color = colorEfectiv(e.efectivas, e.total); });
+    }
     return map;
-  }, [statsBarrios]);
+  }, [statsBarrios, keyDB]);
   const centroidesBarrio = React.useMemo(() => {
     const centroids = new Map<string, [number, number]>();
     if (!geoBarrios?.features) return centroids;
@@ -216,11 +259,11 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
           if (lon < minLon) minLon = lon;
           if (lon > maxLon) maxLon = lon;
         }
-        centroids.set(claveBarrio(feat.properties?.municipio, feat.properties?.nombre), [(minLat + maxLat) / 2, (minLon + maxLon) / 2]);
+        centroids.set(keyGeo(feat.properties?.municipio, feat.properties?.nombre), [(minLat + maxLat) / 2, (minLon + maxLon) / 2]);
       }
     }
     return centroids;
-  }, [geoBarrios]);
+  }, [geoBarrios, keyGeo]);
 
   // Un punto por NIC: colapsa las ordenes (ya filtradas) del mismo NIC en un marcador
   const { nicPoints, nicPointsNoGps } = React.useMemo(() => {
@@ -234,7 +277,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
       
       if (lat == null || lon == null) {
         if (!p.ba) continue;
-        const center = centroidesBarrio.get(claveBarrio(p.mu, p.ba));
+        const center = centroidesBarrio.get(keyDB(p.mu, p.ba));
         if (!center) continue;
         
         lat = center[0];
@@ -246,27 +289,23 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
       const targetMap = isNoGps ? mNoGps : m;
       let e = targetMap.get(key);
       if (!e) {
-        e = { nic: p.nic, la: lat, lo: lon, mu: p.mu, ba: p.ba, total: 0, efectivas: 0, fallidas: 0, perdidas: 0, observaciones: [], isNoGps };
+        e = { nic: p.nic, la: lat, lo: lon, mu: p.mu, ba: p.ba, total: 0, efectivas: 0, fallidas: 0, perdidas: 0, isNoGps };
         targetMap.set(key, e);
       }
       e.total++;
       if (p.es === 'Efectiva') e.efectivas++;
       else if (p.es === 'Fallida') e.fallidas++;
       else if (p.es === 'Perdida') e.perdidas++;
-
-      if (p.es !== 'Efectiva' || p.ob) {
-        e.observaciones.push({ fecha: p.fe, estado: p.es, subaccion: p.su, texto: p.ob });
-      }
+      // Las observaciones del NIC se cargan on-demand al abrir su popup.
     }
     return { nicPoints: Array.from(m.values()), nicPointsNoGps: Array.from(mNoGps.values()) };
-  }, [points, centroidesBarrio]);
+  }, [points, centroidesBarrio, keyDB]);
 
-  // Los poligonos de frontera van en SVG (crisp, predecible) aunque el mapa use
-  // preferCanvas para los 19.5k puntos. En canvas, MultiPolygons grandes como
-  // las zonas (5-6k vertices) se dibujaban mal.
-  const svgRenderer = React.useMemo(() => L.svg({ padding: 0.5 }), []);
-
-  const styleMuni = { color: '#9ca3af', weight: 2, fillOpacity: 0.0, dashArray: '4, 4', renderer: svgRenderer };
+  // Los limites (muni/barrio/zona) van en SVG por defecto (sin preferCanvas en el
+  // MapContainer). Los puntos usan su propia capa canvas (ContinuousHeatLayer), asi
+  // que NO se comparte un renderer: un L.svg() compartido crasheaba en StrictMode
+  // (_initContainer / getPane().appendChild) al re-agregarse en el remonte.
+  const styleMuni = { color: '#9ca3af', weight: 2, fillOpacity: 0.0, dashArray: '4, 4' };
 
   // Limites de zona: color fijo por zona (no el del GeoJSON), sin relleno para
   // no tapar el calor de barrios.
@@ -279,8 +318,7 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
     color: COLOR_ZONA[normBarrio(feature?.properties?.zona)] || '#6366f1',
     weight: 3,
     opacity: 0.9,
-    fillOpacity: 0.0,
-    renderer: svgRenderer,
+    fillOpacity: 0.2,
   });
 
   const onEachZona = (feature: any, layer: any) => {
@@ -290,15 +328,15 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
   
   const getStyleBarrio = (feature: any) => {
     const bName = normBarrio(feature.properties?.nombre);
-    const key = claveBarrio(feature.properties?.municipio, feature.properties?.nombre);
+    const key = keyGeo(feature.properties?.municipio, feature.properties?.nombre);
     if (bName && statsMap.has(key)) {
       const s = statsMap.get(key);
       if (s.total > 0) {
-        return { color: s.color, weight: 1, fillOpacity: 0.45, fillColor: s.color, renderer: svgRenderer };
+        return { color: s.color, weight: 1, fillOpacity: 0.45, fillColor: s.color };
       }
     }
     // Gris para barrios sin información o con 0 órdenes
-    return { color: '#9ca3af', weight: 1, fillOpacity: 0.3, fillColor: '#d1d5db', renderer: svgRenderer };
+    return { color: '#9ca3af', weight: 1, fillOpacity: 0.3, fillColor: '#d1d5db' };
   };
 
   // NIC (punto) mas cercano al clic, en pixeles de pantalla. Sirve para que un
@@ -317,204 +355,142 @@ export default function MapComponent({ points, geoMuni, geoBarrios, geoZonas, st
   };
 
   const onEachFeature = (feature: any, layer: any) => {
-    const bName = normBarrio(feature.properties?.nombre);
-    const key = claveBarrio(feature.properties?.municipio, feature.properties?.nombre);
-
     // El clic no burbujea al mapa (no cuenta como "clic afuera"/reset).
     layer.options.bubblingMouseEvents = false;
 
-    if (bName && statsMap.has(key)) {
-      const s = statsMap.get(key);
-      if (s.total > 0) {
-        const pctEf = ((s.efectivas / s.total) * 100).toFixed(1);
-        const pctFa = ((s.fallidas / s.total) * 100).toFixed(1);
-        const pctPe = ((s.perdidas / s.total) * 100).toFixed(1);
-
-        // Calcular top 3 motivos
-        const motivos = s.motivos || {};
-        const topMotivos = Object.entries(motivos)
-          .sort((a: any, b: any) => b[1] - a[1])
-          .slice(0, 4);
-        
-        let motivosHtml = topMotivos.length === 0 ? '<div style="font-size: 11px; color: #9ca3af;">No hay fallas ni pérdidas registradas.</div>' : '';
-        topMotivos.forEach(([motivo, count]: any) => {
-          const mPct = ((count / (s.fallidas + s.perdidas)) * 100).toFixed(1);
-          motivosHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px;">
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;" title="${motivo}">${motivo}</span>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="color: #6b7280;">${mPct}%</span>
-                <strong>${count}</strong>
-              </div>
-            </div>
-            <div style="background: #e5e7eb; height: 4px; border-radius: 2px; margin-bottom: 6px; overflow: hidden;">
-              <div style="background: #9ca3af; height: 100%; width: ${mPct}%;"></div>
-            </div>
-          `;
-        });
-
-        layer.bindPopup(`
-          <div style="font-family: var(--font-sans); font-size: 12px; width: 260px; color: #374151;">
-            <div style="background: #1e3a2d; color: white; padding: 10px; border-radius: 6px 6px 0 0;">
-              <strong style="font-size: 15px;">${bName}</strong>
-              <div style="font-size: 10px; opacity: 0.8; margin-top: 2px;">Resumen de Operación</div>
-            </div>
-            
-            <div style="padding: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 6px 6px;">
-              
-              <!-- Cajas principales -->
-              <div style="display: flex; gap: 4px; text-align: center; margin-bottom: 15px;">
-                <div style="flex: 1; background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 2px;">
-                  <div style="font-size: 9px; color: #6b7280; font-weight: bold;">TOTAL</div>
-                  <div style="font-size: 12px; font-weight: bold;">${s.total}</div>
-                </div>
-                <div style="flex: 1; background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 2px;">
-                  <div style="font-size: 9px; color: #16a34a; font-weight: bold;">EFECT.</div>
-                  <div style="font-size: 12px; font-weight: bold; color: #16a34a;">${s.efectivas}</div>
-                </div>
-                <div style="flex: 1; background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 2px;">
-                  <div style="font-size: 9px; color: #ca8a04; font-weight: bold;">FALLAS</div>
-                  <div style="font-size: 12px; font-weight: bold; color: #ca8a04;">${s.fallidas}</div>
-                </div>
-                <div style="flex: 1; background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 2px;">
-                  <div style="font-size: 9px; color: #dc2626; font-weight: bold;">PERD.</div>
-                  <div style="font-size: 12px; font-weight: bold; color: #dc2626;">${s.perdidas}</div>
-                </div>
-              </div>
-
-              <!-- Efectividad Global -->
-              <div style="font-size: 10px; font-weight: bold; color: #1e3a2d; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px;">EFECTIVIDAD GLOBAL</div>
-              
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span>Efectividad bruta</span>
-                <strong>${pctEf}%</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span>Tasa de pérdida</span>
-                <strong style="color: #dc2626;">${pctPe}%</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span>Tasa de fallas</span>
-                <strong style="color: #ca8a04;">${pctFa}%</strong>
-              </div>
-
-              <!-- Motivos de no efectividad -->
-              <div style="font-size: 10px; font-weight: bold; color: #1e3a2d; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px;">MOTIVOS DE NO EFECTIVIDAD</div>
-              ${motivosHtml}
-              
-              <!-- Observaciones -->
-              ${s.observaciones && s.observaciones.length > 0 ? `
-              <div style="font-size: 10px; font-weight: bold; color: #1e3a2d; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-top: 12px; margin-bottom: 8px;">OBSERVACIONES REGISTRADAS</div>
-              <div style="max-height: 120px; overflow-y: auto; font-size: 11px; padding-right: 4px;">
-                ${s.observaciones.map((ob: any) => `
-                  <div style="margin-bottom: 8px; padding: 6px; background: white; border-radius: 6px; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                      <strong style="color: ${ob.estado === 'Fallida' ? '#ca8a04' : '#dc2626'};">${ob.nic ?? 'NIC'}</strong>
-                      <span style="color: #9ca3af; font-size: 9px;">${ob.fecha}</span>
-                    </div>
-                    <div style="padding: 6px 8px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; color: #475569; font-style: italic; line-height: 1.3;">"${ob.texto || ob.subaccion || 'Sin observación'}"</div>
-                  </div>
-                `).join('')}
-              </div>
-              ` : ''}
-            </div>
-          </div>
-        `);
-      } else {
-        layer.bindPopup(`
-          <div style="font-family: var(--font-sans); font-size: 13px; color: #6b7280;">
-            <strong style="color: #374151; font-size: 14px;">${bName}</strong><br/>
-            No hay órdenes registradas o sin coordenadas.
-          </div>
-        `);
-      }
-    } else if (bName) {
-      layer.bindPopup(`
-        <div style="font-family: var(--font-sans); font-size: 13px; color: #6b7280;">
-          <strong style="color: #374151; font-size: 14px;">${bName}</strong><br/>
-          Sin información en la base de datos para los filtros actuales.
-        </div>
-      `);
-    }
-
-    // Se registra DESPUES del bindPopup, asi que su handler corre de ultimo y
-    // "gana": si el clic cayo sobre un NIC, mostramos el popup del NIC (su accion)
-    // en vez de seleccionar el barrio.
+    // El barrio ya NO abre popup (se elimino el "detallado" del
+    // leaflet-popup-pane): su detalle se muestra en el panel derecho al
+    // seleccionarlo. El clic solo selecciona el barrio, o el NIC si el clic
+    // cae sobre uno.
     layer.on('click', (e: any) => {
       const map = layer._map as L.Map | undefined;
       const nic = map ? puntoNicCercano(map, e.latlng) : null;
       if (nic) {
-        L.popup().setLatLng([nic.la, nic.lo]).setContent(popupNic(nic)).openOn(map!);
+        // Prioridad NIC: su detalle se muestra en el panel derecho, no en un popup.
+        onSelectNic?.(nic);
         return;
       }
-      onSelectBarrio?.(feature.properties?.municipio || '', feature.properties?.nombre || '');
+      // Si YA hay un barrio seleccionado, cualquier clic de barrio lo deselecciona
+      // (sea el mismo -"2 veces dentro"- u otro -"afuera de el"-) y vuelve a
+      // mostrar todos. Solo se selecciona cuando no hay ninguno activo.
+      if (selectedBarrio !== 'ALL') {
+        onReset?.();
+      } else {
+        onSelectBarrio?.(feature.properties?.municipio || '', feature.properties?.nombre || '');
+      }
     });
   };
 
-    const allPts = [...nicPoints, ...nicPointsNoGps];
-    return (
-      <MapContainer preferCanvas center={[10.96854, -74.78132]} zoom={12} style={{ height: '100%', width: '100%' }}>
-        <MapInteractionHandler allNicPoints={allPts} onReset={onReset} />
+  const filteredGeoMuni = React.useMemo(() => {
+    if (!geoMuni || selectedMuni === 'ALL') return geoMuni;
+    return { ...geoMuni, features: geoMuni.features.filter((f: any) => normBarrio(f.properties?.nombre) === normBarrio(selectedMuni) || normBarrio(f.properties?.MPIO_CNMBR) === normBarrio(selectedMuni)) };
+  }, [geoMuni, selectedMuni]);
+
+  const filteredGeoZonas = React.useMemo(() => {
+    if (!geoZonas || selectedZona === 'ALL') return geoZonas;
+    return { ...geoZonas, features: geoZonas.features.filter((f: any) => {
+      const zName = normBarrio(f.properties?.zona);
+      const selName = normBarrio(selectedZona);
+      return zName && selName.includes(zName);
+    }) };
+  }, [geoZonas, selectedZona]);
+
+  const filteredGeoBarrios = React.useMemo(() => {
+    if (!geoBarrios) return geoBarrios;
+    let features = geoBarrios.features;
+    if (selectedMuni !== 'ALL') {
+      features = features.filter((f: any) => normBarrio(f.properties?.municipio) === normBarrio(selectedMuni));
+    }
+    if (selectedBarrio !== 'ALL') {
+      features = features.filter((f: any) => normBarrio(f.properties?.nombre) === normBarrio(selectedBarrio));
+    }
+    return { ...geoBarrios, features };
+  }, [geoBarrios, selectedMuni, selectedBarrio]);
+
+  const allPts = [...nicPoints, ...nicPointsNoGps];
+
+  return (
+    <div style={{ height: '100%', width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <MapContainer
+        center={[10.75, -74.9]}
+        zoom={10}
+        style={{ height: '100%', width: '100%', background: '#a5c9e2' }}
+        maxZoom={18}
+        minZoom={8}
+      >
+        <BoundsUpdater geoBarrios={selectedBarrio !== 'ALL' ? filteredGeoBarrios : null} geoMuni={selectedMuni !== 'ALL' ? filteredGeoMuni : null} geoZonas={selectedZona !== 'ALL' ? filteredGeoZonas : null} />
+        <MapInteractionHandler allNicPoints={allPts} onReset={onReset} onSelectNic={onSelectNic} />
+        
         <LayersControl position="topright">
-        <LayersControl.BaseLayer checked name="Mapa Claro">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          />
-        </LayersControl.BaseLayer>
-
-        <LayersControl.BaseLayer name="Mapa Satélite">
-          <TileLayer
-            attribution='&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGO, and the GIS User Community'
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          />
-        </LayersControl.BaseLayer>
-
-        {geoMuni && (
-          <LayersControl.Overlay checked name="Límites de Municipios">
-            <GeoJSON 
-              key={`muni-${selectedMuni}`}
-              data={geoMuni} 
-              style={styleMuni} 
-              filter={(feat) => selectedMuni === 'ALL' || normBarrio(feat.properties?.MPIO_CNMBR) === normBarrio(selectedMuni)}
+          <LayersControl.BaseLayer checked name="Mapa Claro (CartoDB)">
+            <TileLayer
+              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             />
-          </LayersControl.Overlay>
-        )}
-
-        {geoBarrios && (
-          <LayersControl.Overlay checked name="Estado de Barrios (Calor)">
-            <GeoJSON 
-              key={`barrio-${selectedBarrio}-${selectedMuni}`}
-              data={geoBarrios} 
-              style={getStyleBarrio} 
-              onEachFeature={onEachFeature} 
-              filter={(feat) => {
-                const matchB = selectedBarrio === 'ALL' || normBarrio(feat.properties?.nombre) === normBarrio(selectedBarrio);
-                const matchM = selectedMuni === 'ALL' || normBarrio(feat.properties?.municipio) === normBarrio(selectedMuni);
-                return matchB && matchM;
-              }}
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Mapa Oscuro">
+            <TileLayer
+              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
             />
-          </LayersControl.Overlay>
-        )}
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Satélite">
+            <TileLayer
+              attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            />
+          </LayersControl.BaseLayer>
 
-        {geoZonas && (
-          <LayersControl.Overlay name="Límites de Zonas">
-            <GeoJSON data={geoZonas} style={getStyleZona} onEachFeature={onEachZona} />
-          </LayersControl.Overlay>
-        )}
+          {filteredGeoZonas && (
+            <LayersControl.Overlay checked name="Límites de Zona">
+                <GeoJSON 
+                  key={`zona-${selectedZona}`}
+                  data={filteredGeoZonas} 
+                  style={getStyleZona}
+                  onEachFeature={onEachZona}
+                />
+            </LayersControl.Overlay>
+          )}
 
-        {/* Capa imperativa de Canvas Custom: soporta el renderizado "Lighter" de heatmaps. */}
-        {nicPoints.length > 0 && (
-          <LayersControl.Overlay checked name="NIC con orden (Puntos GPS)">
-            <ContinuousHeatLayer points={nicPoints} />
-          </LayersControl.Overlay>
-        )}
-        {nicPointsNoGps.length > 0 && (
-          <LayersControl.Overlay checked name="NIC sin GPS (Ubicados por Barrio)">
-            <ContinuousHeatLayer points={nicPointsNoGps} />
-          </LayersControl.Overlay>
-        )}
-      </LayersControl>
-    </MapContainer>
+          {filteredGeoMuni && (
+            <LayersControl.Overlay name="Municipios">
+              <GeoJSON key={`muni-${selectedMuni}`} data={filteredGeoMuni} style={styleMuni} />
+            </LayersControl.Overlay>
+          )}
+
+          {filteredGeoBarrios && (
+            <LayersControl.Overlay checked name="Estado de Barrios (Efectividad)">
+              <GeoJSON
+                key={`barrio-${selectedZona}-${selectedMuni}-${selectedBarrio}`}
+                data={filteredGeoBarrios}
+                style={getStyleBarrio}
+                onEachFeature={onEachFeature}
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {nicPoints.length > 0 && (
+            <LayersControl.Overlay checked name="NIC con orden (Puntos GPS)">
+              <ContinuousHeatLayer points={nicPoints} drawGlow={false} />
+            </LayersControl.Overlay>
+          )}
+          {nicPointsNoGps.length > 0 && (
+            <LayersControl.Overlay checked name="NIC sin GPS (Ubicados por Barrio)">
+              <ContinuousHeatLayer points={nicPointsNoGps} drawGlow={false} />
+            </LayersControl.Overlay>
+          )}
+          {nicPoints.length > 0 && (
+            <LayersControl.Overlay name="Resplandor de Calor (Puntos GPS)">
+              <ContinuousHeatLayer points={nicPoints} drawDots={false} />
+            </LayersControl.Overlay>
+          )}
+          {nicPointsNoGps.length > 0 && (
+            <LayersControl.Overlay name="Resplandor de Calor (Sin GPS)">
+              <ContinuousHeatLayer points={nicPointsNoGps} drawDots={false} />
+            </LayersControl.Overlay>
+          )}
+        </LayersControl>
+      </MapContainer>
+    </div>
   );
 }

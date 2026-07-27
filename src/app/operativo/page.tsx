@@ -442,7 +442,7 @@ export default function OperativoPage() {
           hasDetail 
           detailTableData={d.tableDataEvolutivo as any} 
           headerExtra={
-            <button onClick={() => setMapOpen(true)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer', marginLeft: 10 }}>🗺️ Ver en Mapa</button>
+            <button onClick={() => setMapOpen(true)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--brand-primary)', color: 'var(--brand-grad-text)', border: 'none', cursor: 'pointer', marginLeft: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>📍 Ver en Mapa</button>
           }
         />
       </div>

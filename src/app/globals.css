@@ -545,3 +545,9 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
 @media (prefers-reduced-motion: reduce) {
   .load-logo, .load-logo-ring::before, .load-bar span, .spinner { animation: none; }
 }
+
+/* Leaflet Theme Overrides */
+.leaflet-container { color: #333 !important; }
+.leaflet-control-layers, .leaflet-bar a { background-color: #fff !important; color: #333 !important; border-color: #ccc !important; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background-color: #fff !important; color: #333 !important; }
+

@@ -1,4 +1,4 @@
-import { DB_NAME, DB_VERSION, STORE_MONTHS, STORE_META } from './config';
+import { DB_NAME, DB_VERSION, STORE_MONTHS, STORE_META, STORE_MAPA } from './config';
 
 // Envoltorio minimo sobre IndexedDB con Promesas, sin dependencias.
 // Seguro en SSR: si no hay window/indexedDB, todas las operaciones degradan a
@@ -27,6 +27,7 @@ function openDB(): Promise<IDBDatabase | null> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_MONTHS)) db.createObjectStore(STORE_MONTHS, { keyPath: 'mes' });
       if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
+      if (!db.objectStoreNames.contains(STORE_MAPA)) db.createObjectStore(STORE_MAPA, { keyPath: 'key' });
     };
     req.onsuccess = () => done(req.result);
     req.onerror = () => done(null);           // degradar a "sin cache"
