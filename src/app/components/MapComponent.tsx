@@ -484,7 +484,7 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
             {filteredGeoBarrios && (
               <LayersControl.Overlay checked name="Estado de Barrios (Efectividad)">
                 <GeoJSON
-                  key={`barrio-${selectedZona}-${selectedMuni}-${selectedBarrio}-${statsBarrios.length}-${mes}`}
+                  key={`barrio-${selectedZona}-${selectedMuni}-${selectedBarrio}-${statsBarrios?.length || 0}-${mes}`}
                   data={filteredGeoBarrios}
                   style={getStyleBarrio}
                   onEachFeature={onEachFeature}
