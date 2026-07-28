@@ -7,19 +7,20 @@ interface MapaEntry {
   key: string;
   pts: any[];
   stats: any[];
+  filtros: any;
   fetchedAt: number;
 }
 
 const clave = (mes: string, zona: string, proy: string) => `${mes}|${zona}|${proy}`;
 
 export const MapaCache = {
-  async get(mes: string, zona: string, proy: string): Promise<{ pts: any[]; stats: any[]; fresco: boolean } | null> {
+  async get(mes: string, zona: string, proy: string): Promise<{ pts: any[]; stats: any[]; filtros: any; fresco: boolean } | null> {
     const e = await idbGet<MapaEntry>(STORE_MAPA, clave(mes, zona, proy));
     if (!e) return null;
-    return { pts: e.pts, stats: e.stats, fresco: Date.now() - e.fetchedAt < TTL_MAPA_MS };
+    return { pts: e.pts, stats: e.stats, filtros: e.filtros, fresco: Date.now() - e.fetchedAt < TTL_MAPA_MS };
   },
-  async put(mes: string, zona: string, proy: string, pts: any[], stats: any[]): Promise<void> {
-    if (!pts.length) return; // no cachear respuestas vacias
-    await idbPut(STORE_MAPA, { key: clave(mes, zona, proy), pts, stats, fetchedAt: Date.now() });
+  async put(mes: string, zona: string, proy: string, pts: any[], stats: any[], filtros: any): Promise<void> {
+    if (!pts.length && !stats.length) return; // no cachear respuestas vacias
+    await idbPut(STORE_MAPA, { key: clave(mes, zona, proy), pts, stats, filtros, fetchedAt: Date.now() });
   },
 };

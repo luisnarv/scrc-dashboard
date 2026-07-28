@@ -10,6 +10,7 @@ import ChartCard from '../components/ChartCard';
 import { useTheme } from '../components/ThemeProvider';
 import { esFestivo } from '../components/utils/holidays';
 import MapModal from '../components/MapModal';
+import BrigadaEvolutivoModal from './BrigadaEvolutivoModal';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -27,6 +28,32 @@ const card: React.CSSProperties = { background: 'var(--panel)', borderRadius: 14
 const secH = (c: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: c, margin: '24px 2px 12px' });
 const dot = (c: string): React.CSSProperties => ({ width: 8, height: 8, borderRadius: '50%', background: c });
 
+// Color FIJO por tipo de brigada (por nombre, no por ranking), segun la paleta
+// solicitada. La clave se normaliza a MAYUSCULAS. Nombres no listados caen a la
+// paleta de reserva (evPal).
+const COLOR_BRIGADA: Record<string, string> = {
+  // Nombres reales de la data V2 (historico_mo.tipo_brigada), mapeados a la paleta.
+  'SCR PESADA': '#38764C',                // verde oscuro
+  'SCR LIVIANA': '#2E6FB5',               // azul
+  'SCR MULTIFAMILIAR': '#78BE20',         // verde lima
+  'SCR PESADA DISPONIBILIDAD': '#3E9E56', // verde
+  'SCR MINI CANASTA': '#7E56C2',          // morado
+  'SCR MEDIDA ESPECIAL': '#B5BD00',       // oliva
+  'CANASTA': '#D64A2A',                   // rojo-naranja
+  'WEB': '#8F5A24',                       // cafe
+  'SCR DISPONIBLE': '#97999B',            // gris
+  // Nombres homologados (data vieja / si se homologa el nombre en la consulta).
+  'BRIGADA PESADA': '#38764C',        // verde oscuro
+  'GESTOR INTEGRAL MULTI': '#78BE20', // verde lima
+  'BRIGADA LIVIANA': '#2E6FB5',       // azul
+  'PESADA MT-AT': '#B5BD00',          // oliva
+  'BRIGADA CANASTA': '#D64A2A',       // rojo-naranja
+  'BRIGADA MINICANASTA': '#7E56C2',   // morado
+  '(D) BRIGADA PESADA': '#4FA3E0',    // azul claro
+  'BRIGADA PESADA MT-AT': '#8F5A24',  // cafe
+  'PESADA DISPONIBLE': '#3E9E56',     // verde
+};
+
 /* Barra de progreso simple con semáforo */
 function ProgBar({ pct, color }: { pct: number; color: string }) {
   return (
@@ -41,6 +68,8 @@ export default function OperativoPage() {
   const { colors, theme } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [brigadaModalOpen, setBrigadaModalOpen] = useState(false);
+  const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
 
   const TEAL = colors.sip;
   const INDIGO = colors.otc;
@@ -256,31 +285,179 @@ export default function OperativoPage() {
     // Gráfico 4: Evolutivo Mensual por Tipo de Brigada
     const evMeses = Array.from(new Set((raw.evolutivo || []).map(e => e.Mes))).sort();
     const evTipos = Array.from(new Set((raw.evolutivo || []).map(e => e.TipoBrigada))).sort();
-    
-    const chartEvolutivo = {
-      type: 'bar',
-      data: {
-        labels: evMeses,
-        datasets: evTipos.map((t, idx) => ({
-          label: t,
-          data: evMeses.map(m => {
-            const row = (raw.evolutivo || []).find(e => e.Mes === m && e.TipoBrigada === t);
-            return row ? row.Total_Ordenes : 0;
-          }),
-          backgroundColor: chartColors[idx % chartColors.length],
-        }))
-      },
-      options: { ...baseOpt, scales: { x: { stacked: true }, y: { stacked: true } } }
+
+    // Total de ordenes por (mes, tipo) — acceso rapido.
+    const evVal = (m: string, t: string) => {
+      const row = (raw.evolutivo || []).find(e => e.Mes === m && e.TipoBrigada === t);
+      return row ? Number(row.Total_Ordenes) || 0 : 0;
     };
+    // El grafico principal muestra la TENDENCIA de las 5 brigadas de mayor volumen
+    // (lineas); el resto se resume en la nota "las N restantes suman X% del volumen".
+    const evTotales = evTipos
+      .map(t => ({ t, total: evMeses.reduce((s, m) => s + evVal(m, t), 0) }))
+      .sort((a, b) => b.total - a.total);
+
+    // Paleta por rango de brigada, consistente entre el grafico colapsado, el
+    // completo y las tablas: extiende la paleta de series con tonos extra para que
+    // cada tipo tenga color propio cuando se muestran TODAS las brigadas.
+    const evPal = ['#38764C', '#78BE20', '#2f6f8f', '#B5BD00', '#c2410c'];
+    const evColor = (t: string, idx: number) => idx < 5 ? evPal[idx] : '#97999B';
+
+    const evTop = evTotales.slice(0, 5).map((x, idx) => ({ ...x, color: evColor(x.t, idx) }));
+    const evGran = evTotales.reduce((s, x) => s + x.total, 0);
+    const evRestN = Math.max(0, evTotales.length - evTop.length);
+    const evRestPct = evGran ? Math.round(evTotales.slice(5).reduce((s, x) => s + x.total, 0) / evGran * 100) : 0;
+    const evSubtitle = `Las ${evRestN} restantes suman ${evRestPct}% del volumen`;
+    // La vista COMPLETA (modal) muestra TODAS las brigadas, no solo el top-5.
+    const evSubtitleFull = `Tendencia de todas las brigadas (${evTotales.length} tipos) · clic en una brigada para filtrar`;
+
+    const evLineChart = (tipos: { t: string, color?: string }[]) => {
+      const isFiltered = (t: string) => filtroEvolutivo ? t === filtroEvolutivo : true;
+      const opacity = (t: string) => isFiltered(t) ? '' : '33';
+      const width = (t: string) => (filtroEvolutivo && t === filtroEvolutivo) ? 3.2 : 2.4;
+
+      const maxY = Math.max(...tipos.flatMap(x => evMeses.map(m => evVal(m, x.t))));
+      const mag = Math.pow(10, Math.floor(Math.log10(maxY || 1)));
+      const normalized = maxY / mag;
+      let factor = normalized <= 1.5 ? 1.5 : normalized <= 5 ? 5 : 10; 
+      const roundedMax = factor * mag;
+
+      const customTicksPlugin = {
+        id: 'customTicksPlugin',
+        beforeUpdate(chart: any) {
+          const h = chart.chartArea ? chart.chartArea.bottom - chart.chartArea.top : chart.height;
+          chart.options.scales.y.ticks.maxTicksLimit = h < 90 ? 2 : h < 150 ? 3 : 5;
+        }
+      };
+
+      return {
+        type: 'line',
+        data: {
+          labels: evMeses.map(m => {
+             const mDate = new Date(m + '-02');
+             return mDate.toLocaleString('es', { month: 'short' }).toLowerCase();
+          }),
+          datasets: tipos.map((x, idx) => {
+            const color = x.color || evColor(x.t, idx);
+            return {
+              label: x.t,
+              data: evMeses.map(m => evVal(m, x.t)),
+              borderColor: color + opacity(x.t),
+              borderWidth: width(x.t),
+              borderJoinStyle: 'round',
+              borderCapStyle: 'round',
+              pointStyle: 'circle',
+              pointRadius: 3.4,
+              pointBackgroundColor: '#fff',
+              pointBorderWidth: 2,
+              pointBorderColor: color + opacity(x.t),
+              tension: 0,
+              fill: false,
+            };
+          })
+        },
+        plugins: [customTicksPlugin],
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: true },
+          onClick: (event: any, elements: any, chart: any) => {
+            if (elements.length > 0) {
+              const datasetIndex = elements[0].datasetIndex;
+              const label = chart.data.datasets[datasetIndex].label;
+              setFiltroEvolutivo(prev => prev === label ? null : label);
+            }
+          },
+          plugins: { 
+            legend: { display: false },
+            tooltip: { enabled: false }
+          },
+          scales: {
+            y: {
+              min: 0,
+              max: roundedMax,
+              position: 'left',
+              grid: {
+                color: '#EDF0E7',
+                lineWidth: 1,
+                drawBorder: false,
+              },
+              border: { display: false },
+              ticks: {
+                maxTicksLimit: 5,
+                align: 'right',
+                callback: (v: number) => v.toLocaleString('es-CO'),
+              }
+            },
+            x: {
+              grid: { display: false, drawBorder: false },
+              border: { display: false },
+              ticks: {
+                font: { size: 11.5, weight: 600 },
+                color: '#5c5f5a',
+              }
+            }
+          }
+        }
+      };
+    };
+    const chartEvolutivo = evLineChart(evTop);          // colapsado: top-5
+    const chartEvolutivoFull = evLineChart(evTotales);  // modal (vista completa): todas
+
+      // Detalle por brigada (vista "Ambos"): total, participacion (%) y variacion
+      // mes-a-mes (ultimo vs anterior). El grafico muestra el top-5; la tabla, todas.
+      const evLast = evMeses[evMeses.length - 1];
+      const evPrev = evMeses[evMeses.length - 2];
+      const brigadaDetalle = evTotales.map((x, idx) => {
+        const lastV = evLast ? evVal(evLast, x.t) : 0;
+        const prevV = evPrev ? evVal(evPrev, x.t) : 0;
+        return {
+          brigada: x.t,
+          total: x.total,
+          partPct: evGran ? Math.round(x.total / evGran * 100) : 0,
+          varPct: prevV > 0 ? Math.round((lastV - prevV) / prevV * 100) : null,
+          color: evColor(x.t, idx),
+        };
+      });
+      const mesAbbr = (m: string) => { const n = Number(String(m).split('-').pop()) || 0; return ['—', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'][n] || String(m); };
+      const varHeader = (evLast && evPrev) ? `${mesAbbr(evLast)}/${mesAbbr(evPrev)}` : 'VAR';
+
+      // Detallado por tecnico (vista "Tabla"): tecnicos del mes actual. Alerta =
+      // Eficacia por debajo del umbral (65%). PROM./DIA = ejecutadas / dias laborados.
+      const evTecMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
+      const colorPorBrigada = new Map<string, string>(evTotales.map((x, idx) => [x.t, evColor(x.t, idx)]));
+      const tecnicoDetalle = (evTecMes ? (raw.mes || []).filter(e => e.Mes_YM === evTecMes) : (raw.mes || [])).map(t => {
+        const ejec = Number(t.Visitas) || 0;
+        const dias = Number(t.Dias_Laborados) || 0;
+        const efi = Number(t.Eficacia) || 0;
+        return {
+          tipoBrigada: t.Tipo_Brigada_Mes || '—',
+          tecnico: t.Tecnico || 'Desconocido',
+          color: colorPorBrigada.get(t.Tipo_Brigada_Mes || '') || MUT,
+          cuentas: Number(t.Cantidad_NIC) || 0,
+          ejecutadas: ejec,
+          suspension: Number(t.Total_Suspension) || 0,
+          mantiene: Number(t.Total_Mantiene_Susp) || 0,
+          reconexion: Number(t.Total_Reconexion) || 0,
+          pagos: Number(t.Total_Pagos) || 0,
+          imposibilidades: Number(t.Total_Imposibilidades) || 0,
+          resistencias: Number(t.Total_Resistencia) || 0,
+          diasLab: dias,
+          promDia: dias > 0 ? ejec / dias : 0,
+          eficacia: efi,
+          alerta: efi < 0.65,
+        };
+      }).sort((a, b) => b.ejecutadas - a.ejecutadas);
 
       const tableDataEvolutivo = (() => {
         const currentMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
         const tecCurrent = currentMes ? (raw.mes || []).filter(e => e.Mes_YM === currentMes) : (raw.mes || []);
+        const filteredCurrent = filtroEvolutivo ? tecCurrent.filter(e => e.Tipo_Brigada_Mes === filtroEvolutivo) : tecCurrent;
 
         return {
           columns: ['Tipo de Brigada', 'Técnico', 'Cuentas', 'Total Órdenes Ejecutadas', 'Total Suspensión', 'Total Se Mantiene Suspensión', 'Total Reconexión', 'Total Pagos', 'Total Imposibilidades', 'Total Resistencias', 'Días Laborados en Total', 'Eficacia'],
           categoryIndex: 0,
-          rows: tecCurrent.map(t => [
+          rows: filteredCurrent.map(t => [
             t.Tipo_Brigada_Mes,
             t.Tecnico || 'Desconocido',
             fmtN(t.Cantidad_NIC),
@@ -311,11 +488,12 @@ export default function OperativoPage() {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
       periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, narrativa,
-      chartOrd, chartBrig, chartTipos, chartEvolutivo,
+      chartOrd, chartBrig, chartTipos, chartEvolutivo, evSubtitle, chartEvolutivoFull, evSubtitleFull,
+      brigadaDetalle, varHeader, tecnicoDetalle,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
-      evolutivo: raw.evolutivo
+      evolutivo: raw.evolutivo, evTop
     };
-  }, [raw, filters, mesList]);
+  }, [raw, filters, mesList, filtroEvolutivo]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -434,16 +612,69 @@ export default function OperativoPage() {
       {/* Evolutivo Mensual por Tipo de Brigada */}
       <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Evolutivo Mensual por Tipo de Brigada</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', marginBottom: 20 }}>
-        <ChartCard 
-          id="op-evolutivo" 
-          title="Órdenes Mensuales por Tipo de Brigada" 
-          config={d.chartEvolutivo as never} 
-          height="normal" 
-          hasDetail 
-          detailTableData={d.tableDataEvolutivo as any} 
+        <ChartCard
+          id="op-evolutivo"
+          title="Órdenes Mensuales por Tipo de Brigada"
+          subtitle={d.evSubtitle}
+          config={d.chartEvolutivo as never}
+          height="normal"
+          hasDetail
+          onExpand={() => setBrigadaModalOpen(true)}
+          detailTableData={d.tableDataEvolutivo as any}
           headerExtra={
-            <button onClick={() => setMapOpen(true)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--brand-primary)', color: 'var(--brand-grad-text)', border: 'none', cursor: 'pointer', marginLeft: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>📍 Ver en Mapa</button>
+            <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+              {filtroEvolutivo && (
+                <button onClick={() => setFiltroEvolutivo(null)} style={{ padding: '6px 10px', fontSize: 11, borderRadius: 6, background: '#EDF0E7', color: '#3A3A3A', border: '1px solid #E0E0E0', cursor: 'pointer', fontWeight: 600 }}>Quitar filtro</button>
+              )}
+              <button onClick={() => setMapOpen(true)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--brand-primary)', color: 'var(--brand-grad-text)', border: 'none', cursor: 'pointer', marginLeft: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>📍 Ver en Mapa</button>
+            </div>
           }
+          customLayout={(canvas) => (
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', minHeight: '320px' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                  {canvas}
+                </div>
+                {/* Leyenda Chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '12px' }}>
+                  {d.evTop.map((x: any) => {
+                     const isFiltered = !filtroEvolutivo || filtroEvolutivo === x.t;
+                     return (
+                       <div key={x.t} onClick={() => setFiltroEvolutivo(prev => prev === x.t ? null : x.t)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: '#F4F6EF', borderRadius: '8px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
+                         <span style={{ width: 14, height: 3, background: x.color, display: 'inline-block', borderRadius: 2 }} />
+                         <span style={{ fontSize: 11.5, color: '#3A3A3A', fontWeight: 500 }}>{x.t}</span>
+                       </div>
+                     );
+                  })}
+                </div>
+              </div>
+              {/* Panel Lateral Ranking */}
+              <div style={{ width: '280px', borderLeft: '1px solid #EDF0E7', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#3A3A3A', marginBottom: 16 }}>Detalle por brigada</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto' }}>
+                  {d.brigadaDetalle.slice(0, 10).map((b: any) => {
+                    const isFiltered = !filtroEvolutivo || filtroEvolutivo === b.brigada;
+                    return (
+                      <div key={b.brigada} onClick={() => setFiltroEvolutivo(prev => prev === b.brigada ? null : b.brigada)} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
+                        <span style={{ width: 4, height: '100%', minHeight: '24px', background: b.color, borderRadius: 2 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#3A3A3A' }}>{b.brigada}</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6E7174', marginTop: 2 }}>
+                            <span>{fmtN(b.total)} ({b.partPct}%)</span>
+                            {b.varPct !== null && (
+                              <span style={{ color: b.varPct > 0 ? '#3d7a24' : b.varPct < 0 ? '#a5281c' : '#97999B', fontWeight: 600 }}>
+                                {b.varPct > 0 ? '+' : ''}{b.varPct}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         />
       </div>
 
@@ -495,10 +726,22 @@ export default function OperativoPage() {
       <DisponibilidadSection />
 
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
-      {mapOpen && <MapModal onClose={() => setMapOpen(false)} filtrosBase={{
-        // El endpoint del mapa filtra por UN mes (LIKE mes%); tomamos el mas
-        // reciente seleccionado, igual que el resto de esta vista. Sin seleccion -> ALL.
-        mes: filters.mes.length ? filters.mes[filters.mes.length - 1] : 'ALL',
+      {brigadaModalOpen && d && (
+        <BrigadaEvolutivoModal
+          open={brigadaModalOpen}
+          onClose={() => setBrigadaModalOpen(false)}
+          title="Órdenes Mensuales por Tipo de Brigada"
+          subtitle={d.evSubtitleFull}
+          config={d.chartEvolutivoFull as never}
+          brigadaDetalle={d.brigadaDetalle as never}
+          tecnicoDetalle={d.tecnicoDetalle as never}
+          varHeader={d.varHeader}
+        />
+      )}
+      {mapOpen && <MapModal onClose={() => setMapOpen(false)} mesesDisponibles={mesList} filtrosBase={{
+        // El mapa recibe todos los meses seleccionados para aplicar la lógica híbrida:
+        // si son > 3 meses, se contrae a puntos de barrio, si son <= 3 meses, puntos individuales.
+        mes: filters.mes.length ? filters.mes.join(',') : 'ALL',
         zona: filters.zona,
         proy: filters.proy,
       }} />}

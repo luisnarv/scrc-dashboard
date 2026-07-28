@@ -1,9 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --ok: #509E2F;
-  --warn: #B5BD00;
-  --err: #C0392B;
+  /* ESCALAS DE DATO - Idénticas en ambos temas */
+  --ef-85: #22c55e;
+  --ef-70: #84cc16;
+  --ef-50: #eab308;
+  --ef-30: #f97316;
+  --ef-0: #ef4444;
+  --ef-nan: #94a3b8;
+
+  --zona-norte: #4d7a5b;
+  --zona-centro: #ad7e42;
+  --zona-sur: #823c32;
+  --zona-metro: #5f7d8c;
 }
 
 .theme-light {
@@ -14,9 +23,10 @@
   --text-title: #38764C;
   --text-body: #3A3A3A;
   --text-muted: #97999B;
+  
   --brand-primary: #78BE20;
+  --brand-secondary: #38764C;
   --brand-grad: linear-gradient(135deg, #78BE20 0%, #B5BD00 100%);
-  --brand-grad-text: #FFFFFF;
   
   --sip: #78BE20;
   --otc: #38764C;
@@ -24,6 +34,10 @@
   --otc-bg: #E8F0EA;
   --hover-bg: #F4F6EF;
   --th-bg: #F4F6EF;
+
+  --ok: #509E2F;
+  --warn: #B5BD00;
+  --err: #C0392B;
 }
 
 .theme-dark {
@@ -34,19 +48,18 @@
   --text-title: #F2F7FF;
   --text-body: #C9DAEE;
   --text-muted: #85A3C4;
+  
   --brand-primary: #3B8AD9;
+  --brand-secondary: #2BD98C;
   --brand-grad: linear-gradient(135deg, #3B8AD9 0%, #1E5FA8 100%);
-  --brand-grad-text: #F2F7FF;
 
-  --sip: #4A9EE8;
+  --sip: #3B8AD9;
   --otc: #2BD98C;
   --sip-bg: #0F2744;
   --otc-bg: #0D2340;
   --hover-bg: #16345C;
   --th-bg: #16345C;
 
-  /* El semaforo de :root esta calibrado para fondo claro; sobre navy
-     pierde contraste, asi que el tema oscuro lo re-tonaliza. */
   --ok: #2BD98C;
   --warn: #F0C040;
   --err: #FF5A5F;

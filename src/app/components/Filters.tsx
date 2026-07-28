@@ -55,9 +55,10 @@ export default function Filters() {
   });
 
   return (
-    <div className="filtros">
-      <label>Proyecto</label>
+    <div id="filters-container" className="filtros">
+      <label htmlFor="select-proy">Proyecto</label>
       <select
+        id="select-proy"
         value={filters.proy}
         onChange={e => setFilters({ proy: e.target.value, zona: 'ALL' })}
       >
@@ -65,8 +66,9 @@ export default function Filters() {
         {proyList.map(p => <option key={p} value={p}>{p}</option>)}
       </select>
 
-      <label>Zona</label>
+      <label htmlFor="select-zona">Zona</label>
       <select
+        id="select-zona"
         value={filters.zona}
         onChange={e => setFilters({ zona: e.target.value })}
       >
@@ -74,9 +76,10 @@ export default function Filters() {
         {zonaList.map(z => <option key={z} value={z}>{z}</option>)}
       </select>
 
-      <label>Mes</label>
+      <label htmlFor="btn-mes">Mes</label>
       <div ref={mesRef} style={{ position: 'relative' }}>
         <button
+          id="btn-mes"
           type="button"
           onClick={() => setMesOpen(o => !o)}
           style={{ ...ctrl, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 120 }}
@@ -86,6 +89,7 @@ export default function Filters() {
         </button>
         {mesOpen && (
           <div
+            id="mes-dropdown"
             style={{
               position: 'absolute',
               top: 'calc(100% + 4px)',
@@ -101,8 +105,9 @@ export default function Filters() {
               overflow: 'auto',
             }}
           >
-            <label style={row(filters.mes.length === 0)}>
+            <label htmlFor="chk-mes-todos" style={row(filters.mes.length === 0)}>
               <input
+                id="chk-mes-todos"
                 type="checkbox"
                 checked={filters.mes.length === 0}
                 onChange={() => setFilters({ mes: [], fecha: 'ALL' })}
@@ -110,11 +115,11 @@ export default function Filters() {
               Todos
             </label>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
-            {mesList.map(m => {
+            {mesList.map((m, idx) => {
               const on = filters.mes.includes(m);
               return (
-                <label key={m} style={row(on)}>
-                  <input type="checkbox" checked={on} onChange={() => toggleMes(m)} />
+                <label key={m} htmlFor={`chk-mes-${idx}`} style={row(on)}>
+                  <input id={`chk-mes-${idx}`} type="checkbox" checked={on} onChange={() => toggleMes(m)} />
                   {m}
                 </label>
               );
@@ -123,8 +128,9 @@ export default function Filters() {
         )}
       </div>
 
-      <label>Fecha</label>
+      <label htmlFor="select-fecha">Fecha</label>
       <select
+        id="select-fecha"
         value={filters.fecha}
         onChange={e => setFilters({ fecha: e.target.value })}
       >

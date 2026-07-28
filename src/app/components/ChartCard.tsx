@@ -19,9 +19,12 @@ interface ChartCardProps {
     categoryIndex?: number;
   };
   detailActiveFilters?: { label: string; value: string }[];
+  onExpand?: () => void;
+  customBody?: React.ReactNode;
+  customLayout?: (canvas: React.ReactNode) => React.ReactNode;
 }
 
-export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters }: ChartCardProps) {
+export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters, onExpand, customBody, customLayout }: ChartCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
@@ -33,19 +36,22 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
       if (!isMounted || !canvasRef.current) return;
       Chart.register(...registerables);
 
-      const isDark = document.body.classList.contains('theme-dark');
-      Chart.defaults.color = isDark ? '#85A3C4' : '#97999B';
-      Chart.defaults.borderColor = isDark ? 'rgba(242,247,255,0.10)' : '#E0E0E0';
+      const computed = getComputedStyle(document.body);
+      const getVar = (v: string) => computed.getPropertyValue(v).trim();
+
+      Chart.defaults.color = getVar('--text-muted');
+      Chart.defaults.font.family = computed.fontFamily;
+      Chart.defaults.borderColor = getVar('--border');
       Chart.defaults.elements.line.borderWidth = 3;
       Chart.defaults.elements.point.radius = 5;
       Chart.defaults.elements.point.hoverRadius = 8;
       
       if (!(Chart.defaults.plugins as any).tooltip) (Chart.defaults.plugins as any).tooltip = {};
       const tooltipOpts = Chart.defaults.plugins.tooltip as any;
-      tooltipOpts.backgroundColor = isDark ? '#0F2744' : '#FFFFFF';
-      tooltipOpts.titleColor = isDark ? '#F2F7FF' : '#38764C';
-      tooltipOpts.bodyColor = isDark ? '#C9DAEE' : '#3A3A3A';
-      tooltipOpts.borderColor = isDark ? '#1E3A5F' : '#E0E0E0';
+      tooltipOpts.backgroundColor = getVar('--card');
+      tooltipOpts.titleColor = getVar('--text-title');
+      tooltipOpts.bodyColor = getVar('--text-body');
+      tooltipOpts.borderColor = getVar('--border');
       tooltipOpts.borderWidth = 1;
       tooltipOpts.padding = 12;
       tooltipOpts.cornerRadius = 8;
@@ -64,7 +70,7 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
 
   return (
     <>
-      <div className="card">
+      <div id={`card-${id}`} className="card">
         <div className="ch-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
             {title}
@@ -72,7 +78,8 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           </div>
           {hasDetail && (
             <button
-              onClick={() => setModalOpen(true)}
+              id={`btn-expand-${id}`}
+              onClick={() => onExpand ? onExpand() : setModalOpen(true)}
               style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: 'var(--panel)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
               ⤢ Expandir
@@ -80,12 +87,14 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           )}
         </div>
         {subtitle && <div className="ch-sub">{subtitle}</div>}
-        <div className={boxCls}>
-          <canvas ref={canvasRef} id={id} />
-        </div>
+        {customBody ? customBody : customLayout ? customLayout(<canvas ref={canvasRef} id={id} />) : (
+          <div className={boxCls}>
+            <canvas ref={canvasRef} id={id} />
+          </div>
+        )}
       </div>
 
-      {hasDetail && modalOpen && (
+      {hasDetail && !onExpand && modalOpen && (
         <AnalysisModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}

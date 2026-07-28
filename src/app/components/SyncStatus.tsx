@@ -18,7 +18,7 @@ function haceCuanto(ts: number | null): string {
 const pill: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-  background: 'rgba(255,255,255,0.15)', color: '#fff',
+  background: 'rgba(255,255,255,0.15)', color: 'var(--brand-grad-text)',
   border: '1px solid rgba(255,255,255,0.3)',
 };
 
@@ -45,35 +45,36 @@ export default function SyncStatus() {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    <div id="sync-status-container" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {offline && (
-        <span style={{ ...pill, background: 'rgba(240,192,64,0.22)', borderColor: 'rgba(240,192,64,0.5)' }}
+        <span id="sync-status-offline" style={{ ...pill, background: 'rgba(240,192,64,0.22)', borderColor: 'rgba(240,192,64,0.5)' }}
               title={error || ''}>
           ⚠ Sin conexión · datos guardados
         </span>
       )}
 
       {syncing && (
-        <span style={pill}>
+        <span id="sync-status-syncing" style={pill}>
           <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
           Sincronizando histórico…
         </span>
       )}
 
       {busy && !syncing && (
-        <span style={pill}>
+        <span id="sync-status-busy" style={pill}>
           <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
           Actualizando…
         </span>
       )}
 
       {!girando && !offline && (
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
+        <span id="sync-status-updated" style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
           Actualizado {haceCuanto(lastSync)}
         </span>
       )}
 
       <button
+        id="btn-sync-refresh"
         onClick={onRefresh}
         disabled={girando}
         aria-label="Actualizar datos"

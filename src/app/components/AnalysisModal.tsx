@@ -134,19 +134,22 @@ export default function AnalysisModal({ open, onClose, title, description, confi
       if (!isMounted || !canvasRef.current) return;
       Chart.register(...registerables);
 
-      const isDark = document.body.classList.contains('theme-dark');
-      Chart.defaults.color = isDark ? '#85A3C4' : '#97999B';
-      Chart.defaults.borderColor = isDark ? 'rgba(242,247,255,0.10)' : '#E0E0E0';
+      const computed = getComputedStyle(document.body);
+      const getVar = (v: string) => computed.getPropertyValue(v).trim();
+
+      Chart.defaults.color = getVar('--text-muted');
+      Chart.defaults.font.family = computed.fontFamily;
+      Chart.defaults.borderColor = getVar('--border');
       Chart.defaults.elements.line.borderWidth = 3;
       Chart.defaults.elements.point.radius = 5;
       Chart.defaults.elements.point.hoverRadius = 8;
       
       if (!(Chart.defaults.plugins as any).tooltip) (Chart.defaults.plugins as any).tooltip = {};
       const tooltipOpts = Chart.defaults.plugins.tooltip as any;
-      tooltipOpts.backgroundColor = isDark ? '#0F2744' : '#FFFFFF';
-      tooltipOpts.titleColor = isDark ? '#F2F7FF' : '#38764C';
-      tooltipOpts.bodyColor = isDark ? '#C9DAEE' : '#3A3A3A';
-      tooltipOpts.borderColor = isDark ? '#1E3A5F' : '#E0E0E0';
+      tooltipOpts.backgroundColor = getVar('--card');
+      tooltipOpts.titleColor = getVar('--text-title');
+      tooltipOpts.bodyColor = getVar('--text-body');
+      tooltipOpts.borderColor = getVar('--border');
       tooltipOpts.borderWidth = 1;
       tooltipOpts.padding = 12;
       tooltipOpts.cornerRadius = 8;
@@ -269,17 +272,26 @@ export default function AnalysisModal({ open, onClose, title, description, confi
         <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
+            <div style={{ flex: viewMode === 'chart' ? 1 : `0 0 ${splitRatio}%`, position: 'relative', minHeight: 0 }}>
               <canvas ref={canvasRef} />
             </div>
           )}
 
           {viewMode === 'split' && (
-            <div style={{ height: 20, flexShrink: 0 }} />
+            <div 
+              onMouseDown={() => dragging.current = true}
+              style={{ 
+                height: 12, flexShrink: 0, 
+                background: 'var(--panel)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', 
+                cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' 
+              }}
+            >
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+            </div>
           )}
 
           {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto' }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
               {!filteredTableData ? (
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No hay tabla de respaldo configurada para esta vista.</div>
               ) : (

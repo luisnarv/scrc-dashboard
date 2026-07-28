@@ -13,23 +13,23 @@ export const THEME_COLORS = {
     err: '#C0392B',
     ink: '#38764C',
     mut: '#97999B',
-    // 10 slots: con 10 tipos de brigada el ciclo idx % length repetía el gris
-    // en las posiciones 4 y 9. Ambas pasan a verde.
-    series: ['#B5BD00', '#78BE20', '#509E2F', '#38764C', '#BCD08A',
-             '#B5BD00', '#78BE20', '#509E2F', '#38764C', '#9CB86E']
+    series: [
+      '#78BE20', '#38764C', '#B5BD00', '#97999B',
+      '#78BE20', '#38764C', '#B5BD00', '#97999B'
+    ]
   },
   dark: {
-    sip: '#4A9EE8',
+    sip: '#3B8AD9',
     otc: '#2BD98C',
     ok: '#2BD98C',
     warn: '#F0C040',
     err: '#FF5A5F',
     ink: '#F2F7FF',
     mut: '#85A3C4',
-    // Serie propia del tema navy: los verdes del tema claro pierden
-    // separacion sobre #0A1A2F. Se cicla igual que en light.
-    series: ['#3A87CC', '#17A86B', '#9A6DC4', '#C87340', '#12A0AC',
-             '#AD8B26', '#3A87CC', '#17A86B', '#9A6DC4', '#C87340']
+    series: [
+      '#3B8AD9', '#2BD98C', '#4A9EE8', '#85A3C4',
+      '#3B8AD9', '#2BD98C', '#4A9EE8', '#85A3C4'
+    ]
   }
 };
 

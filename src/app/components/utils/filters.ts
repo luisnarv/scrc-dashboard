@@ -18,7 +18,6 @@ export function filtRaw(rows: RawRecord[], F: Filters): RawRecord[] {
 export function filtCos(rows: CostoRecord[], F: Filters): CostoRecord[] {
   return rows.filter(r => {
     if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
-    if (F.zona !== 'ALL' && r._Zona !== F.zona) return false;
     if (!mesOK(String(r.Mes || ''), F)) return false;
     return true;
   });
@@ -27,7 +26,6 @@ export function filtCos(rows: CostoRecord[], F: Filters): CostoRecord[] {
 export function filtCosSinMes(rows: CostoRecord[], F: Filters): CostoRecord[] {
   return rows.filter(r => {
     if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
-    if (F.zona !== 'ALL' && r._Zona !== F.zona) return false;
     return true;
   });
 }

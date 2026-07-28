@@ -1,12 +1,13 @@
 'use client';
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON, LayersControl, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, LayersControl, useMapEvents, useMap, LayerGroup, CircleMarker, Tooltip } from 'react-leaflet';
 import { createLayerComponent } from '@react-leaflet/core';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
 import { canonBarrio, normBarrio, normBase } from './utils/barrio';
+import { useTheme } from './ThemeProvider';
 
 // Auto-zoom removido para no sacar de foco al usuario.
 
@@ -15,11 +16,12 @@ import { canonBarrio, normBarrio, normBase } from './utils/barrio';
 // React (la reconciliacion era lo que congelaba ~18s al re-filtrar); Leaflet
 // dibuja miles de circulos en canvas sin problema.
 const colorEfectividad = (e: any) => {
-  if (!e.total) return '#9ca3af';
-  const ef = e.efectivas / e.total;
-  if (ef >= 0.85) return '#22c55e';
-  if (ef >= 0.50) return '#eab308';
-  return '#ef4444';
+  const totalEval = e.efectivas + e.fallidas + e.perdidas;
+  if (totalEval <= 0) return 'var(--ef-nan)';
+  const ef = e.efectivas / totalEval;
+  if (ef >= 0.85) return 'var(--ok)';
+  if (ef >= 0.50) return 'var(--ef-50)';
+  return 'var(--err)';
 };
 
   // Detecta clic en el fondo del mapa (fuera de un barrio). Si el clic cae cerca
@@ -86,19 +88,39 @@ const colorEfectividad = (e: any) => {
       if (!ctx) return;
       ctx.clearRect(0, 0, size.x, size.y);
       
+      const computed = getComputedStyle(document.body);
+      const getHex = (v: string) => computed.getPropertyValue(v).trim() || '#9ca3af';
+      const C_OK = getHex('--ok');
+      const C_WARN = getHex('--ef-50');
+      const C_ERR = getHex('--err');
+      const C_NAN = getHex('--ef-nan');
+      
+      const getPtColor = (e: any) => {
+          const totalEval = (e.efectivas || 0) + (e.fallidas || 0) + (e.perdidas || 0);
+          if (totalEval <= 0) return C_NAN;
+          if (e.efectivas > 0) return C_OK;
+          if (e.fallidas > 0) return C_WARN;
+          if (e.perdidas > 0) return C_ERR;
+          return C_NAN;
+      };
+
+      const hexA = (hex: string, alpha: number) => {
+          let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+          if (isNaN(r)) return `rgba(150,150,150,${alpha})`;
+          return `rgba(${r},${g},${b},${alpha})`;
+      };
+
       if (this.drawGlow) {
         const R = 26;
         ctx.globalCompositeOperation = 'lighter';
         for (const p of this.points) {
-          if (p.la == null || p.lo == null) continue;
-          if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+          let la = parseFloat(p.la);
+          let lo = parseFloat(p.lo);
+          if (isNaN(la) || isNaN(lo)) continue;
+          if (la < bounds.getSouth() - 0.1 || la > bounds.getNorth() + 0.1 || lo < bounds.getWest() - 0.1 || lo > bounds.getEast() + 0.1) continue;
           
-          const pt = map.latLngToContainerPoint([p.la, p.lo]);
-          const col = colorEfectividad(p);
-          const hexA = (hex: string, alpha: number) => {
-            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-            return `rgba(${r},${g},${b},${alpha})`;
-          };
+          const pt = map.latLngToContainerPoint([la, lo]);
+          const col = getPtColor(p);
           
           const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, R);
           grad.addColorStop(0, hexA(col, 0.2));
@@ -112,15 +134,14 @@ const colorEfectividad = (e: any) => {
       if (this.drawDots) {
         ctx.globalCompositeOperation = 'source-over';
         for (const p of this.points) {
-          if (p.la == null || p.lo == null) continue;
-          if (p.la < bounds.getSouth() - 0.1 || p.la > bounds.getNorth() + 0.1 || p.lo < bounds.getWest() - 0.1 || p.lo > bounds.getEast() + 0.1) continue;
+          let la = parseFloat(p.la);
+          let lo = parseFloat(p.lo);
+          if (isNaN(la) || isNaN(lo)) continue;
+          if (la < bounds.getSouth() - 0.1 || la > bounds.getNorth() + 0.1 || lo < bounds.getWest() - 0.1 || lo > bounds.getEast() + 0.1) continue;
           
-          const pt = map.latLngToContainerPoint([p.la, p.lo]);
-          const col = colorEfectividad(p);
-          const hexA = (hex: string, alpha: number) => {
-            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-            return `rgba(${r},${g},${b},${alpha})`;
-          };
+          const pt = map.latLngToContainerPoint([la, lo]);
+          const col = getPtColor(p);
+          
           ctx.fillStyle = hexA(col, 0.90);
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 4.0, 0, 2 * Math.PI); ctx.fill();
         }
@@ -167,7 +188,9 @@ function BoundsUpdater({ geoBarrios, geoMuni, geoZonas }: { geoBarrios: any, geo
   return null;
 }
 
-export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZonas, statsBarrios, selectedBarrio = 'ALL', selectedMuni = 'ALL', selectedZona = 'ALL', onSelectBarrio, onReset, onSelectNic }: { points: any[], mes?: string, geoMuni: any, geoBarrios: any, geoZonas?: any, statsBarrios?: any[], selectedBarrio?: string, selectedMuni?: string, selectedZona?: string, onSelectBarrio?: (muni: string, barrio: string) => void, onReset?: () => void, onSelectNic?: (nic: any) => void }) {
+export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZonas, statsBarrios, selectedBarrio = 'ALL', selectedMuni = 'ALL', selectedZona = 'ALL', isMassive = false, onSelectBarrio, onReset, onSelectNic }: { points: any[], mes?: string, geoMuni: any, geoBarrios: any, geoZonas?: any, statsBarrios?: any[], selectedBarrio?: string, selectedMuni?: string, selectedZona?: string, isMassive?: boolean, onSelectBarrio?: (muni: string, barrio: string) => void, onReset?: () => void, onSelectNic?: (nic: any) => void }) {
+  const { theme } = useTheme();
+
   // Nombres de barrio UNICOS en el GeoJSON (aparecen en un solo municipio). Para
   // ellos se cruza SOLO por nombre, porque el municipio de la BD suele venir mal
   // (ej. "Santa Helena": la BD la pone en BARANOA pero geograficamente es de
@@ -202,14 +225,15 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
     return nombresUnicos.has(c) ? c : `${normBase(municipio)}|${c}`;
   }, [nombresUnicos]);
 
-  const colorEfectiv = (efectivas: number, total: number) => {
-    if (total <= 0) return '#d1d5db';
-    const ef = efectivas / total;
-    if (ef >= 0.85) return '#22c55e';
-    if (ef >= 0.70) return '#84cc16';
-    if (ef >= 0.50) return '#eab308';
-    if (ef >= 0.30) return '#f97316';
-    return '#ef4444';
+  const colorEfectiv = (efectivas: number, fallidas: number, perdidas: number) => {
+    const totalEval = efectivas + fallidas + perdidas;
+    if (totalEval <= 0) return 'var(--ef-nan)';
+    const ef = efectivas / totalEval;
+    if (ef >= 0.85) return 'var(--ok)';
+    if (ef >= 0.70) return 'var(--ef-70)';
+    if (ef >= 0.50) return 'var(--ef-50)';
+    if (ef >= 0.30) return 'var(--ef-30)';
+    return 'var(--err)';
   };
 
   const statsMap = React.useMemo(() => {
@@ -229,7 +253,7 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
         // para poder pedir SUS observaciones on-demand al abrir el popup.
         if (s.barrio) e.bas.add(String(s.barrio));
       }
-      map.forEach((e) => { e.color = colorEfectiv(e.efectivas, e.total); });
+      map.forEach((e) => { e.color = colorEfectiv(e.efectivas, e.fallidas, e.perdidas); });
     }
     return map;
   }, [statsBarrios, keyDB]);
@@ -272,8 +296,11 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
     
     for (const p of points) {
       let isNoGps = false;
-      let lat = p.la;
-      let lon = p.lo;
+      let lat = typeof p.la === 'string' ? parseFloat(p.la) : p.la;
+      let lon = typeof p.lo === 'string' ? parseFloat(p.lo) : p.lo;
+      
+      if (isNaN(lat)) lat = null;
+      if (isNaN(lon)) lon = null;
       
       if (lat == null || lon == null) {
         if (!p.ba) continue;
@@ -305,17 +332,17 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
   // MapContainer). Los puntos usan su propia capa canvas (ContinuousHeatLayer), asi
   // que NO se comparte un renderer: un L.svg() compartido crasheaba en StrictMode
   // (_initContainer / getPane().appendChild) al re-agregarse en el remonte.
-  const styleMuni = { color: '#9ca3af', weight: 2, fillOpacity: 0.0, dashArray: '4, 4' };
+  const styleMuni = { color: 'var(--ef-nan)', weight: 2, fillOpacity: 0.0, dashArray: '4, 4' };
 
   // Limites de zona: color fijo por zona (no el del GeoJSON), sin relleno para
   // no tapar el calor de barrios.
   const COLOR_ZONA: Record<string, string> = {
-    NORTE: '#4d7a5b',
-    CENTRO: '#ad7e42',
-    SUR: '#823c32',
+    NORTE: 'var(--zona-norte)',
+    CENTRO: 'var(--zona-centro)',
+    SUR: 'var(--zona-sur)',
   };
   const getStyleZona = (feature: any) => ({
-    color: COLOR_ZONA[normBarrio(feature?.properties?.zona)] || '#6366f1',
+    color: COLOR_ZONA[normBarrio(feature?.properties?.zona)] || 'var(--ef-nan)',
     weight: 3,
     opacity: 0.9,
     fillOpacity: 0.2,
@@ -336,7 +363,7 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
       }
     }
     // Gris para barrios sin información o con 0 órdenes
-    return { color: '#9ca3af', weight: 1, fillOpacity: 0.3, fillColor: '#d1d5db' };
+    return { color: 'var(--ef-nan)', weight: 1, fillOpacity: 0.3, fillColor: 'var(--ef-nan)' };
   };
 
   // NIC (punto) mas cercano al clic, en pixeles de pantalla. Sirve para que un
@@ -410,11 +437,12 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
   const allPts = [...nicPoints, ...nicPointsNoGps];
 
   return (
-    <div style={{ height: '100%', width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+    <div id="map-leaflet-container" style={{ height: '100%', width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', background: '#080c12' }}>
       <MapContainer
+        id="map-instance"
         center={[10.75, -74.9]}
         zoom={10}
-        style={{ height: '100%', width: '100%', background: '#a5c9e2' }}
+        style={{ height: '100%', width: '100%', background: 'var(--bg)' }}
         maxZoom={18}
         minZoom={8}
       >
@@ -422,16 +450,11 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
         <MapInteractionHandler allNicPoints={allPts} onReset={onReset} onSelectNic={onSelectNic} />
         
         <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="Mapa Claro (CartoDB)">
+          <LayersControl.BaseLayer checked name="Mapa Base">
             <TileLayer
+              key={theme}
               attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            />
-          </LayersControl.BaseLayer>
-          <LayersControl.BaseLayer name="Mapa Oscuro">
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url={theme === 'dark' ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"}
             />
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Satélite">
@@ -458,35 +481,72 @@ export default function MapComponent({ points, mes, geoMuni, geoBarrios, geoZona
             </LayersControl.Overlay>
           )}
 
-          {filteredGeoBarrios && (
-            <LayersControl.Overlay checked name="Estado de Barrios (Efectividad)">
-              <GeoJSON
-                key={`barrio-${selectedZona}-${selectedMuni}-${selectedBarrio}`}
-                data={filteredGeoBarrios}
-                style={getStyleBarrio}
-                onEachFeature={onEachFeature}
-              />
-            </LayersControl.Overlay>
-          )}
+            {filteredGeoBarrios && (
+              <LayersControl.Overlay checked name="Estado de Barrios (Efectividad)">
+                <GeoJSON
+                  key={`barrio-${selectedZona}-${selectedMuni}-${selectedBarrio}-${statsBarrios.length}-${mes}`}
+                  data={filteredGeoBarrios}
+                  style={getStyleBarrio}
+                  onEachFeature={onEachFeature}
+                />
+              </LayersControl.Overlay>
+            )}
 
-          {nicPoints.length > 0 && (
+          {(!isMassive && nicPoints.length > 0) && (
             <LayersControl.Overlay checked name="NIC con orden (Puntos GPS)">
               <ContinuousHeatLayer points={nicPoints} drawGlow={false} />
             </LayersControl.Overlay>
           )}
-          {nicPointsNoGps.length > 0 && (
+          {(!isMassive && nicPointsNoGps.length > 0) && (
             <LayersControl.Overlay checked name="NIC sin GPS (Ubicados por Barrio)">
               <ContinuousHeatLayer points={nicPointsNoGps} drawGlow={false} />
             </LayersControl.Overlay>
           )}
-          {nicPoints.length > 0 && (
+          {(!isMassive && nicPoints.length > 0) && (
             <LayersControl.Overlay name="Resplandor de Calor (Puntos GPS)">
               <ContinuousHeatLayer points={nicPoints} drawDots={false} />
             </LayersControl.Overlay>
           )}
-          {nicPointsNoGps.length > 0 && (
+          {(!isMassive && nicPointsNoGps.length > 0) && (
             <LayersControl.Overlay name="Resplandor de Calor (Sin GPS)">
               <ContinuousHeatLayer points={nicPointsNoGps} drawDots={false} />
+            </LayersControl.Overlay>
+          )}
+          {isMassive && statsBarrios && statsBarrios.length > 0 && (
+            <LayersControl.Overlay checked name="Centros de Barrio (Masivo)">
+              <LayerGroup>
+                {statsBarrios.map((st, i) => {
+                  const k = keyDB(st.municipio, st.barrio);
+                  const c = centroidesBarrio.get(k);
+                  if (!c) return null;
+                  const pct = st.total > 0 ? (st.efectivas / st.total) * 100 : 0;
+                  let color = 'var(--ef-nan)';
+                  if (st.total > 0) {
+                    color = pct >= 85 ? 'var(--ok)' : pct >= 70 ? 'var(--ef-70)' : pct >= 50 ? 'var(--ef-50)' : pct >= 30 ? 'var(--ef-30)' : 'var(--err)';
+                  }
+                  return (
+                    <CircleMarker
+                      key={i}
+                      center={c}
+                      radius={6}
+                      fillColor={color}
+                      fillOpacity={0.9}
+                      color="var(--bg)"
+                      weight={1.5}
+                      eventHandlers={{
+                        click: (e) => {
+                          e.originalEvent?.stopPropagation(); // stop bubbling
+                          // Seleccionar el barrio para abrir su panel
+                          if (selectedBarrio !== 'ALL') onReset?.();
+                          else onSelectBarrio?.(st.municipio, st.barrio);
+                        }
+                      }}
+                    >
+                      <Tooltip direction="top">{st.barrio} ({st.municipio}) - {st.total} órdenes</Tooltip>
+                    </CircleMarker>
+                  );
+                })}
+              </LayerGroup>
             </LayersControl.Overlay>
           )}
         </LayersControl>

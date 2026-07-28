@@ -15,7 +15,7 @@ export default function HealthScore({ h }: { h: HealthResult }) {
         <div className="health-right">
           <div className="health-ring">
             <svg viewBox="0 0 120 120" width={140} height={140}>
-              <circle cx={60} cy={60} r={52} fill="none" stroke="#e3e7ef" strokeWidth={10} />
+              <circle cx={60} cy={60} r={52} fill="none" stroke="var(--border)" strokeWidth={10} />
               <circle
                 cx={60} cy={60} r={52} fill="none"
                 stroke={h.color} strokeWidth={10} strokeLinecap="round"
@@ -32,7 +32,7 @@ export default function HealthScore({ h }: { h: HealthResult }) {
           </div>
           <div className="health-bars">
             {h.dims.map(({ label, value, weight }) => {
-              const c = value >= 80 ? '#2E7D32' : value >= 60 ? '#F57C00' : '#C62828';
+              const c = value >= 80 ? 'var(--ok)' : value >= 60 ? 'var(--warn)' : 'var(--err)';
               return (
                 <div key={label} className="health-bar">
                   <span className="hb-lbl">{label} {weight}%</span>

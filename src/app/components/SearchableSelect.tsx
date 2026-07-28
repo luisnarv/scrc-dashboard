@@ -36,7 +36,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '6px',
           padding: '4px 8px',
-          color: '#e6ebf2',
+          color: 'var(--text-title)',
           fontSize: '12px',
           cursor: 'text',
           display: 'flex',
@@ -55,13 +55,13 @@ export default function SearchableSelect({ value, onChange, options, placeholder
               background: 'transparent',
               border: 'none',
               outline: 'none',
-              color: '#e6ebf2',
+              color: 'var(--text-title)',
               width: '100%',
               fontSize: '12px'
             }}
           />
         ) : (
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', color: value === 'ALL' ? '#94a3b8' : '#e6ebf2' }}>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', color: value === 'ALL' ? 'var(--text-muted)' : 'var(--text-title)' }}>
             {value === 'ALL' ? placeholder : displayValue}
           </div>
         )}
@@ -74,8 +74,8 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           left: 0,
           right: 0,
           marginTop: '4px',
-          background: '#0f172a',
-          border: '1px solid #1e293b',
+          background: 'var(--card)',
+          border: '1px solid var(--panel)',
           borderRadius: '6px',
           maxHeight: '200px',
           overflowY: 'auto',
@@ -87,18 +87,18 @@ export default function SearchableSelect({ value, onChange, options, placeholder
             style={{
               padding: '6px 10px',
               fontSize: '12px',
-              color: '#94a3b8',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
-              borderBottom: '1px solid #1e293b',
-              background: value === 'ALL' ? '#1e293b' : 'transparent',
+              borderBottom: '1px solid var(--panel)',
+              background: value === 'ALL' ? 'var(--panel)' : 'transparent',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
-            onMouseLeave={e => e.currentTarget.style.background = value === 'ALL' ? '#1e293b' : 'transparent'}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
+            onMouseLeave={e => e.currentTarget.style.background = value === 'ALL' ? 'var(--panel)' : 'transparent'}
           >
             {allLabel}
           </div>
           {filteredOptions.length === 0 ? (
-            <div style={{ padding: '6px 10px', fontSize: '12px', color: '#64748b' }}>Sin resultados</div>
+            <div style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--text-muted)' }}>Sin resultados</div>
           ) : (
             filteredOptions.map(opt => (
               <div
@@ -107,12 +107,12 @@ export default function SearchableSelect({ value, onChange, options, placeholder
                 style={{
                   padding: '6px 10px',
                   fontSize: '12px',
-                  color: '#e6ebf2',
+                  color: 'var(--text-title)',
                   cursor: 'pointer',
-                  background: value === opt ? '#1e293b' : 'transparent',
+                  background: value === opt ? 'var(--panel)' : 'transparent',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
-                onMouseLeave={e => e.currentTarget.style.background = value === opt ? '#1e293b' : 'transparent'}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
+                onMouseLeave={e => e.currentTarget.style.background = value === opt ? 'var(--panel)' : 'transparent'}
               >
                 {opt}
               </div>
