@@ -154,6 +154,41 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     else { setSort(k); setDir(k === 'label' ? 'asc' : 'desc'); }
   };
 
+  const exportCSV = () => {
+    const rows = [];
+    rows.push(['Fecha', 'Zona', 'Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'PROM vis', 'Prom efec'].join(';'));
+    
+    brigadas.forEach(typeNode => {
+      typeNode.children!.forEach(zoneNode => {
+        zoneNode.children!.forEach(techNode => {
+          const promVis = techNode.dias ? techNode.totVis / techNode.dias : 0;
+          const promEfec = techNode.dias ? techNode.efec / techNode.dias : 0;
+          rows.push([
+            periodo,
+            zoneNode.label,
+            techNode.label.replace(/;/g, ''),
+            techNode.efec,
+            techNode.fall,
+            techNode.perd,
+            techNode.totVis,
+            techNode.ingreso,
+            promVis.toFixed(2),
+            promEfec.toFixed(2)
+          ].join(';'));
+        });
+      });
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Detalle_Brigadas.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   /* --------------------------------- estilos --------------------------------- */
   const th: React.CSSProperties = {
     padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap',
@@ -200,6 +235,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               Jerarquía: Tipo de Brigada → Zona → Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
+          <button
+            onClick={exportCSV}
+            style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Exportar CSV
+          </button>
           <input
             value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo…"
             style={{ padding: '8px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, width: 190, outline: 'none', color: INK }}

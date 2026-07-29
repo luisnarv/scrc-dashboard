@@ -85,7 +85,7 @@ export async function getDashboardDataV2(mes?: string) {
           mb."Fecha" IS NULL 
           OR to_char(mo.fecha_cierre, 'YYYY-MM') = to_char(mb."Fecha"::timestamp, 'YYYY-MM')
         )
-      LEFT JOIN dbanalitica.maestro_estados me ON mo.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       LEFT JOIN dbanalitica.maestro_tarifas mt ON 
            mo.zona = mt."ZONA" AND 
            mo.av_resultado = mt."AV/RESULTADO" AND 
@@ -172,7 +172,7 @@ export async function getDashboardDataV2(mes?: string) {
              COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
              (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_estados me ON mo.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       ${mesymCond.replace('mes_ym', 'mo.mes_ym')}
       GROUP BY mo.mes_ym, mo.cedula
     `, params);
@@ -232,7 +232,7 @@ export async function getMapDataV2(mes?: string, zona?: string) {
         SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as fallidas,
         SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as perdidas
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_estados me ON mo.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       WHERE mo.localidad_barrio IS NOT NULL ${andFilters}
       GROUP BY municipio, split_part(localidad_barrio, '/', 2)
     `;
@@ -253,7 +253,7 @@ export async function getMapDataV2(mes?: string, zona?: string) {
         tipo_os as "to",
         fecha_cierre::text as fe
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_estados me ON mo.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       ${whereFilters}
       ORDER BY fecha_cierre DESC NULLS LAST
       LIMIT 25000
@@ -312,7 +312,7 @@ export async function getMonthsDataV2() {
         SUM(CASE WHEN mo.accion = 'PQR' THEN 1 ELSE 0 END) as "Total_PQR",
         (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_estados me ON mo.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.tipo_brigada
     `);
 
@@ -366,8 +366,8 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
       h.tipo_os                                as "to",
       h.fecha_cierre::text                     as "fe"
     FROM dbanalitica.historico_mo h
-    LEFT JOIN dbanalitica.maestro_estados me
-      ON h.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+    LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me
+        ON dbanalitica.fn_normalizar(h.subaccion_subanomalia) = me.sub
     WHERE ${where.join(' AND ')}
     ORDER BY h.fecha_cierre DESC NULLS LAST
     LIMIT 20000
@@ -410,8 +410,8 @@ export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: st
       h.subaccion_subanomalia             as "su",
       h.observacion                       as "ob"
     FROM dbanalitica.historico_mo h
-    LEFT JOIN dbanalitica.maestro_estados me
-      ON h.subaccion_subanomalia = me."SUBACCION/SUBANOMALIA"
+    LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me
+        ON dbanalitica.fn_normalizar(h.subaccion_subanomalia) = me.sub
     WHERE ${where.join(' AND ')}
     ORDER BY (COALESCE(me."Estado", h.estado_osf) = 'Fallida') DESC, h.fecha_cierre DESC
     LIMIT 40
