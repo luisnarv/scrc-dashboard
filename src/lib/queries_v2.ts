@@ -83,7 +83,7 @@ export async function getDashboardDataV2(mes?: string) {
         ON mo.id_tecnico = mb."Cedula" 
         AND (
           mb."Fecha" IS NULL 
-          OR to_char(mo.fecha_cierre, 'YYYY-MM') = to_char(mb."Fecha"::timestamp, 'YYYY-MM')
+          OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha"
         )
       LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       LEFT JOIN dbanalitica.maestro_tarifas mt ON 
@@ -153,37 +153,38 @@ export async function getDashboardDataV2(mes?: string) {
       EnBrigadas: r.EnBrigadas ? 'SI' : 'NO'
     }));
 
-    const mesRes = await query(`
-      SELECT mes_ym as "Mes_YM", cedula as "Cedula", MAX(tecnico) as "Tecnico", MAX(supervisor) as "Supervisor",
-             MAX(contratista) as "Contratista", MAX(vehiculo) as "Vehiculo",
-             MAX(tipo_brigada) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
-             SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
-             SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
-             SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-             COUNT(*) as "Visitas", SUM(COALESCE(mo.ingresos_cop, 0)) as "Ingresos_COP",
-             COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
-             SUM(CASE WHEN mo.accion = 'SUSPENSION' THEN 1 ELSE 0 END) as "Total_Suspension",
-             SUM(CASE WHEN mo.accion = 'MANTIENE SUSPENSION' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp", 
-             SUM(CASE WHEN mo.accion = 'RECONEXION' THEN 1 ELSE 0 END) as "Total_Reconexion",
-             SUM(CASE WHEN mo.tipo_pago IS NOT NULL THEN 1 ELSE 0 END) as "Total_Pagos", 
-             SUM(CASE WHEN mo.subaccion_subanomalia = 'IMPOSIBILIDAD' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
-             SUM(CASE WHEN mo.subaccion_subanomalia = 'RESISTENCIA' THEN 1 ELSE 0 END) as "Total_Resistencia", 
-             SUM(CASE WHEN mo.accion = 'PQR' THEN 1 ELSE 0 END) as "Total_PQR",
-             COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
-             (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
-      FROM dbanalitica.historico_mo mo
-      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
-      ${mesymCond.replace('mes_ym', 'mo.mes_ym')}
-      GROUP BY mo.mes_ym, mo.cedula
-    `, params);
+      const mesRes = await query(`
+        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mb."Tecnico") as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
+               MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
+               MAX(mb."Tipo Brigada") as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
+               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
+               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+               COUNT(*) as "Visitas", 0 as "Ingresos_COP",
+               COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
+               SUM(CASE WHEN mo.accion = 'SUSPENSION' THEN 1 ELSE 0 END) as "Total_Suspension",
+               SUM(CASE WHEN mo.accion = 'MANTIENE SUSPENSION' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp", 
+               SUM(CASE WHEN mo.accion = 'RECONEXION' THEN 1 ELSE 0 END) as "Total_Reconexion",
+               SUM(CASE WHEN mo.tipo_os IS NOT NULL THEN 1 ELSE 0 END) as "Total_Pagos", 
+               SUM(CASE WHEN mo.subaccion_subanomalia = 'IMPOSIBILIDAD' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
+               SUM(CASE WHEN mo.subaccion_subanomalia = 'RESISTENCIA' THEN 1 ELSE 0 END) as "Total_Resistencia", 
+               SUM(CASE WHEN mo.accion = 'PQR' THEN 1 ELSE 0 END) as "Total_PQR",
+               COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
+               (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
+        FROM dbanalitica.historico_mo mo
+        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
+        LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
+        ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
+        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico
+      `, params);
 
     const dispRes = await query(`
-      SELECT fecha_cierre::text as "Fecha", tipo_brigada as "Tipo_Brigada", zona as "Zona", COUNT(DISTINCT cedula) as "BrigadasActivas"
-      FROM dbanalitica.historico_mo
-      ${fechaCond}
-      GROUP BY fecha_cierre, tipo_brigada, zona
-      ORDER BY fecha_cierre, tipo_brigada
-    `, params);
+        SELECT fecha_cierre::text as "Fecha", tipo_brigada as "Tipo_Brigada", zona as "Zona", COUNT(DISTINCT id_tecnico) as "BrigadasActivas"
+        FROM dbanalitica.historico_mo
+        ${fechaCond}
+        GROUP BY fecha_cierre, tipo_brigada, zona
+        ORDER BY fecha_cierre, tipo_brigada
+      `, params);
 
     return {
       mes: mes || 'ALL',
