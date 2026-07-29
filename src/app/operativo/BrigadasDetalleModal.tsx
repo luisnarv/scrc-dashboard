@@ -171,7 +171,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             techNode.fall,
             techNode.perd,
             techNode.totVis,
-            techNode.ingreso,
+            Math.round(techNode.ingreso),
             promVis.toFixed(2),
             promEfec.toFixed(2)
           ].join(';'));
