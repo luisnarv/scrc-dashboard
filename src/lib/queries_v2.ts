@@ -49,9 +49,9 @@ export async function getDashboardDataV2(mes?: string) {
       SELECT 
         mo.fecha_cierre::text as "fecha", 
         mo.id_tecnico as cedula, 
-        MAX(mb."Tecnico") as "Nombre", 
-        MAX(mb."Tipo Brigada") as "Tipo_Brigada_Operaciones",
-        MAX(mb."Tipo Brigada") as "Tipo_Brigada_Mes", 
+        MAX(mo.tecnico) as "Nombre", 
+        MAX(mo.tipo_brigada) as "Tipo_Brigada_Operaciones",
+        MAX(mo.tipo_brigada) as "Tipo_Brigada_Mes", 
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym", 
         MAX(mo.zona) as "zona", 
         MAX(mb."Supervisor") as "supervisor",
@@ -90,10 +90,10 @@ export async function getDashboardDataV2(mes?: string) {
            mo.zona = mt."ZONA" AND 
            mo.av_resultado = mt."AV/RESULTADO" AND 
            mo.accion = mt."ACCION" AND 
-           mb."Tipo Brigada" = mt."TIPO BRIGADA" AND
+           mo.tipo_brigada = mt."TIPO BRIGADA" AND
            mo.subaccion_subanomalia = mt."SUBACCION/SUBANOMALIA"
       LEFT JOIN dbanalitica.maestro_metas mm ON 
-           mb."Tipo Brigada" = mm."Tipo_Brigada" AND 
+           mo.tipo_brigada = mm."Tipo_Brigada" AND 
            mo.zona = mm."ZONA"
       ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
       GROUP BY mo.fecha_cierre, mo.id_tecnico
@@ -154,9 +154,9 @@ export async function getDashboardDataV2(mes?: string) {
     }));
 
       const mesRes = await query(`
-        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mb."Tecnico") as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
+        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
-               MAX(mb."Tipo Brigada") as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               MAX(mo.tipo_brigada) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
