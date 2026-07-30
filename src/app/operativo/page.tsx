@@ -95,6 +95,24 @@ export default function OperativoPage() {
     const asignado = rawF.reduce((s, r) => s + n(r.Asignacion), 0);
     const brigadasDisp = new Set(rawF.map(r => r.Cedula)).size;
 
+    // Brigadas que cuentan como "disponibles" (Pool). Definido UNA vez y reutilizado
+    // tanto en el mes actual como en el cálculo del mes anterior (deltas mes vs mes).
+    const DISPONIBLES_TYPES = [
+      'brigada canasta',
+      'brigada minicanasta',
+      'brigada pesada mt-at',
+      'gestor integral multi',
+    ];
+    const isDisponible = (tb: string | undefined, dateStr: string) => {
+      if (!tb) return false;
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (dateObj.getDay() === 0) return true; // domingo: todas las que trabajan cuentan
+      }
+      return DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase());
+    };
+
     // Agrupación Diaria para Evolutivos y Tendencias
     const byDay: Record<string, { efec: number, fall: number, perd: number, disp: number, oper: number, brigadas: Set<unknown> }> = {};
     const byTypeDay: Record<string, Record<string, { efec: number, vis: number, fall: number, perd: number }>> = {};
@@ -123,26 +141,6 @@ export default function OperativoPage() {
 
     if (raw.disp) {
       const dispData = raw.disp;
-      
-      const DISPONIBLES_TYPES = [
-        'brigada tipo canasta',
-        'brigada tipo minicanasta',
-        'pesada mt-at',
-        'gestor integral multi'
-      ];
-      
-      const isDisponible = (tb: string | undefined, dateStr: string) => {
-        if (!tb) return false;
-        
-        // Verificar si el día es domingo (getDay() === 0)
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-          const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-          if (dateObj.getDay() === 0) return true; // En domingo, todas las que trabajan se consideran disponibles
-        }
-
-        return DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase());
-      };
 
       dias.forEach(d => {
         const matchingDisp = dispData.filter((r: any) => {
@@ -170,7 +168,17 @@ export default function OperativoPage() {
     }
 
     const brigadasOper = dias.length ? Math.round(dias.reduce((s, f) => s + byDay[f].oper, 0) / dias.length) : 0;
-    const brigadasDispPool = dias.length ? Math.round(dias.reduce((s, f) => s + byDay[f].disp, 0) / dias.length) : 0;
+    // Pool de disponibles del PERIODO = técnicos DISTINTOS que estuvieron en una
+    // brigada disponible durante los días seleccionados (no el promedio diario).
+    // Así, al ver el mes completo, es el total del pool y nunca queda por debajo
+    // de un día individual.
+    const dispTecPeriodo = new Set<unknown>();
+    rawF.forEach(r => {
+      const day = String(r.Fecha || '');
+      const tb = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '');
+      if (day && isDisponible(tb, day)) dispTecPeriodo.add(r.Cedula);
+    });
+    const brigadasDispPool = dispTecPeriodo.size;
 
     const meses12 = mesList.slice(-12);
     const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
@@ -185,9 +193,48 @@ export default function OperativoPage() {
     const perdRate = perdidas / totOrd;
     const disponibilidad = brigadasDispPool ? brigadasOper / brigadasDispPool : 0;
 
-    // Deltas de tendencia (último día vs día anterior)
+    // Deltas de tendencia.
+    //  - Si se ve el MES COMPLETO (Fecha = Todas y un solo mes): mes vs mes anterior.
+    //  - Si no: último día ejecutado vs el día ejecutado anterior.
     let dEfec = null, dFall = null, dOper = null, dDisp = null, ultD = '', antD = '';
-    if (dias.length >= 2) {
+    let modoDelta: 'mes' | 'dia' = 'dia';
+
+    const mesAnteriorStr = (ym: string) => {
+      const [y, m] = ym.split('-').map(Number);
+      const dt = new Date(y, m - 2, 1);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    // Métricas {efec, fall, oper, disp} de un subconjunto de filas (para el mes anterior).
+    const metricasDe = (rows: typeof rawF) => {
+      let efec = 0, fall = 0;
+      const bd: Record<string, { brig: Set<unknown> }> = {};
+      const dispTec = new Set<unknown>();   // técnicos distintos disponibles en el periodo
+      rows.forEach(r => {
+        const day = String(r.Fecha || ''); if (!day) return;
+        efec += n(r.Efectivas); fall += n(r.Fallida_Con_Pago);
+        (bd[day] ??= { brig: new Set() }).brig.add(r.Cedula);
+        const tb = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '');
+        if (isDisponible(tb, day)) dispTec.add(r.Cedula);
+      });
+      const ds = Object.keys(bd);
+      const oper = ds.length ? Math.round(ds.reduce((s, day) => s + bd[day].brig.size, 0) / ds.length) : 0;
+      return { efec, fall, oper, disp: dispTec.size };
+    };
+
+    if (F.fecha === 'ALL' && selWin.length === 1) {
+      // MES COMPLETO -> comparar contra el mes anterior.
+      modoDelta = 'mes';
+      const prevRows = filtRaw(raw.raw, { ...F, mes: [mesAnteriorStr(selWin[0])] });
+      if (prevRows.length) {
+        const prev = metricasDe(prevRows);
+        if (prev.efec) dEfec = (efect - prev.efec) / prev.efec;
+        if (prev.fall) dFall = (fallidas - prev.fall) / prev.fall;
+        if (prev.oper) dOper = (brigadasOper - prev.oper) / prev.oper;
+        if (prev.disp) dDisp = (brigadasDispPool - prev.disp) / prev.disp;
+      }
+    } else if (dias.length >= 2) {
+      // DÍA a DÍA (último día ejecutado vs el anterior).
       ultD = dias[dias.length - 1];
       antD = dias[dias.length - 2];
       const ult = byDay[ultD];
@@ -200,10 +247,11 @@ export default function OperativoPage() {
 
     // Narrativa Automática
     let narrativa = 'No hay suficientes datos diarios para generar una tendencia.';
-    if (dias.length >= 2 && dEfec !== null) {
+    if (dEfec !== null && dias.length >= 1) {
       const maxEfecDay = dias.reduce((a, b) => byDay[a].efec > byDay[b].efec ? a : b);
       const efecTrend = dEfec > 0.05 ? 'al alza' : dEfec < -0.05 ? 'a la baja' : 'estable';
-      narrativa = `La operación muestra una tendencia ${efecTrend} en efectivas respecto al día anterior. El día de mayor volumen fue el ${maxEfecDay.slice(-2)} con ${fmtN(byDay[maxEfecDay].efec)} efectivas. `;
+      const refTxt = modoDelta === 'mes' ? 'respecto al mes anterior' : 'respecto al día anterior';
+      narrativa = `La operación muestra una tendencia ${efecTrend} en efectivas ${refTxt}. El día de mayor volumen fue el ${maxEfecDay.slice(-2)} con ${fmtN(byDay[maxEfecDay].efec)} efectivas. `;
       
       if (disponibilidad < 0.7) narrativa += `La disponibilidad promedio es preocupantemente baja (${fmtPct(disponibilidad)}). `;
       else narrativa += `La disponibilidad promedio se mantiene en ${fmtPct(disponibilidad)}. `;
@@ -498,7 +546,7 @@ export default function OperativoPage() {
     return {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
-      periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, narrativa,
+      periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, modoDelta, narrativa,
       chartOrd, chartBrig, chartTipos, chartEvolutivo, evSubtitle, chartEvolutivoFull, evSubtitleFull,
       brigadaDetalle, varHeader, tecnicoDetalle,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
@@ -601,11 +649,16 @@ export default function OperativoPage() {
       </div>
 
       {/* 1 · Resumen Operativo */}
-      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Resumen operativo</div>
+      <div style={secH(TEAL)}>
+        <span style={dot(TEAL)} /> Resumen operativo
+        <span style={{ fontSize: 10, fontWeight: 600, color: MUT, textTransform: 'none', letterSpacing: 0 }}>
+          · Δ {d.modoDelta === 'mes' ? 'vs mes anterior' : 'vs día anterior'}
+        </span>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
         {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL, d.dOper, false)}
         {kpi('Pool de disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO, d.dDisp, false)}
-        {kpi('Total asignado', fmtN(d.asignado), 'meta de efectivas')}
+        {kpi('Total asignado', fmtN(d.asignado), 'efectivas + fallidas + perdidas')}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
         {kpi('Órdenes efectivas', fmtN(d.efect), undefined, OK, d.dEfec, false)}
         {kpi('Órdenes fallidas', fmtN(d.fallidas), undefined, WARN, d.dFall, true)}

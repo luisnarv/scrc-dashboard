@@ -94,7 +94,11 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(COALESCE(mt."Valor"::numeric, 0)) as "valor_fact_base", 
         0 as "valor_produccion", 
         0 as "margen_neto",
-        MAX(COALESCE(mm."Meta_Ajustada"::numeric, mm."Meta_Inicial"::numeric, 0)) * COUNT(DISTINCT mo.fecha_cierre) as "Asignacion", 
+        -- "Total asignado" = ordenes realmente recibidas = efectivas + fallidas + perdidas
+        -- (no la meta; asi refleja el trabajo real y crece si asignan mas).
+        (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)
+         + SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END)
+         + SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END)) as "Asignacion",
         SUM(
           CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN
             COALESCE(mt."Valor"::numeric, 0)
@@ -115,9 +119,6 @@ export async function getDashboardDataV2(mes?: string) {
            mo.accion = mt."ACCION" AND 
            COALESCE(mb."Tipo Brigada", mo.tipo_brigada) = mt."TIPO BRIGADA" AND
            mo.subaccion_subanomalia = mt."SUBACCION/SUBANOMALIA"
-      LEFT JOIN dbanalitica.maestro_metas mm ON 
-           COALESCE(mb."Tipo Brigada", mo.tipo_brigada) = mm."Tipo_Brigada" AND 
-           mb."Zona" = mm."ZONA"
       ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
       GROUP BY mo.fecha_cierre, mo.id_tecnico
     `, params);
@@ -185,13 +186,15 @@ export async function getDashboardDataV2(mes?: string) {
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
                COUNT(*) as "Visitas", 0 as "Ingresos_COP",
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
-               SUM(CASE WHEN mo.accion = 'SUSPENSION' THEN 1 ELSE 0 END) as "Total_Suspension",
-               SUM(CASE WHEN mo.accion = 'MANTIENE SUSPENSION' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp", 
-               SUM(CASE WHEN mo.accion = 'RECONEXION' THEN 1 ELSE 0 END) as "Total_Reconexion",
-               SUM(CASE WHEN mo.tipo_os IS NOT NULL THEN 1 ELSE 0 END) as "Total_Pagos", 
-               SUM(CASE WHEN mo.subaccion_subanomalia = 'IMPOSIBILIDAD' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
-               SUM(CASE WHEN mo.subaccion_subanomalia = 'RESISTENCIA' THEN 1 ELSE 0 END) as "Total_Resistencia", 
-               SUM(CASE WHEN mo.accion = 'PQR' THEN 1 ELSE 0 END) as "Total_PQR",
+               -- Conteos por tipo de gestión (réplica de las banderas _EV_* del ETL):
+               -- suspensión/mantiene/reconexión/pqr = sobre Efectivas; imposibilidad = Fallida; resistencia = Perdida.
+               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
+               SUM(CASE WHEN mo.tipo_os = 'TO502' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
+               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
                COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
                (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
         FROM dbanalitica.historico_mo mo
@@ -331,13 +334,13 @@ export async function getMonthsDataV2() {
         ${brigadaHomol('mo')} as "TipoBrigada",
         COUNT(DISTINCT nic) as "Cantidad_NIC",
         COUNT(*) as "Total_Ordenes", 
-        SUM(CASE WHEN mo.accion = 'SUSPENSION' THEN 1 ELSE 0 END) as "Total_Suspension",
-        SUM(CASE WHEN mo.accion = 'MANTIENE SUSPENSION' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp", 
-        SUM(CASE WHEN mo.accion = 'RECONEXION' THEN 1 ELSE 0 END) as "Total_Reconexion",
-        0 as "Total_Pagos", /* Pendiente cruzar con tipo_pago si existe */
-        SUM(CASE WHEN mo.subaccion_subanomalia = 'IMPOSIBILIDAD' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
-        SUM(CASE WHEN mo.subaccion_subanomalia = 'RESISTENCIA' THEN 1 ELSE 0 END) as "Total_Resistencia", 
-        SUM(CASE WHEN mo.accion = 'PQR' THEN 1 ELSE 0 END) as "Total_PQR",
+        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
+        SUM(CASE WHEN mo.tipo_os = 'TO502' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
+        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
         (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
