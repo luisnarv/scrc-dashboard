@@ -5,6 +5,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { RawData, RawRecord, CostoRecord, Filters } from './utils/types';
 import { normProy, normZonaDet } from './utils/filters';
 import { dashboardRepo } from '../lib/cache/repository';
+import { MapaCache } from '../lib/cache/mapaCache';
 import type { MonthPayload, MonthsMeta } from '../lib/cache/types';
 
 interface DashboardContextValue {
@@ -181,12 +182,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.mes, loading]);
 
-  // Pull-to-refresh: fuerza red para los meses visibles + metadatos.
+  // Boton "Actualizar" = HARD REFRESH: borra TODA la cache local (meses, meta y
+  // mapa) y recarga la pagina. Con la cache vacia, el arranque vuelve a bajar
+  // TODO fresco desde la BD, asi los ajustes del backend (homologacion, estados,
+  // etc.) se ven de inmediato sin quedar servidos por cache vieja.
   const refresh = useCallback(async () => {
-    try { const { data } = await dashboardRepo.getMonthsMeta({ force: true }); applyMeta(data); } catch { /* seguimos con cache */ }
-    const objetivo = filters.mes.length ? filters.mes : (mesList.length ? [mesList[mesList.length - 1]] : []);
-    await Promise.all(objetivo.map(m => loadMonth(m, true)));
-  }, [filters.mes, mesList, applyMeta, loadMonth]);
+    try { await dashboardRepo.clear(); } catch { /* ignore */ }
+    try { await MapaCache.clear(); } catch { /* ignore */ }
+    if (typeof window !== 'undefined') window.location.reload();
+  }, []);
 
   // ---- Derivar RawData a partir de los meses cargados ----
   const raw: RawData | null = useMemo(() => {

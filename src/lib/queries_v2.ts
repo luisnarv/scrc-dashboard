@@ -3,7 +3,7 @@ import { query } from '../app/lib/db';
 // Formas de fila que devuelve `pg` en cada consulta. Los agregados (COUNT/SUM)
 // llegan como string, por eso el mapeo los envuelve en Number().
 interface RawRowV2 {
-  fecha: string | null;
+  Fecha: string | null;
   cedula: string | null;
   Nombre: string | null;
   Tipo_Brigada_Operaciones: string | null;
@@ -36,6 +36,23 @@ interface EmpRowV2 {
   EnBrigadas: boolean | null;
 }
 
+// Homologación de tipo de brigada — réplica EXACTA de homologar_brigada_dinamica
+// (Prueba_etl_validation.py §3.A). Convierte el nombre crudo de SIPREM
+// (tipo_brigada = "SCR PESADA"…) al nombre oficial que usan el dashboard y los
+// colores ("Brigada Pesada"…). Regla especial (D) por suspensión "D - DISPONIBLE".
+const brigadaHomol = (a: string) => `CASE
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA' AND UPPER(TRIM(COALESCE(${a}.tipo_suspension_solicitada,''))) = 'D - DISPONIBLE' THEN '(D) Brigada Pesada'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA' THEN 'Brigada Pesada'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA DISPONIBILIDAD' THEN 'SCR DISPONIBLE'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MINI CANASTA' THEN 'Brigada Minicanasta'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR LIVIANA' THEN 'Brigada Liviana'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MULTIFAMILIAR' THEN 'Gestor Integral Multi'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MEDIDA ESPECIAL' THEN 'Brigada Pesada MT-AT'
+    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'CANASTA' THEN 'Brigada Canasta'
+    WHEN ${a}.tipo_brigada IS NULL THEN 'SIN CLASIFICAR'
+    ELSE INITCAP(${a}.tipo_brigada)
+  END`;
+
 export async function getDashboardDataV2(mes?: string) {
   const params: unknown[] = [];
   const activo = !!(mes && mes !== 'ALL');
@@ -47,36 +64,42 @@ export async function getDashboardDataV2(mes?: string) {
   try {
     const rawRes = await query(`
       SELECT 
-        mo.fecha_cierre::text as "fecha", 
+        mo.fecha_cierre::text as "Fecha", 
         mo.id_tecnico as cedula, 
         MAX(mo.tecnico) as "Nombre", 
-        MAX(mo.tipo_brigada) as "Tipo_Brigada_Operaciones",
-        MAX(mo.tipo_brigada) as "Tipo_Brigada_Mes", 
+        MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Operaciones",
+        MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Mes", 
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym", 
         MAX(mo.zona) as "zona", 
         MAX(mb."Supervisor") as "supervisor",
-        SUM(CASE WHEN me."Estado" = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
-        SUM(CASE WHEN me."Estado" = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
-        SUM(CASE WHEN me."Estado" = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-        SUM(CASE WHEN me."Estado" = 'Fallida' AND mt."Valor"::numeric > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
-        SUM(CASE WHEN me."Estado" = 'Fallida' AND (mt."Valor"::numeric IS NULL OR mt."Valor"::numeric = 0) THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND mt."Valor"::numeric > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (mt."Valor"::numeric IS NULL OR mt."Valor"::numeric = 0) THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
         COUNT(*) as "Visitas",
         
         -- Multiplicador dinámico de tarifa basado en la fecha
         SUM(
-          COALESCE(mt."Valor"::numeric, 0) * 
-          CASE 
-            WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192 
-            ELSE 1.1584 
-          END
+          CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN
+            COALESCE(mt."Valor"::numeric, 0) * 
+            CASE 
+              WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192 
+              ELSE 1.1584 
+            END
+          ELSE 0 END
         ) as "Ingresos",
         
-        MAX(COALESCE(mm."Meta_Ajustada"::numeric, mm."Meta_Inicial"::numeric, 0)) as "Meta_Facturacion", 
+        0 as "Meta_Facturacion", 
         SUM(COALESCE(mt."Valor"::numeric, 0)) as "valor_fact_base", 
         0 as "valor_produccion", 
         0 as "margen_neto",
-        0 as "Asignacion", 
-        0 as "Perdidas_COP", 
+        MAX(COALESCE(mm."Meta_Ajustada"::numeric, mm."Meta_Inicial"::numeric, 0)) * COUNT(DISTINCT mo.fecha_cierre) as "Asignacion", 
+        SUM(
+          CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN
+            COALESCE(mt."Valor"::numeric, 0)
+          ELSE 0 END
+        ) as "Perdidas_COP", 
         0 as "Costo_Operativo"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN dbanalitica.maestro_brigadas mb 
@@ -90,11 +113,11 @@ export async function getDashboardDataV2(mes?: string) {
            mo.zona = mt."ZONA" AND 
            mo.av_resultado = mt."AV/RESULTADO" AND 
            mo.accion = mt."ACCION" AND 
-           mo.tipo_brigada = mt."TIPO BRIGADA" AND
+           COALESCE(mb."Tipo Brigada", mo.tipo_brigada) = mt."TIPO BRIGADA" AND
            mo.subaccion_subanomalia = mt."SUBACCION/SUBANOMALIA"
       LEFT JOIN dbanalitica.maestro_metas mm ON 
-           mo.tipo_brigada = mm."Tipo_Brigada" AND 
-           mo.zona = mm."ZONA"
+           COALESCE(mb."Tipo Brigada", mo.tipo_brigada) = mm."Tipo_Brigada" AND 
+           mb."Zona" = mm."ZONA"
       ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
       GROUP BY mo.fecha_cierre, mo.id_tecnico
     `, params);
@@ -112,7 +135,7 @@ export async function getDashboardDataV2(mes?: string) {
     `, params);
 
     const rawRecords = rawRes.rows.map((r: RawRowV2) => ({
-      Fecha: r.fecha,
+      Fecha: r.Fecha,
       Cedula: r.cedula,
       Nombre: r.Nombre,
       Tipo_Brigada_Operaciones: r.Tipo_Brigada_Operaciones,
@@ -156,7 +179,7 @@ export async function getDashboardDataV2(mes?: string) {
       const mesRes = await query(`
         SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
-               MAX(mo.tipo_brigada) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
@@ -179,11 +202,15 @@ export async function getDashboardDataV2(mes?: string) {
       `, params);
 
     const dispRes = await query(`
-        SELECT fecha_cierre::text as "Fecha", tipo_brigada as "Tipo_Brigada", zona as "Zona", COUNT(DISTINCT id_tecnico) as "BrigadasActivas"
-        FROM dbanalitica.historico_mo
-        ${fechaCond}
-        GROUP BY fecha_cierre, tipo_brigada, zona
-        ORDER BY fecha_cierre, tipo_brigada
+        SELECT mo.fecha_cierre::text as "Fecha",
+               ${brigadaHomol('mo')} as "Tipo_Brigada",
+               mo.zona as "Zona",
+               COUNT(DISTINCT mo.id_tecnico) as "BrigadasActivas"
+        FROM dbanalitica.historico_mo mo
+        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
+        ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
+        GROUP BY mo.fecha_cierre, ${brigadaHomol('mo')}, mo.zona
+        ORDER BY mo.fecha_cierre, ${brigadaHomol('mo')}
       `, params);
 
     return {
@@ -300,8 +327,8 @@ export async function getMonthsDataV2() {
 
     const evolutivoRes = await query(`
       SELECT 
-        to_char(fecha_cierre, 'YYYY-MM') as "Mes", 
-        tipo_brigada as "TipoBrigada", 
+        to_char(fecha_cierre, 'YYYY-MM') as "Mes",
+        ${brigadaHomol('mo')} as "TipoBrigada",
         COUNT(DISTINCT nic) as "Cantidad_NIC",
         COUNT(*) as "Total_Ordenes", 
         SUM(CASE WHEN mo.accion = 'SUSPENSION' THEN 1 ELSE 0 END) as "Total_Suspension",
@@ -314,7 +341,7 @@ export async function getMonthsDataV2() {
         (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
-      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.tipo_brigada
+      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${brigadaHomol('mo')}
     `);
 
     return {

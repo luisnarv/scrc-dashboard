@@ -125,15 +125,24 @@ export default function OperativoPage() {
       const dispData = raw.disp;
       
       const DISPONIBLES_TYPES = [
-        'brigada minicanasta',
-        'brigada canasta',
+        'brigada tipo canasta',
+        'brigada tipo minicanasta',
         'pesada mt-at',
-        'brigada pesada mt-at',
-        'gestor integral multi',
-        'scr disponible',
-        'scr pesada disponibilidad'
+        'gestor integral multi'
       ];
-      const isDisponible = (tb?: string) => tb ? DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase()) : false;
+      
+      const isDisponible = (tb: string | undefined, dateStr: string) => {
+        if (!tb) return false;
+        
+        // Verificar si el día es domingo (getDay() === 0)
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          if (dateObj.getDay() === 0) return true; // En domingo, todas las que trabajan se consideran disponibles
+        }
+
+        return DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase());
+      };
 
       dias.forEach(d => {
         const matchingDisp = dispData.filter((r: any) => {
@@ -145,9 +154,9 @@ export default function OperativoPage() {
         
         const operativas = byDay[d].brigadas.size;
         
-        // Pool Disponible = solo las 4 categorías que tienen concepto de pool
+        // Pool Disponible = las predefinidas + todas en domingo
         const totalDisp = matchingDisp
-          .filter((r: any) => isDisponible(r.Tipo_Brigada))
+          .filter((r: any) => isDisponible(r.Tipo_Brigada, d))
           .reduce((sum: number, r: any) => sum + (Number(r.BrigadasActivas) || 0), 0);
         
         byDay[d].oper = operativas; // Mantenemos todas las que trabajaron como operativas
@@ -301,7 +310,9 @@ export default function OperativoPage() {
     // completo y las tablas: extiende la paleta de series con tonos extra para que
     // cada tipo tenga color propio cuando se muestran TODAS las brigadas.
     const evPal = ['#38764C', '#78BE20', '#2f6f8f', '#B5BD00', '#c2410c'];
-    const evColor = (t: string, idx: number) => idx < 5 ? evPal[idx] : '#97999B';
+    // Color FIJO por brigada (COLOR_BRIGADA, por nombre homologado); si no está,
+    // cae a la paleta de reserva por posición y por último a gris.
+    const evColor = (t: string, idx: number) => COLOR_BRIGADA[String(t).trim().toUpperCase()] || evPal[idx % evPal.length] || '#97999B';
 
     const evTop = evTotales.slice(0, 5).map((x, idx) => ({ ...x, color: evColor(x.t, idx) }));
     const evGran = evTotales.reduce((s, x) => s + x.total, 0);

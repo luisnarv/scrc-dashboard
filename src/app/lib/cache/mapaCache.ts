@@ -1,4 +1,4 @@
-import { idbGet, idbPut } from './idb';
+import { idbGet, idbPut, idbClear } from './idb';
 import { STORE_MAPA, TTL_MAPA_MS } from './config';
 
 // Cache local del Mapa Operativo Detallado, por combinacion mes|zona|proy.
@@ -22,5 +22,9 @@ export const MapaCache = {
   async put(mes: string, zona: string, proy: string, pts: any[], stats: any[], filtros: any): Promise<void> {
     if (!pts.length && !stats.length) return; // no cachear respuestas vacias
     await idbPut(STORE_MAPA, { key: clave(mes, zona, proy), pts, stats, filtros, fetchedAt: Date.now() });
+  },
+  // Vacia toda la cache del mapa (usado por el boton "Actualizar").
+  async clear(): Promise<void> {
+    await idbClear(STORE_MAPA);
   },
 };

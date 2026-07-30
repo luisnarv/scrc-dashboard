@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDashboardDataV2 } from '../../../../lib/queries_v2';
 
+export const dynamic = 'force-dynamic';
+
 // Datos ACOTADOS A UN MES. El dashboard pide un mes a la vez (Offline-First):
 //   /api/data/base?mes=2026-07  -> solo julio
 //   /api/data/base              -> todo el historico (compatibilidad)
