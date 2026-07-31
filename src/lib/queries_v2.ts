@@ -58,8 +58,25 @@ export async function getDashboardDataV2(mes?: string) {
   const activo = !!(mes && mes !== 'ALL');
   if (activo) params.push(mes);
 
-  const fechaCond = activo ? "WHERE to_char(fecha_cierre, 'YYYY-MM') = $1" : '';
+  const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.obs_tecnico ILIKE 'VS:%'";
+  const fechaCond = activo 
+    ? `WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1 AND ${baseMoCond}` 
+    : `WHERE ${baseMoCond}`;
   const mesymCond = activo ? 'WHERE mes_ym = $1' : '';
+
+  // Override de tarifa (regla puntual): las órdenes de "Suspensión en bornera con
+  // brigada pesada" = subacción "SUSPENSIÓN EN CARGAS" + brigada pesada, en zona
+  // Sur (zona_maestro), toman una tarifa FIJA por fecha que PISA el valor del
+  // maestro. Solo cambia el VALOR, no el estado. (Réplica del paso [3] del ETL.)
+  const VALOR_ORDEN = `CASE
+          WHEN UPPER(mo.subaccion_subanomalia) LIKE 'SUSPENSI%EN CARGAS'
+           AND UPPER(TRIM(mo.tipo_brigada)) IN ('SCR PESADA', 'SCR MEDIDA ESPECIAL')
+           AND UPPER(COALESCE(mo.zona_maestro, '')) = 'SUR'
+          THEN (CASE WHEN mo.fecha_cierre < DATE '2026-01-01' THEN 48122
+                     WHEN mo.fecha_cierre <= DATE '2026-05-31' THEN 55744
+                     ELSE 44744 END)::numeric
+          ELSE COALESCE(mt."Valor"::numeric, 0)
+        END`;
 
   try {
     const rawRes = await query(`
@@ -75,23 +92,23 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
         SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
         SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND mt."Valor"::numeric > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (mt."Valor"::numeric IS NULL OR mt."Valor"::numeric = 0) THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (${VALOR_ORDEN}) > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
+        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (${VALOR_ORDEN}) = 0 THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
         COUNT(*) as "Visitas",
         
         -- Multiplicador dinámico de tarifa basado en la fecha
         SUM(
           CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN
-            COALESCE(mt."Valor"::numeric, 0) * 
-            CASE 
-              WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192 
-              ELSE 1.1584 
+            (${VALOR_ORDEN}) *
+            CASE
+              WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192
+              ELSE 1.1584
             END
           ELSE 0 END
         ) as "Ingresos",
         
         0 as "Meta_Facturacion", 
-        SUM(COALESCE(mt."Valor"::numeric, 0)) as "valor_fact_base", 
+        SUM(${VALOR_ORDEN}) as "valor_fact_base",
         0 as "valor_produccion", 
         0 as "margen_neto",
         -- "Total asignado" = ordenes realmente recibidas = efectivas + fallidas + perdidas
@@ -101,9 +118,9 @@ export async function getDashboardDataV2(mes?: string) {
          + SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END)) as "Asignacion",
         SUM(
           CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN
-            COALESCE(mt."Valor"::numeric, 0)
+            (${VALOR_ORDEN})
           ELSE 0 END
-        ) as "Perdidas_COP", 
+        ) as "Perdidas_COP",
         0 as "Costo_Operativo"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN dbanalitica.maestro_brigadas mb 
@@ -200,7 +217,7 @@ export async function getDashboardDataV2(mes?: string) {
         FROM dbanalitica.historico_mo mo
         LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
         LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
-        ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
+        ${fechaCond}
         GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico
       `, params);
 
@@ -230,10 +247,9 @@ export async function getDashboardDataV2(mes?: string) {
   }
 }
 
-export async function getMapDataV2(mes?: string, zona?: string) {
-  const filterClauses: string[] = [];
+export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
   const values: unknown[] = [];
-
+  const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.obs_tecnico ILIKE 'VS:%'"];
   if (mes && mes !== 'ALL') {
     const meses = mes.split(',');
     const monthClauses = meses.map(m => {
@@ -241,7 +257,7 @@ export async function getMapDataV2(mes?: string, zona?: string) {
       const i1 = values.length;
       values.push(`${m}-01`);
       const i2 = values.length;
-      return `(fecha_cierre >= $${i1}::date AND fecha_cierre < $${i2}::date + interval '1 month')`;
+      return `(mo.fecha_cierre >= $${i1}::date AND mo.fecha_cierre < $${i2}::date + interval '1 month')`;
     });
     filterClauses.push(`(${monthClauses.join(' OR ')})`);
   }
@@ -293,14 +309,14 @@ export async function getMapDataV2(mes?: string, zona?: string) {
 
     const listsQuery = `
       SELECT
-        array_agg(DISTINCT tecnico) FILTER (WHERE tecnico IS NOT NULL) as tecnicos,
-        array_agg(DISTINCT accion) FILTER (WHERE accion IS NOT NULL) as acciones,
-        array_agg(DISTINCT subaccion_subanomalia) FILTER (WHERE subaccion_subanomalia IS NOT NULL) as subacciones,
-        array_agg(DISTINCT estado_osf) FILTER (WHERE estado_osf IS NOT NULL) as estados,
-        array_agg(DISTINCT municipio) FILTER (WHERE municipio IS NOT NULL) as municipios,
-        array_agg(DISTINCT split_part(localidad_barrio, '/', 2)) FILTER (WHERE localidad_barrio IS NOT NULL) as barrios,
-        array_agg(DISTINCT zona) FILTER (WHERE zona IS NOT NULL) as zonas
-      FROM dbanalitica.historico_mo
+        array_agg(DISTINCT mo.tecnico) FILTER (WHERE mo.tecnico IS NOT NULL) as tecnicos,
+        array_agg(DISTINCT mo.accion) FILTER (WHERE mo.accion IS NOT NULL) as acciones,
+        array_agg(DISTINCT mo.subaccion_subanomalia) FILTER (WHERE mo.subaccion_subanomalia IS NOT NULL) as subacciones,
+        array_agg(DISTINCT mo.estado_osf) FILTER (WHERE mo.estado_osf IS NOT NULL) as estados,
+        array_agg(DISTINCT mo.municipio) FILTER (WHERE mo.municipio IS NOT NULL) as municipios,
+        array_agg(DISTINCT split_part(mo.localidad_barrio, '/', 2)) FILTER (WHERE mo.localidad_barrio IS NOT NULL) as barrios,
+        array_agg(DISTINCT mo.zona) FILTER (WHERE mo.zona IS NOT NULL) as zonas
+      FROM dbanalitica.historico_mo mo
       ${whereFilters}
     `;
     const listsRes = await query(listsQuery, values);
@@ -323,7 +339,7 @@ export async function getMonthsDataV2() {
              COUNT(*)::int as "count",
              MAX(fecha_carga)::text as "version"
       FROM dbanalitica.historico_mo
-      WHERE fecha_cierre IS NOT NULL
+      WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND obs_tecnico ILIKE 'VS:%'
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
       ORDER BY 1
     `);
@@ -344,6 +360,7 @@ export async function getMonthsDataV2() {
         (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
+      WHERE mo.id_tecnico IS NOT NULL AND mo.obs_tecnico ILIKE 'VS:%'
       GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${brigadaHomol('mo')}
     `);
 
@@ -365,7 +382,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
   const lista = (barriosParam || '').split('||').map(s => s.trim()).filter(Boolean);
   if (!lista.length) return { rows: [] };
 
-  const where: string[] = [];
+  const where: string[] = ["h.id_tecnico IS NOT NULL", "h.obs_tecnico ILIKE 'VS:%'"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
@@ -411,7 +428,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
 //   getObsDataV2('2026-07', '123456')            -> por NIC
 //   getObsDataV2('2026-07', undefined, 'A||B')   -> por barrios
 export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: string): Promise<{ rows: unknown[] }> {
-  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''"];
+  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''", "h.id_tecnico IS NOT NULL", "h.obs_tecnico ILIKE 'VS:%'"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
