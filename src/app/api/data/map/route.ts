@@ -1,7 +1,10 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { NextResponse } from 'next/server';
 import { getMapDataV2 } from '../../../../lib/queries_v2';
 
-export const revalidate = 3600; // Caché de 1 hora para evitar consultas pesadas repetidas
+
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
