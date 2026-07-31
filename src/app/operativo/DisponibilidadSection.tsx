@@ -47,7 +47,9 @@ export default function DisponibilidadSection() {
       data = data.filter(r => r._Zona === filters.zona || r._ZonaDet === filters.zona);
     }
 
-    // Obtener listas para filtros locales
+    // Obtener listas para filtros locales (ignorando 'SIN CLASIFICAR')
+    data = data.filter(r => r.Tipo_Brigada && r.Tipo_Brigada.toUpperCase() !== 'SIN CLASIFICAR');
+
     const tiposSet = new Set<string>();
     const zonasSet = new Set<string>();
     data.forEach(r => {

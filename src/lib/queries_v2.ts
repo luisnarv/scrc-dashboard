@@ -41,16 +41,16 @@ interface EmpRowV2 {
 // (tipo_brigada = "SCR PESADA"…) al nombre oficial que usan el dashboard y los
 // colores ("Brigada Pesada"…). Regla especial (D) por suspensión "D - DISPONIBLE".
 const brigadaHomol = (a: string) => `CASE
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA' AND UPPER(TRIM(COALESCE(${a}.tipo_suspension_solicitada,''))) = 'D - DISPONIBLE' THEN '(D) Brigada Pesada'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA' THEN 'Brigada Pesada'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR PESADA DISPONIBILIDAD' THEN 'SCR DISPONIBLE'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MINI CANASTA' THEN 'Brigada Minicanasta'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR LIVIANA' THEN 'Brigada Liviana'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MULTIFAMILIAR' THEN 'Gestor Integral Multi'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'SCR MEDIDA ESPECIAL' THEN 'Brigada Pesada MT-AT'
-    WHEN UPPER(TRIM(${a}.tipo_brigada)) = 'CANASTA' THEN 'Brigada Canasta'
-    WHEN ${a}.tipo_brigada IS NULL THEN 'SIN CLASIFICAR'
-    ELSE INITCAP(${a}.tipo_brigada)
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA' AND UPPER(TRIM(COALESCE(${a}.tipo_suspension_solicitada,''))) = 'D - DISPONIBLE' THEN '(D) Brigada Pesada'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA' THEN 'Brigada Pesada'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA DISPONIBILIDAD' THEN 'SCR DISPONIBLE'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MINI CANASTA' THEN 'Brigada Minicanasta'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR LIVIANA' THEN 'Brigada Liviana'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MULTIFAMILIAR' THEN 'Gestor Integral Multi'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MEDIDA ESPECIAL' THEN 'Brigada Pesada MT-AT'
+    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'CANASTA' THEN 'Brigada Canasta'
+    WHEN COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada) IS NULL THEN 'SIN CLASIFICAR'
+    ELSE INITCAP(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))
   END`;
 
 export async function getDashboardDataV2(mes?: string) {
@@ -64,79 +64,53 @@ export async function getDashboardDataV2(mes?: string) {
     : `WHERE ${baseMoCond}`;
   const mesymCond = activo ? 'WHERE mes_ym = $1' : '';
 
-  // Override de tarifa (regla puntual): las órdenes de "Suspensión en bornera con
-  // brigada pesada" = subacción "SUSPENSIÓN EN CARGAS" + brigada pesada, en zona
-  // Sur (zona_maestro), toman una tarifa FIJA por fecha que PISA el valor del
-  // maestro. Solo cambia el VALOR, no el estado. (Réplica del paso [3] del ETL.)
-  const VALOR_ORDEN = `CASE
-          WHEN UPPER(mo.subaccion_subanomalia) LIKE 'SUSPENSI%EN CARGAS'
-           AND UPPER(TRIM(mo.tipo_brigada)) IN ('SCR PESADA', 'SCR MEDIDA ESPECIAL')
-           AND UPPER(COALESCE(mo.zona_maestro, '')) = 'SUR'
-          THEN (CASE WHEN mo.fecha_cierre < DATE '2026-01-01' THEN 48122
-                     WHEN mo.fecha_cierre <= DATE '2026-05-31' THEN 55744
-                     ELSE 44744 END)::numeric
-          ELSE COALESCE(mt."Valor"::numeric, 0)
-        END`;
-
   try {
     const rawRes = await query(`
       SELECT 
         mo.fecha_cierre::text as "Fecha", 
         mo.id_tecnico as cedula, 
         MAX(mo.tecnico) as "Nombre", 
-        MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Operaciones",
-        MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Mes", 
-        MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym", 
-        MAX(mo.zona) as "zona", 
+        MAX(mo.brigada_homologada) as "Tipo_Brigada_Operaciones",
+        MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes",
+        MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym",
+        MAX(mo.zona) as "zona",
         MAX(mb."Supervisor") as "supervisor",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (${VALOR_ORDEN}) > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' AND (${VALOR_ORDEN}) = 0 THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
+        SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
+        SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
+        SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+        SUM(CASE WHEN mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0 THEN 1 ELSE 0 END) as "Fallida_Con_Pago",
+        SUM(CASE WHEN mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) = 0 THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
         COUNT(*) as "Visitas",
-        
-        -- Multiplicador dinámico de tarifa basado en la fecha
+
+        -- Ingresos = valor PRECALCULADO (columna valor_orden, con cascada + override Sur) x factor por fecha
         SUM(
-          CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN
-            (${VALOR_ORDEN}) *
+          CASE WHEN mo.estado_norm = 'Efectiva' THEN
+            COALESCE(mo.valor_orden,0) *
             CASE
               WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192
               ELSE 1.1584
             END
           ELSE 0 END
         ) as "Ingresos",
-        
-        0 as "Meta_Facturacion", 
-        SUM(${VALOR_ORDEN}) as "valor_fact_base",
-        0 as "valor_produccion", 
+
+        0 as "Meta_Facturacion",
+        SUM(COALESCE(mo.valor_orden,0)) as "valor_fact_base",
+        0 as "valor_produccion",
         0 as "margen_neto",
-        -- "Total asignado" = ordenes realmente recibidas = efectivas + fallidas + perdidas
-        -- (no la meta; asi refleja el trabajo real y crece si asignan mas).
-        (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)
-         + SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END)
-         + SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END)) as "Asignacion",
-        SUM(
-          CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN
-            (${VALOR_ORDEN})
-          ELSE 0 END
-        ) as "Perdidas_COP",
+        -- "Total asignado" = efectivas + fallidas + perdidas (trabajo real recibido)
+        (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)
+         + SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END)
+         + SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END)) as "Asignacion",
+        SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN COALESCE(mo.valor_orden,0) ELSE 0 END) as "Perdidas_COP",
         0 as "Costo_Operativo"
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_brigadas mb 
-        ON mo.id_tecnico = mb."Cedula" 
+      LEFT JOIN dbanalitica.maestro_brigadas mb
+        ON mo.id_tecnico = mb."Cedula"
         AND (
-          mb."Fecha" IS NULL 
+          mb."Fecha" IS NULL
           OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha"
         )
-      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
-      LEFT JOIN dbanalitica.maestro_tarifas mt ON 
-           mo.zona = mt."ZONA" AND 
-           mo.av_resultado = mt."AV/RESULTADO" AND 
-           mo.accion = mt."ACCION" AND 
-           COALESCE(mb."Tipo Brigada", mo.tipo_brigada) = mt."TIPO BRIGADA" AND
-           mo.subaccion_subanomalia = mt."SUBACCION/SUBANOMALIA"
-      ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
+      ${fechaCond}
       GROUP BY mo.fecha_cierre, mo.id_tecnico
     `, params);
 
@@ -359,6 +333,7 @@ export async function getMonthsDataV2() {
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
         (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
+      LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
       LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       WHERE mo.id_tecnico IS NOT NULL AND mo.observacion ILIKE 'VS:%'
       GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${brigadaHomol('mo')}
