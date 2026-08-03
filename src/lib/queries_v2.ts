@@ -168,10 +168,10 @@ export async function getDashboardDataV2(mes?: string) {
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
                -- Conteos por tipo de gestión (réplica de las banderas _EV_* del ETL):
                -- suspensión/mantiene/reconexión/pqr = sobre Efectivas; imposibilidad = Fallida; resistencia = Perdida.
-               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+               SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
                SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
                SUM(CASE WHEN mo.tipo_os = 'TO502' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
-               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
+               SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
                SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
                SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
                SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
@@ -251,7 +251,7 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
         TRIM(split_part(gps, ',', 1)) as la,
         TRIM(split_part(gps, ',', 2)) as lo,
         accion as ac,
-        subaccion_subanomalia as su,
+        subaccion_homologada as su,
         tecnico as te,
         municipio as mu,
         split_part(localidad_barrio, '/', 2) as ba,
@@ -270,7 +270,7 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
       SELECT
         array_agg(DISTINCT mo.tecnico) FILTER (WHERE mo.tecnico IS NOT NULL) as tecnicos,
         array_agg(DISTINCT mo.accion) FILTER (WHERE mo.accion IS NOT NULL) as acciones,
-        array_agg(DISTINCT mo.subaccion_subanomalia) FILTER (WHERE mo.subaccion_subanomalia IS NOT NULL) as subacciones,
+        array_agg(DISTINCT mo.subaccion_homologada) FILTER (WHERE mo.subaccion_homologada IS NOT NULL) as subacciones,
         array_agg(DISTINCT mo.estado_osf) FILTER (WHERE mo.estado_osf IS NOT NULL) as estados,
         array_agg(DISTINCT mo.municipio) FILTER (WHERE mo.municipio IS NOT NULL) as municipios,
         array_agg(DISTINCT split_part(mo.localidad_barrio, '/', 2)) FILTER (WHERE mo.localidad_barrio IS NOT NULL) as barrios,
@@ -309,10 +309,10 @@ export async function getMonthsDataV2() {
         mo.brigada_homologada as "TipoBrigada",
         COUNT(DISTINCT nic) as "Cantidad_NIC",
         COUNT(*) as "Total_Ordenes", 
-        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+        SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
         SUM(CASE WHEN mo.tipo_os = 'TO502' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
-        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
+        SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
@@ -363,7 +363,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
       TRIM(split_part(h.gps, ',', 1))          as "la",
       TRIM(split_part(h.gps, ',', 2))          as "lo",
       h.accion                                 as "ac",
-      h.subaccion_subanomalia                  as "su",
+      h.subaccion_homologada                  as "su",
       h.tecnico                                as "te",
       h.municipio                              as "mu",
       split_part(h.localidad_barrio, '/', 2)   as "ba",
@@ -411,7 +411,7 @@ export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: st
       h.fecha_cierre::text                as "fe",
       h.nic                               as "nic",
       h.estado_norm                       as "es",
-      h.subaccion_subanomalia             as "su",
+      h.subaccion_homologada             as "su",
       h.observacion                       as "ob"
     FROM dbanalitica.historico_mo h
     WHERE ${where.join(' AND ')}
