@@ -70,18 +70,27 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(CASE WHEN mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) = 0 THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
         COUNT(*) as "Visitas",
 
-        -- Ingresos = valor PRECALCULADO (columna valor_orden, con cascada + override Sur) x factor por fecha
-        SUM(
-          CASE WHEN mo.estado_norm = 'Efectiva' THEN
-            COALESCE(mo.valor_orden,0) *
-            CASE
-              WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192
-              ELSE 1.1584
-            END
-          ELSE 0 END
-        ) as "Ingresos",
+        -- Producción valorizada HÍBRIDA (para cuadrar con el manual):
+        --  · 5 brigadas (Pesada Disponible, MT-AT, Gestor/Multi, Minicanasta, Canasta) -> META FIJA (no se suma por orden)
+        --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real de órdenes (valor_orden x 1.30045647872)
+        (CASE
+          WHEN MAX(mo.brigada_homologada) IN ('Pesada Disponible','Brigada Pesada MT-AT','Gestor Integral Multi','Brigada Minicanasta','Brigada Canasta')
+            THEN MAX(CASE
+                   WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
+                     THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+                   ELSE COALESCE(mm.costo,0)/24.0 END)
+          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END)
+        END) as "Ingresos",
 
-        0 as "Meta_Facturacion",
+        -- Meta de facturación diaria (fija por día/sábado, sin prorrateo):
+        --   Grupo A (Pesada / (D) Pesada / Liviana) = Costo/184 * (sábado 6h | día 8h)
+        --   Grupo B (MT-AT / Minicanasta / Canasta / Gestor / Pesada Disponible) = Costo/24
+        -- El Costo mensual sale de maestro_metas (join mm). NO LABORO -> el día no existe -> sin meta.
+        MAX(CASE
+          WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
+            THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+          ELSE COALESCE(mm.costo,0)/24.0
+        END) as "Meta_Facturacion",
         SUM(COALESCE(mo.valor_orden,0)) as "valor_fact_base",
         0 as "valor_produccion",
         0 as "margen_neto",
@@ -98,8 +107,27 @@ export async function getDashboardDataV2(mes?: string) {
           mb."Fecha" IS NULL
           OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7)
         )
+      -- Costo mensual por brigada (maestro_metas), mapeando el nombre del maestro
+      -- (seguimiento) al nombre homologado de historico_mo. Costo igual en ambas zonas.
+      LEFT JOIN (
+        SELECT (CASE "Tipo_Brigada"
+                  WHEN 'Brigada Tipo Pesada'      THEN 'Brigada Pesada'
+                  WHEN '(D) Brigada Tipo Pesada'  THEN '(D) Brigada Pesada'
+                  WHEN 'Brigada Tipo Liviana'     THEN 'Brigada Liviana'
+                  WHEN 'Brigada Pesada/ MT AT'    THEN 'Brigada Pesada MT-AT'
+                  WHEN 'Brigada Tipo Minicanasta' THEN 'Brigada Minicanasta'
+                  WHEN 'Brigada Tipo Canasta'     THEN 'Brigada Canasta'
+                  ELSE "Tipo_Brigada" END) AS brig,
+               MAX("Costo"::numeric) AS costo
+        FROM dbanalitica.maestro_metas
+        GROUP BY 1
+      ) mm ON mm.brig = mo.brigada_homologada
       ${fechaCond}
-      GROUP BY mo.fecha_cierre, mo.id_tecnico
+      -- Se agrupa TAMBIÉN por brigada_homologada: si un técnico tuvo órdenes de
+      -- brigadas distintas el mismo día, cada brigada queda con SUS órdenes (el
+      -- conteo "por día y tipo de brigada" cuadra). Los totales y el conteo de
+      -- técnicos distintos (Set de Cédula en el front) no cambian.
+      GROUP BY mo.fecha_cierre, mo.id_tecnico, mo.brigada_homologada
     `, params);
 
     const cosRes = await query(`
@@ -144,13 +172,18 @@ export async function getDashboardDataV2(mes?: string) {
 
     // Replicando las otras consultas requeridas para la compatibilidad (emps, mesRes, dispRes)
     // Asumiendo que tecnico_mes, costos_empleado y la disponibilidad se mantienen o se derivan igual.
-    const empRes = await query(`
-      SELECT mes_ym, empleado as "Empleado", valor_total as "Valor_Total", en_brigadas as "EnBrigadas", cedula_brigada as "Cedula"
-      FROM dbanalitica.costos_empleado
-      ${mesymCond}
-    `, params);
-    
-    const emps = empRes.rows.map((r: EmpRowV2) => ({
+    // costos_empleado es OPCIONAL: si la tabla no existe (hoy no está creada), emps
+    // queda vacío en vez de tumbar toda la consulta. Los costos operativos van en 0.
+    const _ceExiste = await query(`SELECT to_regclass('dbanalitica.costos_empleado') as t`);
+    const empRows: EmpRowV2[] = _ceExiste.rows[0]?.t
+      ? (await query(`
+          SELECT mes_ym, empleado as "Empleado", valor_total as "Valor_Total", en_brigadas as "EnBrigadas", cedula_brigada as "Cedula"
+          FROM dbanalitica.costos_empleado
+          ${mesymCond}
+        `, params)).rows
+      : [];
+
+    const emps = empRows.map((r: EmpRowV2) => ({
       Empleado: r.Empleado,
       Valor_Total: Number(r.Valor_Total),
       EnBrigadas: r.EnBrigadas ? 'SI' : 'NO'
@@ -164,7 +197,7 @@ export async function getDashboardDataV2(mes?: string) {
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
                COUNT(*) as "Visitas",
-               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * CASE WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192 ELSE 1.1584 END ELSE 0 END) as "Ingresos_COP",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END) as "Ingresos_COP",
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
                -- Conteos por tipo de gestión (réplica de las banderas _EV_* del ETL):
                -- suspensión/mantiene/reconexión/pqr = sobre Efectivas; imposibilidad = Fallida; resistencia = Perdida.
