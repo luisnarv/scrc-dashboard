@@ -37,21 +37,9 @@ interface EmpRowV2 {
 }
 
 // Homologación de tipo de brigada — réplica EXACTA de homologar_brigada_dinamica
-// (Prueba_etl_validation.py §3.A). Convierte el nombre crudo de SIPREM
-// (tipo_brigada = "SCR PESADA"…) al nombre oficial que usan el dashboard y los
-// colores ("Brigada Pesada"…). Regla especial (D) por suspensión "D - DISPONIBLE".
-const brigadaHomol = (a: string) => `CASE
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA' AND UPPER(TRIM(COALESCE(${a}.tipo_suspension_solicitada,''))) = 'D - DISPONIBLE' THEN '(D) Brigada Pesada'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA' THEN 'Brigada Pesada'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR PESADA DISPONIBILIDAD' THEN 'SCR DISPONIBLE'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MINI CANASTA' THEN 'Brigada Minicanasta'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR LIVIANA' THEN 'Brigada Liviana'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MULTIFAMILIAR' THEN 'Gestor Integral Multi'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'SCR MEDIDA ESPECIAL' THEN 'Brigada Pesada MT-AT'
-    WHEN UPPER(TRIM(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))) = 'CANASTA' THEN 'Brigada Canasta'
-    WHEN COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada) IS NULL THEN 'SIN CLASIFICAR'
-    ELSE INITCAP(COALESCE(mb."Tipo Brigada", ${a}.tipo_brigada))
-  END`;
+// La homologación de brigada (Prueba_etl_validation.py §3.A) ahora vive en la
+// columna precalculada historico_mo.brigada_homologada (se computa en la ingesta,
+// ver prototipo_etl/ingesta_bd.py::recomputar_columnas). El dashboard solo la LEE.
 
 export async function getDashboardDataV2(mes?: string) {
   const params: unknown[] = [];
@@ -108,7 +96,7 @@ export async function getDashboardDataV2(mes?: string) {
         ON mo.id_tecnico = mb."Cedula"
         AND (
           mb."Fecha" IS NULL
-          OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha"
+          OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7)
         )
       ${fechaCond}
       GROUP BY mo.fecha_cierre, mo.id_tecnico
@@ -171,40 +159,39 @@ export async function getDashboardDataV2(mes?: string) {
       const mesRes = await query(`
         SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
-               MAX(${brigadaHomol('mo')}) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
-               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
-               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
-               SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-               COUNT(*) as "Visitas", 0 as "Ingresos_COP",
+               MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
+               SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
+               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+               COUNT(*) as "Visitas",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * CASE WHEN mo.fecha_cierre >= '2026-06-01' THEN 1.1300192 ELSE 1.1584 END ELSE 0 END) as "Ingresos_COP",
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
                -- Conteos por tipo de gestión (réplica de las banderas _EV_* del ETL):
                -- suspensión/mantiene/reconexión/pqr = sobre Efectivas; imposibilidad = Fallida; resistencia = Perdida.
-               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
-               SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
-               SUM(CASE WHEN mo.tipo_os = 'TO502' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
+               SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
+               SUM(CASE WHEN mo.tipo_os = 'TO502' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
                SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
-               SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
-               SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
-               SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
+               SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
                COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
-               (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
+               (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
         FROM dbanalitica.historico_mo mo
-        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
-        LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
-        ${fechaCond}
+        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7))
+          ${fechaCond}
         GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico
       `, params);
 
     const dispRes = await query(`
         SELECT mo.fecha_cierre::text as "Fecha",
-               ${brigadaHomol('mo')} as "Tipo_Brigada",
+               mo.brigada_homologada as "Tipo_Brigada",
                mo.zona as "Zona",
                COUNT(DISTINCT mo.id_tecnico) as "BrigadasActivas"
         FROM dbanalitica.historico_mo mo
-        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
-        ${fechaCond ? "WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1" : ""}
-        GROUP BY mo.fecha_cierre, ${brigadaHomol('mo')}, mo.zona
-        ORDER BY mo.fecha_cierre, ${brigadaHomol('mo')}
+        ${fechaCond}
+        GROUP BY mo.fecha_cierre, mo.brigada_homologada, mo.zona
+        ORDER BY mo.fecha_cierre, mo.brigada_homologada
       `, params);
 
     return {
@@ -249,11 +236,10 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
         municipio,
         split_part(localidad_barrio, '/', 2) as barrio,
         COUNT(*) as total,
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as efectivas,
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as fallidas,
-        SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as perdidas
+        SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as efectivas,
+        SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as fallidas,
+        SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as perdidas
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       WHERE mo.localidad_barrio IS NOT NULL ${andFilters}
       GROUP BY municipio, split_part(localidad_barrio, '/', 2)
     `;
@@ -270,11 +256,10 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
         municipio as mu,
         split_part(localidad_barrio, '/', 2) as ba,
         zona as zo,
-        COALESCE(me."Estado", mo.estado_osf) as es,
+        mo.estado_norm as es,
         tipo_os as "to",
         fecha_cierre::text as fe
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       ${whereFilters}
       ORDER BY fecha_cierre DESC NULLS LAST
       LIMIT 25000
@@ -321,22 +306,20 @@ export async function getMonthsDataV2() {
     const evolutivoRes = await query(`
       SELECT 
         to_char(fecha_cierre, 'YYYY-MM') as "Mes",
-        ${brigadaHomol('mo')} as "TipoBrigada",
+        mo.brigada_homologada as "TipoBrigada",
         COUNT(DISTINCT nic) as "Cantidad_NIC",
         COUNT(*) as "Total_Ordenes", 
-        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
-        SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
-        SUM(CASE WHEN mo.tipo_os = 'TO502' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
+        SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%MANTIENE%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Mantiene_Susp",
+        SUM(CASE WHEN mo.tipo_os = 'TO502' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Reconexion",
         SUM(CASE WHEN UPPER(mo.subaccion_subanomalia) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END) as "Total_Pagos",
-        SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND COALESCE(me."Estado", mo.estado_osf) = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
-        SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND COALESCE(me."Estado", mo.estado_osf) = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
-        SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
-        (SUM(CASE WHEN COALESCE(me."Estado", mo.estado_osf) = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%IMPOSIBILIDAD TECNICA%' AND mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Total_Imposibilidades",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%RESISTENCIA DEL CLIENTE%' AND mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Total_Resistencia",
+        SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
+        (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = mb."Fecha")
-      LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me ON dbanalitica.fn_normalizar(mo.subaccion_subanomalia) = me.sub
       WHERE mo.id_tecnico IS NOT NULL AND mo.observacion ILIKE 'VS:%'
-      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${brigadaHomol('mo')}
+      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.brigada_homologada
     `);
 
     return {
@@ -385,12 +368,10 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
       h.municipio                              as "mu",
       split_part(h.localidad_barrio, '/', 2)   as "ba",
       h.zona                                   as "zo",
-      COALESCE(me."Estado", h.estado_osf)      as "es",
+      h.estado_norm                            as "es",
       h.tipo_os                                as "to",
       h.fecha_cierre::text                     as "fe"
     FROM dbanalitica.historico_mo h
-    LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me
-        ON dbanalitica.fn_normalizar(h.subaccion_subanomalia) = me.sub
     WHERE ${where.join(' AND ')}
     ORDER BY h.fecha_cierre DESC NULLS LAST
     LIMIT 20000
@@ -429,14 +410,12 @@ export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: st
     SELECT
       h.fecha_cierre::text                as "fe",
       h.nic                               as "nic",
-      COALESCE(me."Estado", h.estado_osf) as "es",
+      h.estado_norm                       as "es",
       h.subaccion_subanomalia             as "su",
       h.observacion                       as "ob"
     FROM dbanalitica.historico_mo h
-    LEFT JOIN (SELECT dbanalitica.fn_normalizar("SUBACCION/SUBANOMALIA") as sub, MAX(estado) as "Estado" FROM dbanalitica.maestro_tarifas GROUP BY 1) me
-        ON dbanalitica.fn_normalizar(h.subaccion_subanomalia) = me.sub
     WHERE ${where.join(' AND ')}
-    ORDER BY (COALESCE(me."Estado", h.estado_osf) = 'Fallida') DESC, h.fecha_cierre DESC
+    ORDER BY (h.estado_norm = 'Fallida') DESC, h.fecha_cierre DESC
     LIMIT 40
   `, values);
   return { rows: res.rows };

@@ -36,13 +36,17 @@ export function useDashboard() { return useContext(DashboardContext); }
 
 const PROYS_VAL = ['Norte-Centro', 'Sur'];
 
-// Mismo umbral que antes: descarta meses cargados a medias por el ETL.
+// Descarta meses cargados a medias por el ETL (menos del 5% del promedio),
+// PERO siempre conserva el mes más reciente: es el mes en curso y aunque tenga
+// pocas órdenes (los primeros días) debe verse en el dashboard.
 function mesesValidos(counts: Record<string, number>): string[] {
   const vals = Object.values(counts);
   if (!vals.length) return [];
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
   const umbral = Math.max(10, avg * 0.05);
-  return Object.entries(counts).filter(([, c]) => c >= umbral).map(([m]) => m).sort();
+  const todos = Object.keys(counts).sort();
+  const ultimo = todos[todos.length - 1];            // mes en curso: siempre visible
+  return todos.filter(m => counts[m] >= umbral || m === ultimo);
 }
 
 // Normaliza zonas/proyecto de un mes una sola vez, al entrar en memoria.
