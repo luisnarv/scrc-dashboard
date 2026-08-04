@@ -70,15 +70,18 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(CASE WHEN mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) = 0 THEN 1 ELSE 0 END) as "Fallida_Sin_Pago",
         COUNT(*) as "Visitas",
 
-        -- Producción valorizada HÍBRIDA (para cuadrar con el manual):
-        --  · 5 brigadas (Pesada Disponible, MT-AT, Gestor/Multi, Minicanasta, Canasta) -> META FIJA (no se suma por orden)
-        --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real de órdenes (valor_orden x 1.30045647872)
+        -- Producción valorizada HÍBRIDA con PRORRATEO (réplica del "valor fact" del manual):
+        --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real (valor_orden x 1.30045647872)
+        --  · Pesada Disponible -> meta fija (sin prorrateo)
+        --  · MT-AT / Minicanasta / Canasta -> meta x min(1, Total_Visita / (11 día | 8 sábado))
+        --  · Gestor -> meta x min(1, (Efectivas + Fallida_con_pago) / (18 día | 13 sábado))
         (CASE
-          WHEN MAX(mo.brigada_homologada) IN ('Pesada Disponible','Brigada Pesada MT-AT','Gestor Integral Multi','Brigada Minicanasta','Brigada Canasta')
-            THEN MAX(CASE
-                   WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
-                     THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
-                   ELSE COALESCE(mm.costo,0)/24.0 END)
+          WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+            THEN MAX(COALESCE(mm.costo,0)/24.0)
+          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, COUNT(*)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
           ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END)
         END) as "Ingresos",
 
@@ -192,7 +195,7 @@ export async function getDashboardDataV2(mes?: string) {
       const mesRes = await query(`
         SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
-               MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
@@ -213,7 +216,9 @@ export async function getDashboardDataV2(mes?: string) {
         FROM dbanalitica.historico_mo mo
         LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7))
           ${fechaCond}
-        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico
+        -- Agrupa TAMBIÉN por brigada_homologada: un técnico con 2 brigadas en el mes
+        -- aparece en cada una con SUS órdenes (antes MAX escondía la brigada real).
+        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico, mo.brigada_homologada
       `, params);
 
     const dispRes = await query(`
