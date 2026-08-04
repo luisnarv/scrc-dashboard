@@ -25,6 +25,7 @@ interface RawRowV2 {
 interface CostoRowV2 {
   Mes: string | null;
   Zona: string | null;
+  Proyecto: string | null;
   Categoria: string | null;
   es_ingreso: boolean | null;
   Valor: string;
@@ -51,6 +52,12 @@ export async function getDashboardDataV2(mes?: string) {
     ? `WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1 AND ${baseMoCond}` 
     : `WHERE ${baseMoCond}`;
   const mesymCond = activo ? 'WHERE mes_ym = $1' : '';
+  // OTC del dashboard = SOLO proyectos SCR ('SCR Sur' / 'SCR Norte - Centro'), que son
+  // exactamente las filas con zona derivada (zona IS NOT NULL). Los demás proyectos del
+  // OTC (ELECTROHUILA, AIRE, AFINIA, AGUA…) NO pertenecen a este dashboard y se excluyen.
+  const otcWhere = activo
+    ? "WHERE mes_ym = $1 AND zona IS NOT NULL"
+    : "WHERE zona IS NOT NULL";
 
   try {
     const rawRes = await query(`
@@ -134,15 +141,19 @@ export async function getDashboardDataV2(mes?: string) {
     `, params);
 
     const cosRes = await query(`
-      SELECT 
-        mes_ym as "Mes", 
-        zona as "Zona", 
-        cuenta_mayor as "Categoria", 
-        es_ingreso, 
-        SUM(COALESCE(valor, 0)) as "Valor"
+      SELECT
+        mes_ym as "Mes",
+        zona as "Zona",
+        proyecto as "Proyecto",
+        nombre_cuenta as "Categoria",
+        es_ingreso,
+        -- Los ingresos (cuentas clase 4, naturaleza CRÉDITO en el PUC) llegan en
+        -- negativo desde contabilidad; se voltean a POSITIVO para el dashboard.
+        -- Los costos (débito) se dejan tal cual.
+        SUM(COALESCE(valor, 0) * (CASE WHEN es_ingreso THEN -1 ELSE 1 END)) as "Valor"
       FROM dbanalitica.historico_otc
-      ${mesymCond}
-      GROUP BY mes_ym, zona, cuenta_mayor, es_ingreso
+      ${otcWhere}
+      GROUP BY mes_ym, zona, proyecto, nombre_cuenta, es_ingreso
     `, params);
 
     const rawRecords = rawRes.rows.map((r: RawRowV2) => ({
@@ -168,7 +179,8 @@ export async function getDashboardDataV2(mes?: string) {
     const costosFinal = cosRes.rows.map((r: CostoRowV2) => ({
       Mes: r.Mes,
       Zona: r.Zona,
-      Categoria: r.es_ingreso ? 'INGRESOS ' + r.Categoria : r.Categoria,
+      Proyecto: r.Proyecto || '',   // 'SCR Sur' / 'SCR Norte - Centro'
+      Categoria: r.Categoria,   // nombre_cuenta real (p.ej. 'INGRESOS POR INGENIERIA ELECTRICA')
       Valor: Number(r.Valor),
       Tercero: ''
     }));

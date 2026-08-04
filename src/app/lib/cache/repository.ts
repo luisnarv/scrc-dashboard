@@ -115,7 +115,15 @@ class DashboardRepository {
   async syncMonths(meses: string[], versions: Record<string, string | null>) {
     for (const mes of meses) {
       const cached = await LocalSource.getMonth(mes);
-      if (this.decide(cached, versions[mes] ?? null, mes) === 'fresh') continue;
+      if (cached && this.decide(cached, versions[mes] ?? null, mes) === 'fresh') {
+        // Fresco en cache: NO se refetchea, pero SÍ se EMITE para que el mes entre al
+        // estado en memoria (monthsData). Antes se hacía `continue` y el dato quedaba
+        // solo en IndexedDB → nunca llegaba a la vista, así que los evolutivos multi-mes
+        // (Estratégico/Gerencial) solo mostraban el mes actual aunque el filtro fuera "Todos".
+        this.emit({ type: 'month', mes, result: { mes, payload: cached.payload, origin: 'cache', version: cached.version } });
+        await yieldIdle();
+        continue;
+      }
       try {
         const payload = await RemoteSource.fetchMonth(mes);
         if (!payload.rawRecords.length) { await yieldIdle(); continue; }

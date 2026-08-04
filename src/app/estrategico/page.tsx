@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw, filtCos, ventanaPrevia } from '../components/utils/filters';
 import { otcAgg, otcAggMes, mesAnterior } from '../components/utils/aggregators';
@@ -16,8 +16,19 @@ const baseOpt = {
 };
 
 export default function ResumenPage() {
-  const { raw, filters, mesList, loading, error } = useDashboard();
+  const { raw, filters, setFilters, mesList, loading, error } = useDashboard();
   const { colors } = useTheme();
+
+  // Vista estratégica = lectura ACUMULADA: al entrar, fija el filtro de meses en
+  // "Todos" (mes=[]) una sola vez, apenas la lista de meses esté disponible (esto
+  // sobrescribe el default global del provider, que arranca en el mes actual).
+  const initMes = useRef(false);
+  useEffect(() => {
+    if (!initMes.current && mesList.length) {
+      initMes.current = true;
+      setFilters({ mes: [] });
+    }
+  }, [mesList, setFilters]);
 
   const CFG = { ok: colors.ok, warn: colors.warn, err: colors.err, otc: colors.otc, sip: colors.sip, neu: colors.mut };
 
@@ -98,7 +109,7 @@ export default function ResumenPage() {
 
     // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
     const ingElec = cosF
-      .filter(r => String(r.Categoria || '').toUpperCase().includes('INGRESOS POR INGENIERIA ELECTRICA'))
+      .filter(r => String(r.Categoria || '').toUpperCase().includes('INGENIERIA ELECTRICA'))
       .reduce((s, r) => s + num(r.Valor), 0);
 
     // Evolutivos 12m
@@ -150,7 +161,9 @@ export default function ResumenPage() {
     });
 
     // Acumulado dinámico: ventana seleccionada vs previa equivalente
-    const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
+    // "Todos" (mes=[]) => la ventana acumulada abarca TODA la historia (no solo el
+    // último mes); con meses seleccionados, esos meses.
+    const selWin = F.mes.length ? [...F.mes].sort() : [...mesList];
     const prevWin = ventanaPrevia(selWin, mesList);
     const aggWin = (arr: string[]) => {
       const set = new Set(arr);
