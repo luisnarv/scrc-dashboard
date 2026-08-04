@@ -128,14 +128,15 @@ export default function Filters() {
         )}
       </div>
 
-      <label htmlFor="select-fecha">Fecha</label>
+      <label htmlFor="select-fecha">Día</label>
       <select
         id="select-fecha"
         value={filters.fecha}
         onChange={e => setFilters({ fecha: e.target.value })}
       >
-        <option value="ALL">Todas</option>
-        {fechaList.map(f => <option key={f} value={f}>{f}</option>)}
+        <option value="ALL">Todos</option>
+        {/* value = fecha COMPLETA (el filtro compara r.Fecha === F.fecha); se muestra solo el día */}
+        {fechaList.map(f => <option key={f} value={f}>{String(f).slice(0, 10).split('-')[2] || f}</option>)}
       </select>
 
       <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--muted)' }}>
