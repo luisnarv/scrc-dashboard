@@ -147,12 +147,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const res = await dashboardRepo.getMonth(actual, { serverVersion: versionsRef.current[actual] ?? null });
         if (cancel) return;
         mergeMonth(actual, res.payload);
-        setLoading(false);
-
         // 3) Resto de meses (recientes primero) en segundo plano, progresivo.
         const previos = lista.filter(m => m !== actual).reverse();
+        // syncing=true ANTES de loading=false: así no queda un frame (loading=false &
+        // syncing=false) que revele los gráficos a medias antes de terminar el sync.
+        if (previos.length) setSyncing(true);
+        setLoading(false);
         if (previos.length) {
-          setSyncing(true);
           await dashboardRepo.syncMonths(previos, versionsRef.current);
           if (!cancel) setSyncing(false);
         }

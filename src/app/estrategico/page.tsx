@@ -12,6 +12,7 @@ import { useTheme } from '../components/ThemeProvider';
 const baseOpt = {
   responsive: true,
   maintainAspectRatio: false,
+  animation: { duration: 0 },   // sin animación de entrada: el reveal es instantáneo (sin saltos)
   plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 10 } } },
 };
 
@@ -68,7 +69,7 @@ export default function ResumenPage() {
     const meses12 = mesList.slice(-12);
     const seriesOTC = meses12.map(m => otcAggMes(raw.costos.filter(filtBase), m));
     const prodMes = meses12.map(m => {
-      const rr = raw.raw.filter(x => String(x.Fecha || '').startsWith(m) && filtBase(x));
+      const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
       const p = rr.reduce((s, x) => s + num(x.Ingresos), 0);
       const mt = rr.reduce((s, x) => s + num(x.Meta_Facturacion), 0);
       return { prod: p, cump: mt ? (p / mt) * 100 : 0 };
@@ -114,7 +115,7 @@ export default function ResumenPage() {
 
     // Evolutivos 12m
     const efMes = meses12.map(m => {
-      const rr = raw.raw.filter(x => String(x.Fecha || '').startsWith(m) && filtBase(x));
+      const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
       const ef = rr.reduce((s, x) => s + num(x.Efectivas), 0);
       const vi = rr.reduce((s, x) => s + num(x.Visitas), 0);
       const ing = rr.reduce((s, x) => s + num(x.Ingresos), 0);
@@ -131,7 +132,7 @@ export default function ResumenPage() {
     });
 
     const efMesPorTipo = meses12.flatMap(m => {
-      const rr = raw.raw.filter(x => String(x.Fecha || '').startsWith(m) && filtBase(x));
+      const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
       const tmap: Record<string, { ef: number; vi: number; ing: number; co: number; me: number; b: Set<unknown>; tecs: Record<string, { nombre: string; ef: number; vi: number; ing: number; co: number; me: number; }> }> = {};
       rr.forEach(r => {
         const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || r['Tipo de cuadrilla '] || 'Sin tipo').trim();
@@ -307,31 +308,32 @@ export default function ResumenPage() {
               <ChartCard id="r-otc-mar" title="Margen Real" subtitle="Rentabilidad financiera neta (Ingresos - Costos)" config={otcMargenCfg as never} height="short" />
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="section" style={{ marginTop: 24 }}>
-            <h2>⚖️ Comparativo Operativo Acumulado</h2>
-            <div className="sec-sub">{selLbl} vs {prevLbl} (ventana previa equivalente)</div>
-            {winIncompleto && (
-              <div className="status err" style={{ marginBottom: 8 }}>
-                ⚠️ La ventana previa tiene menos meses que la actual. Comparativo incompleto.
-              </div>
-            )}
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              {cmp.map(c => {
-                const d = deltaPct(c.a, c.b);
-                const up = d !== null && d >= 0;
-                return (
-                  <div key={c.lbl} className="kpi sip">
-                    <div className="lbl">{c.lbl}</div>
-                    <div className="val">{c.fmt(c.a)}</div>
-                    {d !== null
-                      ? <div className={`delta ${Math.abs(d) < 0.001 ? 'neu' : up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {(d * 100).toFixed(1)}% vs previa</div>
-                      : <div className="delta neu">sin comparativo</div>}
-                  </div>
-                );
-              })}
-            </div>
+      {/* Comparativo acumulado a lo ANCHO (alineado a la izquierda), fuera del grid de 2 columnas */}
+      <div className="section" style={{ marginTop: 24 }}>
+        <h2>⚖️ Comparativo Operativo Acumulado</h2>
+        <div className="sec-sub">{selLbl} vs {prevLbl} (ventana previa equivalente)</div>
+        {winIncompleto && (
+          <div className="status err" style={{ marginBottom: 8 }}>
+            ⚠️ La ventana previa tiene menos meses que la actual. Comparativo incompleto.
           </div>
+        )}
+        <div className="kpi-grid">
+          {cmp.map(c => {
+            const d = deltaPct(c.a, c.b);
+            const up = d !== null && d >= 0;
+            return (
+              <div key={c.lbl} className="kpi sip">
+                <div className="lbl">{c.lbl}</div>
+                <div className="val">{c.fmt(c.a)}</div>
+                {d !== null
+                  ? <div className={`delta ${Math.abs(d) < 0.001 ? 'neu' : up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {(d * 100).toFixed(1)}% vs previa</div>
+                  : <div className="delta neu">sin comparativo</div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

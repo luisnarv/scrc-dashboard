@@ -564,3 +564,43 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
 .leaflet-control-layers, .leaflet-bar a { background-color: #fff !important; color: #333 !important; border-color: #ccc !important; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background-color: #fff !important; color: #333 !important; }
 
+/* ===================== RESPONSIVE (móvil / tablet) =====================
+   Complementa los breakpoints ya existentes (grid-2/3 → 1 col en 900px;
+   kpi-grid 1100/600px; alertas/health-grid). Aquí: header, nav, filtros,
+   tablas, charts y paddings para pantallas chicas. */
+@media (max-width: 768px) {
+  .wrap { padding: 10px; }
+  /* Header apilado */
+  header.dash-header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; }
+  header.dash-header h1 { font-size: 18px; }
+  /* Nav: scroll horizontal para no cortar los enlaces (antes overflow:hidden) */
+  .dash-nav { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+  .nav-link { white-space: nowrap; padding: 10px 14px; }
+  /* Filtros (ya hacen flex-wrap) más compactos */
+  .filtros { padding: 8px 10px; gap: 8px; }
+  .filtros select, .filtros input { font-size: 12px; }
+  .section { padding: 12px; }
+  /* Modales casi a ancho de pantalla */
+  .modal-box { max-width: 96vw; }
+}
+
+@media (max-width: 640px) {
+  .wrap { padding: 8px; }
+  header.dash-header h1 { font-size: 16px; }
+  header.dash-header .sub { font-size: 11px; }
+  .chart-box { height: 200px; }
+  .chart-box.tall { height: 240px; }
+  .chart-box.short { height: 160px; }
+  /* Tablas: fuente y padding compactos (ya scrollean vía .det-wrap) */
+  table.det { font-size: 10px; }
+  table.det td, table.det th { padding: 4px 6px; }
+  .section h2 { font-size: 14px; }
+}
+
+@media (max-width: 420px) {
+  .kpi .val { font-size: 16px; }
+  .nav-link { padding: 9px 11px; font-size: 12px; gap: 4px; }
+  .filtros { flex-direction: column; align-items: stretch; }
+  .filtros select, .filtros input { width: 100%; }
+}
+
