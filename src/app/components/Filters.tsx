@@ -68,16 +68,6 @@ export default function Filters() {
 
   return (
     <div id="filters-container" className="filtros">
-      <label htmlFor="select-ano">Año</label>
-      <select
-        id="select-ano"
-        value={filters.ano}
-        onChange={e => setFilters({ ano: e.target.value, mes: [], fecha: 'ALL' })}
-      >
-        <option value="ALL">Todos</option>
-        {anoList.map(a => <option key={a} value={a}>{a}</option>)}
-      </select>
-
       <label htmlFor="select-proy">Proyecto</label>
       <select
         id="select-proy"
@@ -96,6 +86,16 @@ export default function Filters() {
       >
         <option value="ALL">Todas</option>
         {zonaList.map(z => <option key={z} value={z}>{z}</option>)}
+      </select>
+
+      <label htmlFor="select-ano">Año</label>
+      <select
+        id="select-ano"
+        value={filters.ano}
+        onChange={e => setFilters({ ano: e.target.value, mes: [], fecha: 'ALL' })}
+      >
+        <option value="ALL">Todos</option>
+        {anoList.map(a => <option key={a} value={a}>{a}</option>)}
       </select>
 
       <label htmlFor="btn-mes">Mes</label>
