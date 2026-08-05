@@ -13,6 +13,7 @@ interface DashboardContextValue {
   filters: Filters;
   setFilters: (f: Partial<Filters>) => void;
   mesList: string[];
+  anoList: string[];
   proyList: string[];
   zonaList: string[];
   fechaList: string[];
@@ -25,9 +26,9 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue>({
   raw: null,
-  filters: { proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' },
+  filters: { proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL' },
   setFilters: () => {},
-  mesList: [], proyList: [], zonaList: [], fechaList: [],
+  mesList: [], anoList: [], proyList: [], zonaList: [], fechaList: [],
   loading: true, syncing: false, lastSync: null, error: null,
   refresh: async () => {},
 });
@@ -84,7 +85,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', mes: [], fecha: 'ALL' });
+  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL' });
+  const [anoList, setAnoList] = useState<string[]>([]);
   const [proyList, setProyList] = useState<string[]>([]);
   const [zonaList, setZonaList] = useState<string[]>([]);
   const [fechaList, setFechaList] = useState<string[]>([]);
@@ -124,6 +126,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     versionsRef.current = versions;
     const lista = mesesValidos(counts);
     setMesList(lista);
+    
+    const anos = [...new Set(lista.map(m => m.split('-')[0]))].sort().reverse();
+    setAnoList(anos);
+    
     setEvolutivo(meta.evolutivo);
     return lista;
   }, []);
@@ -143,12 +149,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         dashboardRepo.setCurrentMonth(actual);
 
         // 2) Mes actual (cache-first): apenas llega, se muestra.
-        setFiltersState(prev => ({ ...prev, mes: [actual] }));
+        const actualAno = actual.split('-')[0];
+        setFiltersState(prev => ({ ...prev, ano: actualAno, mes: [actual] }));
         const res = await dashboardRepo.getMonth(actual, { serverVersion: versionsRef.current[actual] ?? null });
         if (cancel) return;
         mergeMonth(actual, res.payload);
-        // 3) Resto de meses (recientes primero) en segundo plano, progresivo.
-        const previos = lista.filter(m => m !== actual).reverse();
+        // 3) Resto de meses (recientes primero) en segundo plano, pero SOLO DEL AÑO ACTUAL.
+        // Los otros años se bajarán bajo demanda si el usuario cambia el filtro 'Año'.
+        const previos = lista.filter(m => m !== actual && m.startsWith(actualAno)).reverse();
         // syncing=true ANTES de loading=false: así no queda un frame (loading=false &
         // syncing=false) que revele los gráficos a medias antes de terminar el sync.
         if (previos.length) setSyncing(true);
@@ -180,12 +188,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Carga bajo demanda cuando el usuario selecciona meses aun no cargados.
+  // Carga bajo demanda cuando el usuario selecciona un Año o Meses aún no cargados.
   useEffect(() => {
     if (loading) return;
+    if (filters.ano !== 'ALL') {
+      const delAno = mesList.filter(m => m.startsWith(filters.ano));
+      delAno.forEach(m => { if (!(m in monthsData)) loadMonth(m); });
+    }
     filters.mes.forEach(m => { if (!(m in monthsData)) loadMonth(m); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.mes, loading]);
+  }, [filters.ano, filters.mes, loading]);
 
   // Boton "Actualizar" = HARD REFRESH: borra TODA la cache local (meses, meta y
   // mapa) y recarga la pagina. Con la cache vacia, el arranque vuelve a bajar
@@ -197,9 +209,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') window.location.reload();
   }, []);
 
-  // ---- Derivar RawData a partir de los meses cargados ----
+  // ---- Derivar RawData a partir de los meses cargados y el filtro de Año ----
   const raw: RawData | null = useMemo(() => {
-    const meses = Object.values(monthsData);
+    const meses = Object.entries(monthsData)
+      .filter(([m]) => filters.ano === 'ALL' || m.startsWith(filters.ano))
+      .map(([_, p]) => p);
     if (!meses.length) return null;
     return {
       raw: meses.flatMap(m => m.rawRecords),
@@ -210,7 +224,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       disp: meses.flatMap(m => m.dispDiaria),
       evolutivo,
     };
-  }, [monthsData, evolutivo]);
+  }, [monthsData, evolutivo, filters.ano]);
 
   // Listas de filtros derivadas de lo cargado (se amplian con el sync).
   useEffect(() => {
@@ -244,7 +258,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   return (
     <DashboardContext.Provider value={{
-      raw, filters, setFilters, mesList, proyList, zonaList, fechaList,
+      raw, filters, setFilters, mesList, anoList, proyList, zonaList, fechaList,
       loading, syncing, lastSync, error, refresh,
     }}>
       {children}

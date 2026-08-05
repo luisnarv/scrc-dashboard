@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useDashboard } from './DashboardProvider';
 
 export default function Filters() {
-  const { filters, setFilters, proyList, zonaList, mesList, fechaList } = useDashboard();
+  const { filters, setFilters, proyList, zonaList, anoList, mesList, fechaList } = useDashboard();
   const [mesOpen, setMesOpen] = useState(false);
   const mesRef = useRef<HTMLDivElement>(null);
 
@@ -23,11 +23,21 @@ export default function Filters() {
     setFilters({ mes: next, fecha: 'ALL' });
   };
 
+  const formatMes = (m: string) => {
+    // Si están viendo "Todos los años", dejamos el año visible para no confundir.
+    if (filters.ano === 'ALL') return m; 
+    const partes = m.split('-');
+    if (partes.length !== 2) return m;
+    const n = parseInt(partes[1], 10);
+    const nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return nombres[n - 1] || partes[1];
+  };
+
   const mesLabel =
     filters.mes.length === 0
       ? 'Todos'
       : filters.mes.length === 1
-      ? filters.mes[0]
+      ? formatMes(filters.mes[0])
       : `${filters.mes.length} meses`;
 
   const ctrl: React.CSSProperties = {
@@ -54,8 +64,20 @@ export default function Filters() {
     color: on ? 'var(--text)' : 'var(--text-muted)',
   });
 
+  const visibleMeses = filters.ano === 'ALL' ? mesList : mesList.filter(m => m.startsWith(filters.ano));
+
   return (
     <div id="filters-container" className="filtros">
+      <label htmlFor="select-ano">Año</label>
+      <select
+        id="select-ano"
+        value={filters.ano}
+        onChange={e => setFilters({ ano: e.target.value, mes: [], fecha: 'ALL' })}
+      >
+        <option value="ALL">Todos</option>
+        {anoList.map(a => <option key={a} value={a}>{a}</option>)}
+      </select>
+
       <label htmlFor="select-proy">Proyecto</label>
       <select
         id="select-proy"
@@ -115,12 +137,12 @@ export default function Filters() {
               Todos
             </label>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
-            {mesList.map((m, idx) => {
+            {visibleMeses.map((m, idx) => {
               const on = filters.mes.includes(m);
               return (
                 <label key={m} htmlFor={`chk-mes-${idx}`} style={row(on)}>
                   <input id={`chk-mes-${idx}`} type="checkbox" checked={on} onChange={() => toggleMes(m)} />
-                  {m}
+                  {formatMes(m)}
                 </label>
               );
             })}
