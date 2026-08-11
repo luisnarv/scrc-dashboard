@@ -70,6 +70,7 @@ export default function OperativoPage() {
   const [mapOpen, setMapOpen] = useState(false);
   const [brigadaModalOpen, setBrigadaModalOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
+  const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia'>('mes');
 
   const TEAL = colors.sip;
   const INDIGO = colors.otc;
@@ -340,7 +341,7 @@ export default function OperativoPage() {
     // Gráfico 4: Evolutivo Mensual por Tipo de Brigada (Dinámico, reacciona a filtros globales)
     const evValMap = new Map<string, number>();
     rawF.forEach(r => {
-      const mesYM = r.Fecha ? String(r.Fecha).substring(0, 7) : null;
+      const mesYM = vistaEvolutivo === 'dia' ? (r.Fecha ? String(r.Fecha) : null) : (r.Fecha ? String(r.Fecha).substring(0, 7) : null);
       const t = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || '');
       if (!mesYM || !t) return;
       
@@ -404,8 +405,15 @@ export default function OperativoPage() {
         type: 'line',
         data: {
           labels: evMeses.map(m => {
-             const mDate = new Date(m + '-02');
-             return mDate.toLocaleString('es', { month: 'short' }).toLowerCase();
+             if (vistaEvolutivo === 'dia') {
+               const parts = m.split('-');
+               if (parts.length !== 3) return m;
+               const mDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+               return mDate.toLocaleString('es', { day: 'numeric', month: 'short' }).toLowerCase();
+             } else {
+               const mDate = new Date(m + '-02');
+               return mDate.toLocaleString('es', { month: 'short' }).toLowerCase();
+             }
           }),
           datasets: tipos.map((x, idx) => {
             const color = x.color || evColor(x.t, idx);
@@ -564,7 +572,7 @@ export default function OperativoPage() {
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
       evolutivo: raw.evolutivo, evTop
     };
-  }, [raw, filters, mesList, filtroEvolutivo]);
+  }, [raw, filters, mesList, filtroEvolutivo, vistaEvolutivo]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -690,7 +698,7 @@ export default function OperativoPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', marginBottom: 20 }}>
         <ChartCard
           id="op-evolutivo"
-          title="Órdenes Mensuales por Tipo de Brigada"
+          title={vistaEvolutivo === 'mes' ? "Órdenes Mensuales por Tipo de Brigada" : "Órdenes Diarias por Tipo de Brigada"}
           subtitle={d.evSubtitle}
           config={d.chartEvolutivo as never}
           height="normal"
@@ -699,6 +707,10 @@ export default function OperativoPage() {
           detailTableData={d.tableDataEvolutivo as any}
           headerExtra={
             <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+              <div style={{ display: 'flex', background: '#EDF0E7', borderRadius: 6, overflow: 'hidden', border: '1px solid #E0E0E0' }}>
+                <button onClick={() => setVistaEvolutivo('mes')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'mes' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por mes</button>
+                <button onClick={() => setVistaEvolutivo('dia')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'dia' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por día</button>
+              </div>
               {filtroEvolutivo && (
                 <button onClick={() => setFiltroEvolutivo(null)} style={{ padding: '6px 10px', fontSize: 11, borderRadius: 6, background: '#EDF0E7', color: '#3A3A3A', border: '1px solid #E0E0E0', cursor: 'pointer', fontWeight: 600 }}>Quitar filtro</button>
               )}
