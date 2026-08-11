@@ -3,8 +3,8 @@
 import { useMemo } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw, filtCos, ventanaPrevia } from '../components/utils/filters';
-import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
-import { otcAgg } from '../components/utils/aggregators';
+import { fmtCOP, fmtPct, fmtN, deltaPct, num as n, fmtRangoMeses } from '../components/utils/formatters';
+import { otcAgg, unitEconomicsPorTipo } from '../components/utils/aggregators';
 import ChartCard from '../components/ChartCard';
 import KpiCard from '../components/KpiCard';
 import { useTheme } from '../components/ThemeProvider';
@@ -22,9 +22,7 @@ export default function GerencialPage() {
 
   const d = useMemo(() => {
     if (!raw) return null;
-    const F = filters;
-    const n = (v: unknown) => Number(v) || 0;
-    
+    const F = filters;    
     // --- 1. OPERACIÓN (Teórico/Estimado) ---
     const rawF = filtRaw(raw.raw, F);
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
@@ -39,18 +37,7 @@ export default function GerencialPage() {
     const prodXtecnico = totalTecnicos ? prodValorizada / totalTecnicos : 0;
 
     // Unit Economics (Estimados)
-    const tmap: Record<string, { b: Set<unknown>; ing: number; co: number; ef: number }> = {};
-    rawF.forEach(r => {
-      const t = String(r.Tipo_Brigada_Operaciones || 'Sin tipo');
-      if (!tmap[t]) tmap[t] = { b: new Set(), ing: 0, co: 0, ef: 0 };
-      tmap[t].b.add(r.Cedula);
-      tmap[t].ing += n(r.Ingresos);
-      tmap[t].co += n(r.Costo_Operativo);
-      tmap[t].ef += n(r.Efectivas);
-    });
-    const tipoRows = Object.entries(tmap)
-      .map(([tipo, v]) => { const nb = v.b.size; return { tipo, brigadas: nb, ingreso: v.ing, ingXbrig: nb ? v.ing / nb : 0, costXbrig: nb ? v.co / nb : 0 }; })
-      .sort((a, b) => b.ingreso - a.ingreso);
+    const tipoRows = unitEconomicsPorTipo(rawF);
 
     // --- 2. FINANCIERO (Real OTC) ---
     const cosF = filtCos(raw.costos, F);
@@ -64,7 +51,6 @@ export default function GerencialPage() {
     const brechaAbsoluta = ingresoReal - prodValorizada;
     const brechaPct = prodValorizada ? brechaAbsoluta / prodValorizada : 0;
 
-    const winLbl = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
     const selWin = F.mes.length ? [...F.mes].sort() : [mesList[mesList.length - 1]].filter(Boolean);
 
     return {
@@ -72,7 +58,7 @@ export default function GerencialPage() {
       prodValorizada, perdidasOperativas, prodXtecnico, totalTecnicos,
       ingresoReal, costoReal, margenReal, margenPct,
       brechaAbsoluta, brechaPct,
-      periodoLabel: winLbl(selWin),
+      periodoLabel: fmtRangoMeses(selWin),
       tipoRows,
     };
   }, [raw, filters, mesList]);

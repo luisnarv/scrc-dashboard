@@ -8,17 +8,13 @@ import Header from './Header';
 import Filters from './Filters';
 
 export default function DashboardGate({ children }: { children: ReactNode }) {
-  const { loading, syncing, error, raw } = useDashboard();
+  const { loading, error, raw } = useDashboard();
   const pathname = usePathname();
 
   // El panel de administración no depende de los datos del dashboard
   if (pathname.startsWith('/admin')) return <main>{children}</main>;
 
-  // Se mantiene la MISMA pantalla de carga (LoadingScreen) no solo durante la carga
-  // inicial, sino también mientras se sincronizan los meses previos (syncing). Así, al
-  // quitarla, los evolutivos ya tienen TODOS los meses y no hay saltos por datos que
-  // llegan luego. `syncing` solo ocurre una vez, en el arranque.
-  if (loading || syncing) return <LoadingScreen />;
+  if (loading) return <LoadingScreen />;
 
   const hayDatos = !!raw && raw.raw.length > 0;
 

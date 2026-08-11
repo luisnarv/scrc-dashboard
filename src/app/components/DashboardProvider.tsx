@@ -26,7 +26,7 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue>({
   raw: null,
-  filters: { proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL' },
+  filters: { proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL', proceso: 'ALL' },
   setFilters: () => {},
   mesList: [], anoList: [], proyList: [], zonaList: [], fechaList: [],
   loading: true, syncing: false, lastSync: null, error: null,
@@ -85,7 +85,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL' });
+  const [filters, setFiltersState] = useState<Filters>({ proy: 'ALL', zona: 'ALL', ano: 'ALL', mes: [], fecha: 'ALL', proceso: 'ALL' });
   const [anoList, setAnoList] = useState<string[]>([]);
   const [proyList, setProyList] = useState<string[]>([]);
   const [zonaList, setZonaList] = useState<string[]>([]);

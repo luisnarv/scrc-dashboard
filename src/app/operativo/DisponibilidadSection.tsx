@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import DisponibilidadAnalysisModal from './DisponibilidadAnalysisModal';
 import { useTheme } from '../components/ThemeProvider';
+import { filtDisp } from '../components/utils/filters';
 
 const TEAL = 'var(--sip)';
 const INK = 'var(--text-title)';
@@ -35,7 +36,7 @@ export default function DisponibilidadSection() {
   const { matrix, days, brigadas, totalsByDay, totalsByBrigada, availableTipos, availableZonas } = useMemo(() => {
     if (!raw || !raw.disp) return { matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {}, availableTipos: [], availableZonas: [] };
 
-    let data = raw.disp;
+    let data = filtDisp(raw.disp, filters);   // Proceso: solo Gestor si aplica
     // Aplicar filtros globales obligatorios
     if (filters.mes && filters.mes.length > 0) {
       data = data.filter(r => r.Fecha && filters.mes.some(m => r.Fecha!.startsWith(m)));
@@ -109,7 +110,7 @@ export default function DisponibilidadSection() {
       availableTipos: Array.from(tiposSet).sort(), 
       availableZonas: Array.from(zonasSet).sort() 
     };
-  }, [raw, filters.mes, filters.proy, filters.zona, locFilterTipo, locFilterZona]);
+  }, [raw, filters.mes, filters.proy, filters.zona, filters.proceso, locFilterTipo, locFilterZona]);
 
   const getCellColor = (val: number) => {
     if (val === 0) return 'var(--hover-bg)';

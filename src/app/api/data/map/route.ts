@@ -10,9 +10,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mes = searchParams.get('mes');
   const zona = searchParams.get('zona');
+  const proceso = searchParams.get('proceso');
 
   try {
-    const data = await getMapDataV2(mes || undefined, zona || undefined);
+    const data = await getMapDataV2(mes || undefined, zona || undefined, undefined, proceso || undefined);
     return NextResponse.json(data);
   } catch (err) {
     console.error('Error fetching map data:', err);

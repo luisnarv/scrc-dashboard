@@ -79,9 +79,3 @@ export function canonBarrio(barrio?: string): string {
   const homolog = HOMOLOGACION_BARRIO[normBase(barrio)];
   return homolog ? normBarrio(homolog) : normBarrio(barrio);
 }
-
-// Clave municipio|barrio (para nombres duplicados entre municipios). Usa el
-// canonico. Para nombres unicos, MapComponent cruza solo por canonBarrio().
-export function claveBarrio(municipio?: string, barrio?: string): string {
-  return `${normBase(municipio)}|${canonBarrio(barrio)}`;
-}

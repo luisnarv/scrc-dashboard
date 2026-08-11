@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw } from '../components/utils/filters';
-import { fmtN, fmtCOP } from '../components/utils/formatters';
+import { fmtN, fmtCOP, num } from '../components/utils/formatters';
 
 /* Paleta del dashboard */
 const TEAL = 'var(--sip)';
@@ -30,8 +30,6 @@ interface Row {
 type SortKey =
   | 'label' | 'efec' | 'fall' | 'perd'
   | 'totVis' | 'promVis' | 'promEfec' | 'ingreso';
-
-const num = (v: unknown) => Number(v) || 0;
 
 /* columnas de la tabla: clave, título, ¿es promedio? */
 const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean }[] = [

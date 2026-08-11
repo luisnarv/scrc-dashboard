@@ -9,7 +9,7 @@ const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false });
 
 interface MapModalProps {
   onClose: () => void;
-  filtrosBase: { mes: string; zona: string; proy: string };
+  filtrosBase: { mes: string; zona: string; proy: string; proceso: string };
   mesesDisponibles?: string[];
 }
 
@@ -40,14 +40,14 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
   const [fTipo, setFTipo] = useState('ALL');
   const [fEstado, setFEstado] = useState('ALL');
 
-  const { zona, proy } = filtrosBase;
+  const { zona, proy, proceso } = filtrosBase;
   const isMassive = localMes === 'ALL' || localMes.split(',').length > 3;
 
   useEffect(() => {
     let ignore = false;
     setLoading(true);
 
-    const traerDeRed = () => fetch(`/api/data/map?mes=${localMes}&zona=${zona}&proy=${proy}`)
+    const traerDeRed = () => fetch(`/api/data/map?mes=${localMes}&zona=${zona}&proy=${proy}&proceso=${proceso}`)
       .then(res => res.json())
       .then(d => {
         if (ignore) return;
@@ -56,12 +56,12 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
         setStatsBarrios(stats);
         setApiFiltros(filtros);
         setLoading(false);
-        MapaCache.put(localMes, zona, proy, pts, stats, filtros);
+        MapaCache.put(localMes, zona, proy, pts, stats, filtros, proceso);
       })
       .catch(e => { if (!ignore) { console.error("Error cargando puntos:", e); setLoading(false); } });
 
     (async () => {
-      const cached = await MapaCache.get(localMes, zona, proy).catch(() => null);
+      const cached = await MapaCache.get(localMes, zona, proy, proceso).catch(() => null);
       if (ignore) return;
       if (cached) {
         setData(cached.pts);
@@ -91,7 +91,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
       .catch(e => console.error("Error cargando zonas:", e));
 
     return () => { ignore = true; };
-  }, [localMes, zona, proy]);
+  }, [localMes, zona, proy, proceso]);
 
   // Al seleccionar un barrio, traemos TODAS sus ordenes de la BD (no el subconjunto
   // de 25k). Homologamos: pedimos por todos los nombres de barrio de BD que mapean

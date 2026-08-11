@@ -32,6 +32,7 @@ export interface CostoRecord {
   Mes?: string;
   Proyecto?: string;
   Zona?: string;
+  Brigada?: string;   // brigada del empleado (para filtrar OTC por Proceso); NULL en ingresos
   Categoria?: string;
   CuentaMayor?: string;
   NombreCuenta?: string;
@@ -142,6 +143,7 @@ export interface Filters {
   ano: string;
   mes: string[];
   fecha: string;
+  proceso: string;   // 'ALL' (SCR = todo) | 'GESTOR' (solo brigada_homologada = 'Gestor Integral Multi')
 }
 
 export interface OtcAgg {

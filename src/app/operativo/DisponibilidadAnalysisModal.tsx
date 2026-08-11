@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { useTheme } from '../components/ThemeProvider';
+import { filtDisp } from '../components/utils/filters';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 const TEAL = 'var(--sip)';
@@ -63,7 +64,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
   const { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada } = useMemo(() => {
     if (!raw || !raw.disp) return { chartData: [], matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {} };
 
-    let data = raw.disp;
+    let data = filtDisp(raw.disp, filters);   // Proceso: solo Gestor si aplica
     if (filters.mes && filters.mes.length > 0) {
       data = data.filter(r => r.Fecha && filters.mes.some(m => r.Fecha!.startsWith(m)));
     }
@@ -114,7 +115,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
     });
 
     return { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada };
-  }, [raw, filters.mes]);
+  }, [raw, filters.mes, filters.proceso]);
 
   const visibleBrigadas = selectedCategories.length > 0 ? brigadas.filter(b => selectedCategories.includes(b)) : brigadas;
 

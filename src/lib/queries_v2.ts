@@ -26,6 +26,7 @@ interface CostoRowV2 {
   Mes: string | null;
   Zona: string | null;
   Proyecto: string | null;
+  Brigada: string | null;
   Categoria: string | null;
   es_ingreso: boolean | null;
   Valor: string;
@@ -145,6 +146,9 @@ export async function getDashboardDataV2(mes?: string) {
         mes_ym as "Mes",
         zona as "Zona",
         proyecto as "Proyecto",
+        -- Brigada del empleado (homologada). NULL en ingresos y costos no-personales.
+        -- Permite que el filtro Proceso (Multifamiliar) restrinja el financiero.
+        brigada_homologada as "Brigada",
         nombre_cuenta as "Categoria",
         es_ingreso,
         -- Los ingresos (cuentas clase 4, naturaleza CRÉDITO en el PUC) llegan en
@@ -153,7 +157,7 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(COALESCE(valor, 0) * (CASE WHEN es_ingreso THEN -1 ELSE 1 END)) as "Valor"
       FROM dbanalitica.historico_otc
       ${otcWhere}
-      GROUP BY mes_ym, zona, proyecto, nombre_cuenta, es_ingreso
+      GROUP BY mes_ym, zona, proyecto, brigada_homologada, nombre_cuenta, es_ingreso
     `, params);
 
     const rawRecords = rawRes.rows.map((r: RawRowV2) => ({
@@ -180,6 +184,7 @@ export async function getDashboardDataV2(mes?: string) {
       Mes: r.Mes,
       Zona: r.Zona,
       Proyecto: r.Proyecto || '',   // 'SCR Sur' / 'SCR Norte - Centro'
+      Brigada: r.Brigada || undefined,   // brigada del empleado (NULL en ingresos/costos no-personales)
       Categoria: r.Categoria,   // nombre_cuenta real (p.ej. 'INGRESOS POR INGENIERIA ELECTRICA')
       Valor: Number(r.Valor),
       Tercero: ''
@@ -258,9 +263,13 @@ export async function getDashboardDataV2(mes?: string) {
   }
 }
 
-export async function getMapDataV2(mes?: string, zona?: string, proy?: string) {
+export async function getMapDataV2(mes?: string, zona?: string, proy?: string, proceso?: string) {
   const values: unknown[] = [];
   const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.observacion ILIKE 'VS:%'"];
+  // Proceso: 'GESTOR' restringe a la brigada 'Gestor Integral Multi'. 'ALL'/SCR = todo.
+  if (proceso === 'GESTOR') {
+    filterClauses.push("mo.brigada_homologada = 'Gestor Integral Multi'");
+  }
   if (mes && mes !== 'ALL') {
     const meses = mes.split(',');
     const monthClauses = meses.map(m => {

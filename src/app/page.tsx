@@ -2,9 +2,9 @@
 
 import { useMemo } from 'react';
 import { useDashboard } from './components/DashboardProvider';
-import { filtRaw, filtCos, ventanaPrevia } from './components/utils/filters';
-import { otcAgg, otcAggMes, mesAnterior } from './components/utils/aggregators';
-import { fmtCOP, fmtPct, fmtN, deltaPct } from './components/utils/formatters';
+import { filtRaw, filtCos, ventanaPrevia, matchProyZona } from './components/utils/filters';
+import { otcAgg, otcAggMes, mesAnterior, ingresoElectrica, unitEconomicsPorTipo, aggVentana } from './components/utils/aggregators';
+import { fmtCOP, fmtPct, fmtN, deltaPct, num, fmtRangoMeses } from './components/utils/formatters';
 import { calcHealth } from './components/utils/health';
 import HealthScore from './components/HealthScore';
 import { useTheme } from './components/ThemeProvider';
@@ -25,16 +25,12 @@ export default function ResumenPage() {
 
   const data = useMemo(() => {
     if (!raw) return null;
-    const F = filters;
-    const num = (v: unknown) => Number(v) || 0;
-    const rawF = filtRaw(raw.raw, F);
+    const F = filters;    const rawF = filtRaw(raw.raw, F);
     const cosF = filtCos(raw.costos, F);
     const mActual = F.mes.length ? [...F.mes].sort().at(-1)! : mesList[mesList.length - 1];
     const mAnt = mesAnterior(mActual, mesList);
 
-    const filtBase = (r: { _Proyecto?: string; _Zona?: string; _ZonaDet?: string }) =>
-      (F.proy === 'ALL' || r._Proyecto === F.proy) &&
-      (F.zona === 'ALL' || r._Zona === F.zona || r._ZonaDet === F.zona);
+    const filtBase = matchProyZona(F);
 
     // ---- OTC (para Health) ----
     const pOTC = otcAgg(cosF);
@@ -119,9 +115,7 @@ export default function ResumenPage() {
     const costoXbrig = brigadas ? costoPeriodo / brigadas : 0;
 
     // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
-    const ingElec = cosF
-      .filter(r => String(r.Categoria || '').toUpperCase().includes('INGRESOS POR INGENIERIA ELECTRICA'))
-      .reduce((s, r) => s + num(r.Valor), 0);
+    const ingElec = ingresoElectrica(cosF);
 
     // Evolutivos 12m
     const efMes = meses12.map(m => {
@@ -138,31 +132,12 @@ export default function ResumenPage() {
     // Acumulado dinámico: ventana seleccionada vs previa equivalente
     const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
     const prevWin = ventanaPrevia(selWin, mesList);
-    const aggWin = (arr: string[]) => {
-      const set = new Set(arr);
-      const rr = raw.raw.filter(x => set.has(String(x.Fecha || '').slice(0, 7)) && filtBase(x));
-      const ef = rr.reduce((s, x) => s + num(x.Efectivas), 0);
-      const vi = rr.reduce((s, x) => s + num(x.Visitas), 0);
-      const ing = rr.reduce((s, x) => s + num(x.Ingresos), 0);
-      return { ing, ef, vi, efic: vi ? ef / vi : null, brig: new Set(rr.map(x => x.Cedula)).size };
-    };
-    const winA = aggWin(selWin);
-    const winB = aggWin(prevWin);
+    const winA = aggVentana(raw.raw, selWin, filtBase);
+    const winB = aggVentana(raw.raw, prevWin, filtBase);
     const winIncompleto = prevWin.length < selWin.length;
 
     // Productividad por tipo de brigada
-    const tmap: Record<string, { b: Set<unknown>; ing: number; co: number; ef: number }> = {};
-    rawF.forEach(r => {
-      const t = String(r.Tipo_Brigada_Operaciones || 'Sin tipo');
-      if (!tmap[t]) tmap[t] = { b: new Set(), ing: 0, co: 0, ef: 0 };
-      tmap[t].b.add(r.Cedula);
-      tmap[t].ing += num(r.Ingresos);
-      tmap[t].co += num(r.Costo_Operativo);
-      tmap[t].ef += num(r.Efectivas);
-    });
-    const tipoRows = Object.entries(tmap)
-      .map(([tipo, v]) => { const nb = v.b.size; return { tipo, brigadas: nb, ingreso: v.ing, ingXbrig: nb ? v.ing / nb : 0, costXbrig: nb ? v.co / nb : 0 }; })
-      .sort((a, b) => b.ingreso - a.ingreso);
+    const tipoRows = unitEconomicsPorTipo(rawF);
 
     // Narrativa (ahora en términos de ingreso real + cumplimiento de producción)
     const periodoLabel = F.mes.length ? F.mes.join(', ') : 'periodo seleccionado';
@@ -204,8 +179,6 @@ export default function ResumenPage() {
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } } },
   };
 
-  const winLabel = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
-
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
     { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
     { lbl: 'Efectivas', a: winA.ef, b: winB.ef, fmt: fmtN },
@@ -244,7 +217,7 @@ export default function ResumenPage() {
       {/* ===== KPIS FINANCIEROS (OTC) ===== */}
       <div className="section" style={{ marginTop: 24 }}>
         <h2>💰 Resultado Financiero Real (Fuente: OTC)</h2>
-        <div className="sec-sub">Ventana seleccionada: {winLabel(selWin)}</div>
+        <div className="sec-sub">Ventana seleccionada: {fmtRangoMeses(selWin)}</div>
         <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso real contable." />
           <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(pOTC.costos || 0)} help="Costo real contable." />

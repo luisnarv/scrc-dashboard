@@ -68,6 +68,16 @@ export default function Filters() {
 
   return (
     <div id="filters-container" className="filtros">
+      <label htmlFor="select-proceso">Proceso</label>
+      <select
+        id="select-proceso"
+        value={filters.proceso}
+        onChange={e => setFilters({ proceso: e.target.value })}
+      >
+        <option value="ALL">SCR</option>
+        <option value="GESTOR">Multifamiliar</option>
+      </select>
+
       <label htmlFor="select-proy">Proyecto</label>
       <select
         id="select-proy"

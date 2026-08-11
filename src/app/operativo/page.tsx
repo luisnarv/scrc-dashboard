@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw } from '../components/utils/filters';
-import { fmtPct, fmtN } from '../components/utils/formatters';
+import { filtRaw, filtMes, filtDisp } from '../components/utils/filters';
+import { fmtPct, fmtN, num as n, fmtRangoMeses } from '../components/utils/formatters';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
 import ChartCard from '../components/ChartCard';
@@ -84,9 +84,7 @@ export default function OperativoPage() {
 
   const d = useMemo(() => {
     if (!raw) return null;
-    const F = filters;
-    const n = (v: unknown) => Number(v) || 0;
-    const rawF = filtRaw(raw.raw, F);
+    const F = filters;    const rawF = filtRaw(raw.raw, F);
 
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
     const fallidas = rawF.reduce((s, r) => s + n(r.Fallida_Con_Pago), 0);
@@ -140,7 +138,7 @@ export default function OperativoPage() {
     const diasEjec = dias.length;
 
     if (raw.disp) {
-      const dispData = raw.disp;
+      const dispData = filtDisp(raw.disp, F);
 
       dias.forEach(d => {
         const matchingDisp = dispData.filter((r: any) => {
@@ -339,15 +337,20 @@ export default function OperativoPage() {
       })
     };
 
-    // Gráfico 4: Evolutivo Mensual por Tipo de Brigada
-    const evMeses = Array.from(new Set((raw.evolutivo || []).map(e => e.Mes))).sort();
-    const evTipos = Array.from(new Set((raw.evolutivo || []).map(e => e.TipoBrigada))).sort();
+    // Gráfico 4: Evolutivo Mensual por Tipo de Brigada (Dinámico, reacciona a filtros globales)
+    const tecBaseParaEvolutivo = filtMes(raw.mes || [], F);
+    const evMeses = Array.from(new Set(tecBaseParaEvolutivo.map(e => e.Mes_YM).filter(Boolean) as string[])).sort();
+    const evTipos = Array.from(new Set(tecBaseParaEvolutivo.map(e => e.Tipo_Brigada_Mes).filter(Boolean) as string[])).sort();
+
+    const evValMap = new Map<string, number>();
+    tecBaseParaEvolutivo.forEach(e => {
+      if (!e.Mes_YM || !e.Tipo_Brigada_Mes) return;
+      const key = `${e.Mes_YM}|${e.Tipo_Brigada_Mes}`;
+      evValMap.set(key, (evValMap.get(key) || 0) + (Number(e.Ordenes) || 0));
+    });
 
     // Total de ordenes por (mes, tipo) — acceso rapido.
-    const evVal = (m: string, t: string) => {
-      const row = (raw.evolutivo || []).find(e => e.Mes === m && e.TipoBrigada === t);
-      return row ? Number(row.Total_Ordenes) || 0 : 0;
-    };
+    const evVal = (m: string, t: string) => evValMap.get(`${m}|${t}`) || 0;
     // El grafico principal muestra la TENDENCIA de las 5 brigadas de mayor volumen
     // (lineas); el resto se resume en la nota "las N restantes suman X% del volumen".
     const evTotales = evTipos
@@ -485,7 +488,7 @@ export default function OperativoPage() {
       // Eficacia por debajo del umbral (65%). PROM./DIA = ejecutadas / dias laborados.
       const evTecMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
       const colorPorBrigada = new Map<string, string>(evTotales.map((x, idx) => [x.t, evColor(x.t, idx)]));
-      const tecnicoDetalle = (evTecMes ? (raw.mes || []).filter(e => e.Mes_YM === evTecMes) : (raw.mes || [])).map(t => {
+      const tecnicoDetalle = (evTecMes ? filtMes(raw.mes || [], F).filter(e => e.Mes_YM === evTecMes) : filtMes(raw.mes || [], F)).map(t => {
         const ejec = Number(t.Visitas) || 0;
         const dias = Number(t.Dias_Laborados) || 0;
         const efi = Number(t.Eficacia) || 0;
@@ -510,7 +513,8 @@ export default function OperativoPage() {
 
       const tableDataEvolutivo = (() => {
         const currentMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
-        const tecCurrent = currentMes ? (raw.mes || []).filter(e => e.Mes_YM === currentMes) : (raw.mes || []);
+        const tecBase = filtMes(raw.mes || [], F);
+        const tecCurrent = currentMes ? tecBase.filter(e => e.Mes_YM === currentMes) : tecBase;
         const filteredCurrent = filtroEvolutivo ? tecCurrent.filter(e => e.Tipo_Brigada_Mes === filtroEvolutivo) : tecCurrent;
 
         return {
@@ -541,7 +545,7 @@ export default function OperativoPage() {
     const critico = disponibilidad < 0.30 || efectividad < 0.55 || perdRate > 0.15;
     const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
-    const winLbl = selWin.length ? (selWin.length === 1 ? selWin[0] : `${selWin[0]} – ${selWin[selWin.length - 1]}`) : '—';
+    const winLbl = fmtRangoMeses(selWin);
 
     return {
       efect, fallidas, perdidas, visitas, asignado, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
@@ -808,6 +812,7 @@ export default function OperativoPage() {
         mes: filters.mes.length ? filters.mes.join(',') : 'ALL',
         zona: filters.zona,
         proy: filters.proy,
+        proceso: filters.proceso,
       }} />}
     </>
   );

@@ -2,9 +2,9 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw, filtCos, ventanaPrevia } from '../components/utils/filters';
-import { otcAgg, otcAggMes, mesAnterior } from '../components/utils/aggregators';
-import { fmtCOP, fmtPct, fmtN, deltaPct } from '../components/utils/formatters';
+import { filtRaw, filtCos, ventanaPrevia, matchProyZona } from '../components/utils/filters';
+import { otcAgg, otcAggMes, mesAnterior, ingresoElectrica, aggVentana } from '../components/utils/aggregators';
+import { fmtCOP, fmtPct, fmtN, deltaPct, num, fmtRangoMeses } from '../components/utils/formatters';
 import { calcHealth } from '../components/utils/health';
 import ChartCard from '../components/ChartCard';
 import { useTheme } from '../components/ThemeProvider';
@@ -35,16 +35,12 @@ export default function ResumenPage() {
 
   const data = useMemo<any>(() => {
     if (!raw) return null;
-    const F = filters;
-    const num = (v: unknown) => Number(v) || 0;
-    const rawF = filtRaw(raw.raw, F);
+    const F = filters;    const rawF = filtRaw(raw.raw, F);
     const cosF = filtCos(raw.costos, F);
     const mActual = F.mes.length ? [...F.mes].sort().at(-1)! : mesList[mesList.length - 1];
     const mAnt = mesAnterior(mActual, mesList);
 
-    const filtBase = (r: { _Proyecto?: string; _Zona?: string; _ZonaDet?: string }) =>
-      (F.proy === 'ALL' || r._Proyecto === F.proy) &&
-      (F.zona === 'ALL' || r._Zona === F.zona || r._ZonaDet === F.zona);
+    const filtBase = matchProyZona(F);
 
     // ---- OTC (para Health) ----
     const pOTC = otcAgg(cosF);
@@ -109,9 +105,7 @@ export default function ResumenPage() {
     const costoXbrig = brigadas ? costoPeriodo / brigadas : 0;
 
     // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
-    const ingElec = cosF
-      .filter(r => String(r.Categoria || '').toUpperCase().includes('INGENIERIA ELECTRICA'))
-      .reduce((s, r) => s + num(r.Valor), 0);
+    const ingElec = ingresoElectrica(cosF);
 
     // Evolutivos 12m
     const efMes = meses12.map(m => {
@@ -166,16 +160,8 @@ export default function ResumenPage() {
     // último mes); con meses seleccionados, esos meses.
     const selWin = F.mes.length ? [...F.mes].sort() : [...mesList];
     const prevWin = ventanaPrevia(selWin, mesList);
-    const aggWin = (arr: string[]) => {
-      const set = new Set(arr);
-      const rr = raw.raw.filter(x => set.has(String(x.Fecha || '').slice(0, 7)) && filtBase(x));
-      const ef = rr.reduce((s, x) => s + num(x.Efectivas), 0);
-      const vi = rr.reduce((s, x) => s + num(x.Visitas), 0);
-      const ing = rr.reduce((s, x) => s + num(x.Ingresos), 0);
-      return { ing, ef, vi, efic: vi ? ef / vi : null, brig: new Set(rr.map(x => x.Cedula)).size };
-    };
-    const winA = aggWin(selWin);
-    const winB = aggWin(prevWin);
+    const winA = aggVentana(raw.raw, selWin, filtBase);
+    const winB = aggVentana(raw.raw, prevWin, filtBase);
     const winIncompleto = prevWin.length < selWin.length;
 
     // Series Financieras Reales (OTC) 12m
@@ -190,11 +176,9 @@ export default function ResumenPage() {
       };
     });
 
-    const winLbl = (arr: string[]) => (arr.length ? (arr.length === 1 ? arr[0] : `${arr[0]} … ${arr[arr.length - 1]}`) : '—');
-
     return {
       meses12, efMes, efMesPorTipo, evolutivoOTC,
-      winA, winB, winIncompleto, selLbl: winLbl(selWin), prevLbl: winLbl(prevWin)
+      winA, winB, winIncompleto, selLbl: fmtRangoMeses(selWin), prevLbl: fmtRangoMeses(prevWin)
     };
   }, [raw, filters, mesList]);
 
