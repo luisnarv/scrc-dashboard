@@ -338,16 +338,24 @@ export default function OperativoPage() {
     };
 
     // Gráfico 4: Evolutivo Mensual por Tipo de Brigada (Dinámico, reacciona a filtros globales)
-    const tecBaseParaEvolutivo = filtMes(raw.mes || [], F);
-    const evMeses = Array.from(new Set(tecBaseParaEvolutivo.map(e => e.Mes_YM).filter(Boolean) as string[])).sort();
-    const evTipos = Array.from(new Set(tecBaseParaEvolutivo.map(e => e.Tipo_Brigada_Mes).filter(Boolean) as string[])).sort();
-
     const evValMap = new Map<string, number>();
-    tecBaseParaEvolutivo.forEach(e => {
-      if (!e.Mes_YM || !e.Tipo_Brigada_Mes) return;
-      const key = `${e.Mes_YM}|${e.Tipo_Brigada_Mes}`;
-      evValMap.set(key, (evValMap.get(key) || 0) + (Number(e.Ordenes) || 0));
+    rawF.forEach(r => {
+      const mesYM = r.Fecha ? String(r.Fecha).substring(0, 7) : null;
+      const t = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || '');
+      if (!mesYM || !t) return;
+      
+      const totalOrd = Number(r.Efectivas || 0) + 
+                       Number(r.Fallida_Con_Pago || 0) + 
+                       Number(r.Fallida_Sin_Pago || 0) + 
+                       Number(r.Perdidas || 0);
+                       
+      const key = `${mesYM}|${t}`;
+      evValMap.set(key, (evValMap.get(key) || 0) + totalOrd);
     });
+
+    const uniqueKeys = Array.from(evValMap.keys());
+    const evMeses = Array.from(new Set(uniqueKeys.map(k => k.split('|')[0]))).sort();
+    const evTipos = Array.from(new Set(uniqueKeys.map(k => k.split('|')[1]))).sort();
 
     // Total de ordenes por (mes, tipo) — acceso rapido.
     const evVal = (m: string, t: string) => evValMap.get(`${m}|${t}`) || 0;
