@@ -497,8 +497,15 @@ export default function OperativoPage() {
           color: evColor(x.t, idx),
         };
       });
-      const mesAbbr = (m: string) => { const n = Number(String(m).split('-').pop()) || 0; return ['—', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'][n] || String(m); };
-      const varHeader = (evLast && evPrev) ? `${mesAbbr(evLast)}/${mesAbbr(evPrev)}` : 'VAR';
+      const formatHeader = (m: string) => {
+        const parts = String(m).split('-');
+        const names = ['—', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+        if (vistaEvolutivo === 'dia' && parts.length === 3) {
+          return `${Number(parts[2])} ${names[Number(parts[1])] || ''}`;
+        }
+        return names[Number(parts.pop()) || 0] || String(m);
+      };
+      const varHeader = (evLast && evPrev) ? `${formatHeader(evLast)}/${formatHeader(evPrev)}` : 'VAR';
 
       // Detallado por tecnico (vista "Tabla"): tecnicos del mes actual. Alerta =
       // Eficacia por debajo del umbral (65%). PROM./DIA = ejecutadas / dias laborados.
