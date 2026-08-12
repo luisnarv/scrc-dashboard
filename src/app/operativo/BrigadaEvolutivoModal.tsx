@@ -57,9 +57,7 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
       Chart.defaults.elements.line.borderWidth = 3;
       Chart.defaults.elements.point.radius = 4;
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-      const cfg = JSON.parse(JSON.stringify(config)) as any;
-      if (!cfg.options) cfg.options = {};
-      cfg.options.maintainAspectRatio = false;
+      const cfg = { ...config, options: { ...(config?.options || {}), maintainAspectRatio: false } } as any;
       chartRef.current = new Chart(canvasRef.current, cfg as ChartConfiguration);
     });
     return () => { mounted = false; if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
@@ -122,7 +120,6 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
             <th style={{ ...th, textAlign: 'left' }}>Brigada</th>
             <th style={{ ...th, textAlign: 'right' }}>Total</th>
             <th style={{ ...th, textAlign: 'right' }}>Part.</th>
-            <th style={{ ...th, textAlign: 'right' }}>{varHeader}</th>
           </tr>
         </thead>
         <tbody>
@@ -134,9 +131,6 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
               </td>
               <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--text-title)' }}>{nf(b.total)}</td>
               <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{b.partPct}%</td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: b.varPct == null ? 'var(--text-muted)' : b.varPct < 0 ? 'var(--err)' : 'var(--ok)' }}>
-                {b.varPct == null ? '—' : `${b.varPct > 0 ? '+' : ''}${b.varPct}%`}
-              </td>
             </tr>
           ))}
         </tbody>

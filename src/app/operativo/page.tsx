@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw, filtMes, filtDisp } from '../components/utils/filters';
 import { fmtPct, fmtN, num as n, fmtRangoMeses } from '../components/utils/formatters';
@@ -71,6 +71,15 @@ export default function OperativoPage() {
   const [brigadaModalOpen, setBrigadaModalOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
   const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia'>('mes');
+
+  useEffect(() => {
+    const selectedCount = filters.mes ? filters.mes.length : 0;
+    if (selectedCount === 1) {
+      setVistaEvolutivo('dia');
+    } else {
+      setVistaEvolutivo('mes');
+    }
+  }, [filters.mes]);
 
   const TEAL = colors.sip;
   const INDIGO = colors.otc;
@@ -382,6 +391,8 @@ export default function OperativoPage() {
     // La vista COMPLETA (modal) muestra TODAS las brigadas, no solo el top-5.
     const evSubtitleFull = `Tendencia de todas las brigadas (${evTotales.length} tipos) · clic en una brigada para filtrar`;
 
+    const tiposConColor = evTotales.map((x, idx) => ({ ...x, color: evColor(x.t, idx) }));
+
     const evLineChart = (tipos: { t: string, color?: string }[]) => {
       const isFiltered = (t: string) => filtroEvolutivo ? t === filtroEvolutivo : true;
       const opacity = (t: string) => isFiltered(t) ? '' : '33';
@@ -425,7 +436,7 @@ export default function OperativoPage() {
               borderJoinStyle: 'round',
               borderCapStyle: 'round',
               pointStyle: 'circle',
-              pointRadius: 3.4,
+              pointRadius: 4,
               pointBackgroundColor: '#fff',
               pointBorderWidth: 2,
               pointBorderColor: color + opacity(x.t),
@@ -448,7 +459,7 @@ export default function OperativoPage() {
           },
           plugins: { 
             legend: { display: false },
-            tooltip: { enabled: false }
+            tooltip: { enabled: true, mode: 'index', intersect: false }
           },
           scales: {
             y: {
@@ -479,8 +490,8 @@ export default function OperativoPage() {
         }
       };
     };
-    const chartEvolutivo = evLineChart(evTop);          // colapsado: top-5
-    const chartEvolutivoFull = evLineChart(evTotales);  // modal (vista completa): todas
+    const chartEvolutivo = evLineChart(tiposConColor);
+    const chartEvolutivoFull = evLineChart(tiposConColor);
 
       // Detalle por brigada (vista "Ambos"): total, participacion (%) y variacion
       // mes-a-mes (ultimo vs anterior). El grafico muestra el top-5; la tabla, todas.
@@ -577,7 +588,7 @@ export default function OperativoPage() {
       chartOrd, chartBrig, chartTipos, chartEvolutivo, evSubtitle, chartEvolutivoFull, evSubtitleFull,
       brigadaDetalle, varHeader, tecnicoDetalle,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
-      evolutivo: raw.evolutivo, evTop
+      evolutivo: raw.evolutivo, evTop, tiposConColor
     };
   }, [raw, filters, mesList, filtroEvolutivo, vistaEvolutivo]);
 
@@ -706,14 +717,13 @@ export default function OperativoPage() {
         <ChartCard
           id="op-evolutivo"
           title={vistaEvolutivo === 'mes' ? "Órdenes Mensuales por Tipo de Brigada" : "Órdenes Diarias por Tipo de Brigada"}
-          subtitle={d.evSubtitle}
+          subtitle={d.evSubtitleFull}
           config={d.chartEvolutivo as never}
-          height="normal"
           hasDetail
           onExpand={() => setBrigadaModalOpen(true)}
           detailTableData={d.tableDataEvolutivo as any}
           headerExtra={
-            <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
               <div style={{ display: 'flex', background: '#EDF0E7', borderRadius: 6, overflow: 'hidden', border: '1px solid #E0E0E0' }}>
                 <button onClick={() => setVistaEvolutivo('mes')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'mes' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por mes</button>
                 <button onClick={() => setVistaEvolutivo('dia')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'dia' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por día</button>
@@ -725,14 +735,14 @@ export default function OperativoPage() {
             </div>
           }
           customLayout={(canvas) => (
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', minHeight: '320px' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', minHeight: '340px' }}>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                   {canvas}
                 </div>
                 {/* Leyenda Chips */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '12px' }}>
-                  {d.evTop.map((x: any) => {
+                  {d.tiposConColor.map((x: any) => {
                      const isFiltered = !filtroEvolutivo || filtroEvolutivo === x.t;
                      return (
                        <div key={x.t} onClick={() => setFiltroEvolutivo(prev => prev === x.t ? null : x.t)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: '#F4F6EF', borderRadius: '8px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
@@ -756,11 +766,6 @@ export default function OperativoPage() {
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#3A3A3A' }}>{b.brigada}</div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6E7174', marginTop: 2 }}>
                             <span>{fmtN(b.total)} ({b.partPct}%)</span>
-                            {b.varPct !== null && (
-                              <span style={{ color: b.varPct > 0 ? '#3d7a24' : b.varPct < 0 ? '#a5281c' : '#97999B', fontWeight: 600 }}>
-                                {b.varPct > 0 ? '+' : ''}{b.varPct}%
-                              </span>
-                            )}
                           </div>
                         </div>
                       </div>

@@ -48,7 +48,7 @@ export async function getDashboardDataV2(mes?: string) {
   const activo = !!(mes && mes !== 'ALL');
   if (activo) params.push(mes);
 
-  const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.observacion ILIKE 'VS:%'";
+  const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.observacion ~* 'v\\s*s\\s*:'";
   const fechaCond = activo 
     ? `WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1 AND ${baseMoCond}` 
     : `WHERE ${baseMoCond}`;
@@ -265,7 +265,7 @@ export async function getDashboardDataV2(mes?: string) {
 
 export async function getMapDataV2(mes?: string, zona?: string, proy?: string, proceso?: string) {
   const values: unknown[] = [];
-  const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.observacion ILIKE 'VS:%'"];
+  const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.observacion ~* 'v\\s*s\\s*:'"];
   // Proceso: 'GESTOR' restringe a la brigada 'Gestor Integral Multi'. 'ALL'/SCR = todo.
   if (proceso === 'GESTOR') {
     filterClauses.push("mo.brigada_homologada = 'Gestor Integral Multi'");
@@ -357,7 +357,7 @@ export async function getMonthsDataV2() {
              COUNT(*)::int as "count",
              MAX(fecha_carga)::text as "version"
       FROM dbanalitica.historico_mo
-      WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND observacion ILIKE 'VS:%'
+      WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND observacion ~* 'v\\s*s\\s*:'
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
       ORDER BY 1
     `);
@@ -377,7 +377,7 @@ export async function getMonthsDataV2() {
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
         (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
-      WHERE mo.id_tecnico IS NOT NULL AND mo.observacion ILIKE 'VS:%'
+      WHERE mo.id_tecnico IS NOT NULL AND mo.observacion ~* 'v\\s*s\\s*:'
       GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.brigada_homologada
     `);
 
@@ -399,7 +399,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
   const lista = (barriosParam || '').split('||').map(s => s.trim()).filter(Boolean);
   if (!lista.length) return { rows: [] };
 
-  const where: string[] = ["h.id_tecnico IS NOT NULL", "h.observacion ILIKE 'VS:%'"];
+  const where: string[] = ["h.id_tecnico IS NOT NULL", "h.observacion ~* 'v\\s*s\\s*:'"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
@@ -443,7 +443,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
 //   getObsDataV2('2026-07', '123456')            -> por NIC
 //   getObsDataV2('2026-07', undefined, 'A||B')   -> por barrios
 export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: string): Promise<{ rows: unknown[] }> {
-  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''", "h.id_tecnico IS NOT NULL", "h.observacion ILIKE 'VS:%'"];
+  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''", "h.id_tecnico IS NOT NULL", "h.observacion ~* 'v\\s*s\\s*:'"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
