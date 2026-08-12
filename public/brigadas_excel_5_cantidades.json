@@ -1,0 +1,70 @@
+{
+  "(D) Brigada Tipo Pesada": {
+    "Enero": 5,
+    "Febrero": 6,
+    "Marzo": 6,
+    "Abril": 6,
+    "Mayo": 5,
+    "Junio": 3,
+    "Julio": 3
+  },
+  "Brigada Pesada/ MT AT": {
+    "Enero": 4,
+    "Febrero": 5,
+    "Marzo": 4,
+    "Abril": 4,
+    "Mayo": 4,
+    "Junio": 4,
+    "Julio": 4
+  },
+  "Brigada Tipo Liviana": {
+    "Enero": 10,
+    "Febrero": 8,
+    "Marzo": 9,
+    "Abril": 10,
+    "Mayo": 7,
+    "Junio": 7,
+    "Julio": 7
+  },
+  "Brigada Tipo Minicanasta": {
+    "Enero": 5,
+    "Febrero": 5,
+    "Marzo": 6,
+    "Abril": 6,
+    "Mayo": 7,
+    "Junio": 5,
+    "Julio": 4
+  },
+  "Brigada Tipo Pesada": {
+    "Enero": 23,
+    "Febrero": 23,
+    "Marzo": 29,
+    "Abril": 32,
+    "Mayo": 34,
+    "Junio": 38,
+    "Julio": 41
+  },
+  "Gestor Integral Multi": {
+    "Enero": 11,
+    "Febrero": 13,
+    "Marzo": 13,
+    "Abril": 13,
+    "Mayo": 14,
+    "Junio": 12,
+    "Julio": 13
+  },
+  "Pesada Disponible": {
+    "Enero": 10,
+    "Febrero": 13,
+    "Marzo": 12,
+    "Abril": 14,
+    "Mayo": 16,
+    "Junio": 15,
+    "Julio": 13
+  },
+  "Brigada Tipo Canasta": {
+    "Mayo": 2,
+    "Junio": 2,
+    "Julio": 2
+  }
+}

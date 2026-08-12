@@ -1,0 +1,887 @@
+[
+  {
+    "nombre": "ALBERTO MARIO MERCADO MACEA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 8858994.9,
+      "Marzo": 12164036.36,
+      "Mayo": 1053881.28,
+      "Junio": 7469405.44,
+      "Enero": 1073773.09,
+      "Febrero": 1053881.28,
+      "Julio": 7876262.07
+    }
+  },
+  {
+    "nombre": "ALDAIR ALBERTO BARRIOS RODELO",
+    "tipoBrigada": "Brigada Pesada/ MT AT",
+    "monthlyData": {
+      "Abril": 22083603.28,
+      "Enero": 1053881.28,
+      "Febrero": 18874055.73,
+      "Julio": 20724779.05,
+      "Junio": 20297097.47,
+      "Marzo": 1053881.28,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "ALEX JUNIOR MEDINA CARPIO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Febrero": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 10926625.73,
+      "Marzo": 9990912.72,
+      "Mayo": 9539634.83
+    }
+  },
+  {
+    "nombre": "ALEXANDER ORTIZ PAVA",
+    "tipoBrigada": "Brigada Pesada/ MT AT",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Enero": 122869.17,
+      "Febrero": 19245309.37,
+      "Julio": 1028061.19,
+      "Junio": 22089093.46,
+      "Marzo": 25137463.82,
+      "Mayo": 21652470.03
+    }
+  },
+  {
+    "nombre": "BLADIMIR OSPINO MACEA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 6231282.95
+    }
+  },
+  {
+    "nombre": "BRAY HAROL DELUQUE SAYAS",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Febrero": 1053881.28,
+      "Enero": 6377243.37,
+      "Marzo": 5049426.21
+    }
+  },
+  {
+    "nombre": "BRAYAN RAFAEL\tSARMIENTO DONADO",
+    "tipoBrigada": "(D) Brigada Tipo Pesada",
+    "monthlyData": {
+      "Marzo": 2352001.46,
+      "Febrero": 4506713.5
+    }
+  },
+  {
+    "nombre": "CHARRIS RODRIGUEZ HOLLMAN ENRIQUE",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Enero": 1053881.28,
+      "Febrero": 11753556.17,
+      "Julio": 1028061.19,
+      "Junio": 11637863.21,
+      "Marzo": 13493023.51,
+      "Mayo": 14205063.03
+    }
+  },
+  {
+    "nombre": "DAIRO JOSE PACHECO CANTILLO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 16649448.04,
+      "Enero": 7929844.58,
+      "Febrero": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 13081132.77,
+      "Marzo": 17743263.77,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "DAVID ENRIQUE PEÑA MUÑOZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Febrero": 1053881.28,
+      "Abril": 11310593.27,
+      "Julio": 3782381.06,
+      "Junio": 10974327.23,
+      "Marzo": 9313110.87,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "DAVID JOSÉ HERRERA TOSCANO",
+    "tipoBrigada": "Brigada Tipo Minicanasta",
+    "monthlyData": {
+      "Abril": 57818885.47,
+      "Enero": 13209455.03,
+      "Febrero": 47113722.95,
+      "Julio": 52107048.31,
+      "Junio": 53336103.75,
+      "Marzo": 53635891.37,
+      "Mayo": 50416086.71
+    }
+  },
+  {
+    "nombre": "DEIBIS JOSE CAUSADO SALCEDO",
+    "tipoBrigada": "Brigada Pesada/ MT AT",
+    "monthlyData": {
+      "Febrero": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 18748910.45,
+      "Mayo": 15892050.73,
+      "Abril": 1053881.28,
+      "Marzo": 12137331.77
+    }
+  },
+  {
+    "nombre": "DELGADO AVILA JAROD ENRIQUE",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Julio": 6412446.75,
+      "Junio": 714699.95,
+      "Abril": 7494006.25,
+      "Enero": 7957391.64,
+      "Febrero": 6828672.5,
+      "Marzo": 7656817.33,
+      "Mayo": 7780491.13
+    }
+  },
+  {
+    "nombre": "DEYVID JOSE PERTUZ POLO",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 8422342.52,
+      "Enero": 8344067.96,
+      "Febrero": 5967652.35,
+      "Julio": 8165599.61,
+      "Junio": 7067588.37,
+      "Marzo": 8048190.13,
+      "Mayo": 7290492.4
+    }
+  },
+  {
+    "nombre": "DIEGO ALEJANDRO PUELLO SALAS",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Enero": 381546.84
+    }
+  },
+  {
+    "nombre": "DONY  ANDRES  MIRANDA  GUZMAN",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Marzo": 1053881.28,
+      "Abril": 16823059.77,
+      "Enero": 1053881.28,
+      "Febrero": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 1072759.51,
+      "Mayo": 15761635.23
+    }
+  },
+  {
+    "nombre": "EDGARDO JOSE MIRANDA NUÑEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Febrero": 1002840.78
+    }
+  },
+  {
+    "nombre": "EDILBERTO RAFAEL MOVILLA BARRIOS",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 4537543.16,
+      "Julio": 12238668.43,
+      "Junio": 11961017.06,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "EFRAIN PAREJO",
+    "tipoBrigada": "Brigada Tipo Minicanasta",
+    "monthlyData": {
+      "Abril": 5063624.43,
+      "Marzo": 1761260.67,
+      "Mayo": 2421733.42
+    }
+  },
+  {
+    "nombre": "ELDER AGUSTIN CABRERA CHURIO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Enero": 5915844.54,
+      "Abril": 7008376.76,
+      "Febrero": 1053881.28,
+      "Marzo": 1053881.28,
+      "Mayo": 6126627.01
+    }
+  },
+  {
+    "nombre": "EMILIO JOSE DIAZ CALVO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 18052813.83,
+      "Junio": 11461818.65
+    }
+  },
+  {
+    "nombre": "ESTRADA HERRERA GABRIEL SEGUNDO",
+    "tipoBrigada": "Brigada Tipo Minicanasta",
+    "monthlyData": {
+      "Abril": 209587.0,
+      "Enero": 55699868.72,
+      "Febrero": 50195929.12,
+      "Julio": 56697622.89,
+      "Junio": 54232508.85,
+      "Marzo": 54213805.03,
+      "Mayo": 47333880.53
+    }
+  },
+  {
+    "nombre": "GARCIA ROCHA JEANS CARLOS",
+    "tipoBrigada": "(D) Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 11931803.81,
+      "Enero": 11277635.64,
+      "Febrero": 13306573.24,
+      "Julio": 1028061.19,
+      "Junio": 12340383.71,
+      "Marzo": 1053881.28,
+      "Mayo": 13203036.6
+    }
+  },
+  {
+    "nombre": "GREGORIO PEREZ DE LA ROSA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 3161643.85,
+      "Julio": 15602328.78,
+      "Junio": 1072759.51,
+      "Marzo": 4375873.38,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "HAROLD FRANCISCO DE ÁVILA BELTRÁN",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 4257403.81
+    }
+  },
+  {
+    "nombre": "IVAN ANDRES ESTRADA GUERRERO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Mayo": 8478751.26,
+      "Julio": 10434470.73,
+      "Junio": 1072759.51
+    }
+  },
+  {
+    "nombre": "IVAN ANDRES PACHECO ARIZA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Junio": 1697008.59
+    }
+  },
+  {
+    "nombre": "IVAN DARIO SARMIENTO VIZCAINO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Junio": 56168.73
+    }
+  },
+  {
+    "nombre": "IVAN ENRIQUE CAMARGO ARRIETA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 6643151.22,
+      "Junio": 4877458.93
+    }
+  },
+  {
+    "nombre": "JAIME ALBERTO DONADO RIVERO",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 7861896.68,
+      "Enero": 2476607.04,
+      "Febrero": 6075671.25,
+      "Julio": 8199196.62,
+      "Junio": 7227937.72,
+      "Marzo": 7861896.68,
+      "Mayo": 7764836.22
+    }
+  },
+  {
+    "nombre": "JAIME LUIS BELTRAN FLORES",
+    "tipoBrigada": "Brigada Tipo Minicanasta",
+    "monthlyData": {
+      "Abril": 34784898.25,
+      "Enero": 26033634.29,
+      "Febrero": 37426789.26,
+      "Junio": 1120506.38,
+      "Marzo": 36821355.9,
+      "Mayo": 34096905.8
+    }
+  },
+  {
+    "nombre": "JAIR ANTONIO ROSALES ALTAMAR",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 8073237.98,
+      "Enero": 2805360.18,
+      "Febrero": 4881201.48,
+      "Julio": 7165325.12,
+      "Junio": 6849207.83,
+      "Marzo": 8524099.44,
+      "Mayo": 7937040.25
+    }
+  },
+  {
+    "nombre": "JANNER FABIAN IGLESIAS GUTIERREZ",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 7572280.81,
+      "Enero": 8106113.3,
+      "Febrero": 7245093.15,
+      "Julio": 8529058.14,
+      "Junio": 7085914.01,
+      "Marzo": 7421993.66,
+      "Mayo": 7534709.02
+    }
+  },
+  {
+    "nombre": "JAWY JAVIER DIAZ MARTINEZ",
+    "tipoBrigada": "Brigada Pesada/ MT AT",
+    "monthlyData": {
+      "Abril": 22191386.59,
+      "Enero": 1053881.28,
+      "Febrero": 17245330.11,
+      "Marzo": 1053881.28,
+      "Mayo": 618724.61
+    }
+  },
+  {
+    "nombre": "JEISON MAZILLI SIERRA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 3863445.24
+    }
+  },
+  {
+    "nombre": "JESUS MARIA THALLIENS BLANCO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 5920244.15,
+      "Julio": 7331626.72,
+      "Junio": 1072759.51,
+      "Marzo": 1053881.28,
+      "Mayo": 7928576.13
+    }
+  },
+  {
+    "nombre": "JHON JAIRO BRAVO",
+    "tipoBrigada": "(D) Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 15858170.49,
+      "Enero": 1053881.28,
+      "Febrero": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 13494952.58,
+      "Marzo": 14946385.74,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "JHON NAIDER RIPOLL GUERRERO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 11514162.27,
+      "Junio": 6721768.92
+    }
+  },
+  {
+    "nombre": "JOEL DAVID ACOSTA MENDOZA",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 8034100.7,
+      "Enero": 3071493.68,
+      "Febrero": 6748832.45,
+      "Julio": 8681771.8,
+      "Junio": 8116731.24,
+      "Marzo": 8646207.75,
+      "Mayo": 7695954.61
+    }
+  },
+  {
+    "nombre": "JOHN JAIRO ARCON ESCORCIA",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 7955826.15,
+      "Enero": 8262662.42,
+      "Febrero": 6949215.32,
+      "Julio": 8437429.94,
+      "Junio": 7464643.9,
+      "Marzo": 7772663.68,
+      "Mayo": 7421993.66
+    }
+  },
+  {
+    "nombre": "JORGE ELIECER BLANCO RUEDA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 19627114.09,
+      "Enero": 18191747.6,
+      "Febrero": 14399610.52,
+      "Julio": 11693017.18,
+      "Junio": 1072759.51,
+      "Marzo": 1053881.28,
+      "Mayo": 15410958.59
+    }
+  },
+  {
+    "nombre": "JORGE LUIS ZAMBRANO MERCADO",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 6919470.99,
+      "Febrero": 4541489.9,
+      "Julio": 8157963.93,
+      "Junio": 6609447.38,
+      "Marzo": 7412600.71,
+      "Mayo": 7631769.47
+    }
+  },
+  {
+    "nombre": "JOSE ALBERTO GARCIA PUYO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 9029448.83,
+      "Febrero": 1053881.28,
+      "Julio": 10895537.77,
+      "Junio": 10108952.88,
+      "Marzo": 10304298.14,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "JOSE ANGEL GUERRERO MONTAÑO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 4430835.79
+    }
+  },
+  {
+    "nombre": "JOSE EDUARDO HERNANDEZ CARDOZO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 15116544.82,
+      "Junio": 1072759.51,
+      "Mayo": 12826794.07
+    }
+  },
+  {
+    "nombre": "JOSE MANUEL HERNANDEZ AYALA",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 13846039.38,
+      "Junio": 8783162.37
+    }
+  },
+  {
+    "nombre": "JULIO RAFAEL GALVAN RUIZ",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 4452256.9,
+      "Enero": 6457651.09,
+      "Febrero": 4751265.71,
+      "Marzo": 5316408.03,
+      "Mayo": 1913030.21
+    }
+  },
+  {
+    "nombre": "KENNY SANDER ACUÑA TORRES",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 2457235.79
+    }
+  },
+  {
+    "nombre": "KEVIN DACIR VALENCIANO RODRIGUEZ",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Marzo": 2558018.27
+    }
+  },
+  {
+    "nombre": "LEWIN SAHIR MOLINARES CASTILLO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Julio": 1028061.19,
+      "Junio": 8783328.49,
+      "Marzo": 3795582.16,
+      "Mayo": 10793050.27
+    }
+  },
+  {
+    "nombre": "LUIS ALFONSO MEZA PERCIA",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Julio": 5344590.79
+    }
+  },
+  {
+    "nombre": "LUIS CARLOS ESCORCIA LOPEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 1028061.19,
+      "Junio": 8033209.31
+    }
+  },
+  {
+    "nombre": "LUIS FERRER CARDOZO",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Abril": 8601099.15,
+      "Enero": 3394103.89,
+      "Febrero": 7836395.29,
+      "Julio": 6173298.28,
+      "Junio": 7969337.24,
+      "Marzo": 9140162.91,
+      "Mayo": 7195800.09
+    }
+  },
+  {
+    "nombre": "LUIS JAVIER TORRENEGRA MOLINA",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Abril": 7266055.89,
+      "Enero": 7353226.65,
+      "Febrero": 6302433.9,
+      "Julio": 6987161.84,
+      "Junio": 6752834.28,
+      "Marzo": 7123548.36,
+      "Mayo": 7404477.74
+    }
+  },
+  {
+    "nombre": "LUIS MIGUEL CUENTAS VALLEJO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Marzo": 78457.27
+    }
+  },
+  {
+    "nombre": "MARCELIANO ANTONIO TOVAR BALDOVINO",
+    "tipoBrigada": "Brigada Tipo Canasta",
+    "monthlyData": {
+      "Julio": 63759153.34,
+      "Junio": 50526460.05,
+      "Mayo": 1100787.92
+    }
+  },
+  {
+    "nombre": "MARCO ANTONIO MERIÑO ORTIZ",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Abril": 5591258.55,
+      "Julio": 7508930.86,
+      "Junio": 4950362.12,
+      "Marzo": 1905528.61,
+      "Mayo": 223865.24
+    }
+  },
+  {
+    "nombre": "MENDOZA HERNANDEZ ENDERSON DE JESUS",
+    "tipoBrigada": "Brigada Tipo Minicanasta",
+    "monthlyData": {
+      "Abril": 58121602.14,
+      "Enero": 53278135.3,
+      "Febrero": 46453250.2,
+      "Julio": 53825158.1,
+      "Junio": 50114647.9,
+      "Marzo": 51957189.8,
+      "Mayo": 50856401.88
+    }
+  },
+  {
+    "nombre": "MICHAEL JOSE BELLO HERNANDEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 15326603.9,
+      "Julio": 15226894.59,
+      "Junio": 12084556.41,
+      "Marzo": 1053881.28,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "MIGUEL ALBERTO RODRIGUEZ INSIGNARES",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Enero": 7509469.32,
+      "Febrero": 2930599.48,
+      "Abril": 7725698.94,
+      "Julio": 5195318.85,
+      "Junio": 8191560.94,
+      "Marzo": 8633683.82,
+      "Mayo": 8283013.8
+    }
+  },
+  {
+    "nombre": "NEVIS SMITH MARIN RODRIGUEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 10691701.86,
+      "Julio": 2737495.24,
+      "Junio": 5924878.25,
+      "Mayo": 4695987.95
+    }
+  },
+  {
+    "nombre": "NILSON FABIAN AMADOR OROZCO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Febrero": 7577753.53,
+      "Marzo": 8567255.33,
+      "Abril": 9931265.54,
+      "Enero": 6849093.29,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "OLVER JOSE RAMOS POSSO",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 8519402.97,
+      "Enero": 8099851.33,
+      "Febrero": 6957042.78,
+      "Julio": 8298460.5,
+      "Junio": 8020521.63,
+      "Marzo": 8793363.92,
+      "Mayo": 8315889.12
+    }
+  },
+  {
+    "nombre": "OSCAR ALBERTO BAYUELO MARTINEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Julio": 13455051.6,
+      "Junio": 1072759.51,
+      "Marzo": 3610928.57,
+      "Mayo": 12805721.62
+    }
+  },
+  {
+    "nombre": "RIVADENEIRA PENENREY DANNY JAVIER",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 13349885.81,
+      "Enero": 1053881.28,
+      "Febrero": 1053881.28,
+      "Julio": 9923522.38,
+      "Junio": 1072759.51,
+      "Marzo": 12735641.89,
+      "Mayo": 2107762.57
+    }
+  },
+  {
+    "nombre": "ROBERTO CARLOS FUENTES HERNANDEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Julio": 14586894.65,
+      "Junio": 1072759.51,
+      "Marzo": 12500738.07,
+      "Mayo": 12821845.39
+    }
+  },
+  {
+    "nombre": "ROBERTO DANIEL OJEDA GARCÍA",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Enero": 62560.55
+    }
+  },
+  {
+    "nombre": "STEWIN SILVA MANZANO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Julio": 6739878.61,
+      "Junio": 8857537.98,
+      "Marzo": 126993.08,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "STIVEN HERNANDEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Enero": 1053881.28,
+      "Febrero": 13749960.1,
+      "Julio": 1028061.19,
+      "Junio": 14496819.69,
+      "Marzo": 13912694.45,
+      "Mayo": 16070995.21
+    }
+  },
+  {
+    "nombre": "SUAREZ ANGUILA ISAIAS JOSE",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Enero": 9200792.4,
+      "Abril": 1053881.28,
+      "Febrero": 9164607.46,
+      "Julio": 8444026.66,
+      "Junio": 1072759.51,
+      "Marzo": 6921572.06,
+      "Mayo": 10625601.24
+    }
+  },
+  {
+    "nombre": "VARGAS MIGUEL ANGEL",
+    "tipoBrigada": "(D) Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 6094150.11,
+      "Enero": 1053881.28,
+      "Febrero": 8875776.64,
+      "Marzo": 1053881.28,
+      "Mayo": 1053881.28,
+      "Julio": 2959659.28,
+      "Junio": 10168641.62
+    }
+  },
+  {
+    "nombre": "VICTOR ALFONSO VILLAMIL GONZALEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Julio": 1031356.09
+    }
+  },
+  {
+    "nombre": "VICTOR MANUEL PAJARO CARRIAZO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 18555332.29,
+      "Enero": 1053881.28,
+      "Febrero": 18898353.06,
+      "Julio": 13415461.38,
+      "Junio": 1072759.51,
+      "Marzo": 1053881.28,
+      "Mayo": 17471213.53
+    }
+  },
+  {
+    "nombre": "VLADIMIR JULIO ACOSTA MARQUEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Enero": 1102357.77,
+      "Febrero": 697181.88
+    }
+  },
+  {
+    "nombre": "WALTER DE JESUS VILLA PUGLIESSE",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Enero": 14893540.69,
+      "Abril": 1053881.28,
+      "Febrero": 11376085.73,
+      "Julio": 1028061.19,
+      "Junio": 12981002.9,
+      "Marzo": 10641241.95,
+      "Mayo": 11653062.65
+    }
+  },
+  {
+    "nombre": "WILFRIDO JESUS OSORIO CASTRO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 12481595.51,
+      "Enero": 1638278.78,
+      "Febrero": 1053881.28,
+      "Julio": 6985204.64,
+      "Junio": 5083913.44,
+      "Marzo": 13955844.85,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "WILHEM KOOK BADILLO",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 13543086.08,
+      "Enero": 14324428.04,
+      "Febrero": 9834781.25,
+      "Julio": 13311439.72,
+      "Junio": 1072759.51,
+      "Marzo": 1053881.28,
+      "Mayo": 14035297.19
+    }
+  },
+  {
+    "nombre": "WILMER ENRIQUE PERTUZ FLOREZ",
+    "tipoBrigada": "Brigada Tipo Liviana",
+    "monthlyData": {
+      "Abril": 6993520.28,
+      "Enero": 7501209.93,
+      "Febrero": 4548838.71,
+      "Julio": 2654098.7,
+      "Junio": 5531999.95,
+      "Marzo": 6580338.69,
+      "Mayo": 6583652.88
+    }
+  },
+  {
+    "nombre": "WILSON DE JESUS COLPAS DE LA HOZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 871587.11,
+      "Julio": 8431930.94,
+      "Junio": 1072759.51,
+      "Mayo": 9919122.04
+    }
+  },
+  {
+    "nombre": "YACID ALBERTO CARDENAS PEREZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 1053881.28,
+      "Julio": 10623345.53,
+      "Junio": 1072759.51,
+      "Marzo": 600110.28,
+      "Mayo": 13566174.15
+    }
+  },
+  {
+    "nombre": "YESITH ALONSO PADILLA HERNANDEZ",
+    "tipoBrigada": "Brigada Tipo Pesada",
+    "monthlyData": {
+      "Abril": 11747047.12,
+      "Marzo": 12870008.19,
+      "Febrero": 9901139.03,
+      "Julio": 4416273.24,
+      "Junio": 11077136.38,
+      "Mayo": 1053881.28
+    }
+  },
+  {
+    "nombre": "YINETH PAOLA FONTALVO RODRIGUEZ",
+    "tipoBrigada": "Gestor Integral Multi",
+    "monthlyData": {
+      "Abril": 3259352.62,
+      "Enero": 6798928.17,
+      "Febrero": 5970783.34,
+      "Julio": 258086.09,
+      "Junio": 6795758.05,
+      "Marzo": 7623942.02,
+      "Mayo": 7345284.59
+    }
+  }
+]

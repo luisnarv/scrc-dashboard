@@ -72,6 +72,8 @@ export default function OperativoPage() {
   const [brigadaModalOpen, setBrigadaModalOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
   const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia'>('mes');
+  const [tecSearch, setTecSearch] = useState<string>('');
+  const [topLimit, setTopLimit] = useState<number>(0);
 
   useEffect(() => {
     const selectedCount = filters.mes ? filters.mes.length : 0;
@@ -124,7 +126,7 @@ export default function OperativoPage() {
 
     // Agrupación Diaria para Evolutivos y Tendencias
     const byDay: Record<string, { efec: number, fall: number, perd: number, disp: number, oper: number, brigadas: Set<unknown> }> = {};
-    const byTypeDay: Record<string, Record<string, { efec: number, vis: number, fall: number, perd: number }>> = {};
+    const byTypeDay: Record<string, Record<string, { efec: number, vis: number, fall: number, perd: number, brigadas: Set<unknown> }>> = {};
 
     rawF.forEach(r => {
       const day = String(r.Fecha || '');
@@ -141,8 +143,9 @@ export default function OperativoPage() {
       bd.brigadas.add(r.Cedula);
 
       const btd = (byTypeDay[t] ??= {});
-      const td = (btd[day] ??= { efec: 0, vis: 0, fall: 0, perd: 0 });
+      const td = (btd[day] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
       td.efec += e; td.vis += v; td.fall += f; td.perd += p;
+      td.brigadas.add(r.Cedula);
     });
 
     const dias = Object.keys(byDay).sort();
@@ -272,6 +275,20 @@ export default function OperativoPage() {
     const baseOpt = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 10 } } } } };
     
     // Gráfico 1: Evolutivo Diario de Órdenes
+    // Agrupación Mensual general para las gráficas dinámicas
+    const byTypeMonth: Record<string, Record<string, number>> = {};
+    const _meses = new Set<string>();
+    rawF.forEach(r => {
+      const day = String(r.Fecha || '');
+      if (!day) return;
+      const month = day.substring(0, 7);
+      _meses.add(month);
+      const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin tipo');
+      const btm = (byTypeMonth[t] ??= {});
+      btm[month] = (btm[month] || 0) + n(r.Efectivas);
+    });
+    const mesesArr = Array.from(_meses).sort();
+
     const chartOrd = {
       type: 'bar',
       data: {
@@ -285,28 +302,52 @@ export default function OperativoPage() {
       options: { ...baseOpt, scales: { x: { stacked: true }, y: { stacked: true } } }
     };
 
-    // Gráfico 2: Evolutivo Diario de Brigadas
+    // Gráfico 2: Evolutivo de Brigadas por Tipo (Dinámico)
+    const tiposArr = Object.keys(byTypeDay);
+    const brigMensual: Record<string, Record<string, number>> = {};
+    if (vistaEvolutivo === 'mes') {
+      tiposArr.forEach(t => {
+        brigMensual[t] = {};
+        const daysInMonth: Record<string, number> = {};
+        const sumInMonth: Record<string, number> = {};
+        Object.keys(byTypeDay[t]).forEach(day => {
+          const month = day.substring(0, 7);
+          daysInMonth[month] = (daysInMonth[month] || 0) + 1;
+          sumInMonth[month] = (sumInMonth[month] || 0) + (byTypeDay[t][day]?.brigadas.size || 0);
+        });
+        Object.keys(sumInMonth).forEach(month => {
+          brigMensual[t][month] = Math.round(sumInMonth[month] / daysInMonth[month]);
+        });
+      });
+    }
+
     const chartBrig = {
       type: 'line',
       data: {
-        labels: dias.map(d => d.slice(-2)),
-        datasets: [
-          { label: 'Brigadas Operativas', data: dias.map(d => byDay[d].oper), borderColor: INDIGO, backgroundColor: INDIGO + '33', fill: true, tension: 0.3 },
-          { label: 'Brigadas Disponibles', data: dias.map(d => byDay[d].disp), borderColor: MUT, borderDash: [5, 5], fill: false, tension: 0 },
-        ]
+        labels: vistaEvolutivo === 'mes' ? mesesArr : dias.map(d => d.slice(-2)),
+        datasets: tiposArr.map((t, idx) => ({
+          label: t,
+          data: vistaEvolutivo === 'mes'
+            ? mesesArr.map(m => brigMensual[t]?.[m] || 0)
+            : dias.map(d => byTypeDay[t][d]?.brigadas.size || 0),
+          borderColor: chartColors[idx % chartColors.length],
+          backgroundColor: chartColors[idx % chartColors.length] + '33',
+          fill: false, tension: 0.3
+        }))
       },
       options: { ...baseOpt, scales: { y: { min: 0 } } }
     };
 
-    // Gráfico 3: Evolutivo por Tipo de Brigada
-    const tiposArr = Object.keys(byTypeDay);
+    // Gráfico 3: Efectivas por Tipo de Brigada (Dinámico)
     const chartTipos = {
       type: 'line',
       data: {
-        labels: dias.map(d => d.slice(-2)),
+        labels: vistaEvolutivo === 'mes' ? mesesArr : dias.map(d => d.slice(-2)),
         datasets: tiposArr.map((t, idx) => ({
           label: t,
-          data: dias.map(d => byTypeDay[t][d]?.efec || 0),
+          data: vistaEvolutivo === 'mes'
+            ? mesesArr.map(m => byTypeMonth[t]?.[m] || 0)
+            : dias.map(d => byTypeDay[t][d]?.efec || 0),
           borderColor: chartColors[idx % chartColors.length],
           backgroundColor: chartColors[idx % chartColors.length] + '33',
           fill: false, tension: 0.3
@@ -519,37 +560,65 @@ export default function OperativoPage() {
       };
       const varHeader = (evLast && evPrev) ? `${formatHeader(evLast)}/${formatHeader(evPrev)}` : 'VAR';
 
-      // Detallado por tecnico (vista "Tabla"): tecnicos del mes actual. Alerta =
-      // Eficacia por debajo del umbral (65%). PROM./DIA = ejecutadas / dias laborados.
-      const evTecMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
+      // Detallado por tecnico: respeta el filtro GLOBAL de meses (F.mes). Con varios
+      // meses seleccionados, agrega por técnico (suma) a través de TODOS esos meses;
+      // con "Todos" (F.mes vacío) toma todos los meses. Alerta = Eficacia < 65%.
       const colorPorBrigada = new Map<string, string>(evTotales.map((x, idx) => [x.t, evColor(x.t, idx)]));
-      const tecnicoDetalle = (evTecMes ? filtMes(raw.mes || [], F).filter(e => e.Mes_YM === evTecMes) : filtMes(raw.mes || [], F)).map(t => {
-        const ejec = Number(t.Visitas) || 0;
-        const dias = Number(t.Dias_Laborados) || 0;
-        const efi = Number(t.Eficacia) || 0;
+      const mesesSelTec = F.mes;   // [] = todos los meses
+      const tecAgg = new Map<string, {
+        tipoBrigada: string; tecnico: string; cuentas: number; ejecutadas: number;
+        suspension: number; mantiene: number; reconexion: number; pagos: number;
+        imposibilidades: number; resistencias: number; diasLab: number;
+        efectivas: number; ordenes: number;
+      }>();
+      filtMes(raw.mes || [], F)
+        .filter(e => !mesesSelTec.length || mesesSelTec.includes(String(e.Mes_YM)))
+        .forEach(t => {
+          const key = `${t.Cedula || ''}|${t.Tipo_Brigada_Mes || ''}`;
+          let a = tecAgg.get(key);
+          if (!a) {
+            a = { tipoBrigada: t.Tipo_Brigada_Mes || '—', tecnico: t.Tecnico || 'Desconocido',
+              cuentas: 0, ejecutadas: 0, suspension: 0, mantiene: 0, reconexion: 0, pagos: 0,
+              imposibilidades: 0, resistencias: 0, diasLab: 0, efectivas: 0, ordenes: 0 };
+            tecAgg.set(key, a);
+          }
+          a.cuentas += n(t.Cantidad_NIC);
+          a.ejecutadas += n(t.Visitas);
+          a.suspension += n(t.Total_Suspension);
+          a.mantiene += n(t.Total_Mantiene_Susp);
+          a.reconexion += n(t.Total_Reconexion);
+          a.pagos += n(t.Total_Pagos);
+          a.imposibilidades += n(t.Total_Imposibilidades);
+          a.resistencias += n(t.Total_Resistencia);
+          a.diasLab += n(t.Dias_Laborados);
+          a.efectivas += n(t.Efectivas);
+          a.ordenes += n(t.Ordenes);
+        });
+      const tecnicoDetalle = Array.from(tecAgg.values()).map(a => {
+        const efi = a.ordenes > 0 ? a.efectivas / a.ordenes : 0;
         return {
-          tipoBrigada: t.Tipo_Brigada_Mes || '—',
-          tecnico: t.Tecnico || 'Desconocido',
-          color: colorPorBrigada.get(t.Tipo_Brigada_Mes || '') || MUT,
-          cuentas: Number(t.Cantidad_NIC) || 0,
-          ejecutadas: ejec,
-          suspension: Number(t.Total_Suspension) || 0,
-          mantiene: Number(t.Total_Mantiene_Susp) || 0,
-          reconexion: Number(t.Total_Reconexion) || 0,
-          pagos: Number(t.Total_Pagos) || 0,
-          imposibilidades: Number(t.Total_Imposibilidades) || 0,
-          resistencias: Number(t.Total_Resistencia) || 0,
-          diasLab: dias,
-          promDia: dias > 0 ? ejec / dias : 0,
+          tipoBrigada: a.tipoBrigada,
+          tecnico: a.tecnico,
+          color: colorPorBrigada.get(a.tipoBrigada) || MUT,
+          cuentas: a.cuentas,
+          ejecutadas: a.ejecutadas,
+          suspension: a.suspension,
+          mantiene: a.mantiene,
+          reconexion: a.reconexion,
+          pagos: a.pagos,
+          imposibilidades: a.imposibilidades,
+          resistencias: a.resistencias,
+          diasLab: a.diasLab,
+          promDia: a.diasLab > 0 ? a.ejecutadas / a.diasLab : 0,
           eficacia: efi,
           alerta: efi < 0.65,
         };
       }).sort((a, b) => b.ejecutadas - a.ejecutadas);
 
       const tableDataEvolutivo = (() => {
-        const currentMes = selWin.length ? selWin[selWin.length - 1] : (mesList.length ? mesList[0] : null);
+        // Respeta el filtro global de meses: todos los meses seleccionados (o todos si F.mes vacío).
         const tecBase = filtMes(raw.mes || [], F);
-        const tecCurrent = currentMes ? tecBase.filter(e => e.Mes_YM === currentMes) : tecBase;
+        const tecCurrent = F.mes.length ? tecBase.filter(e => F.mes.includes(String(e.Mes_YM))) : tecBase;
         const filteredCurrent = filtroEvolutivo ? tecCurrent.filter(e => e.Tipo_Brigada_Mes === filtroEvolutivo) : tecCurrent;
 
         return {
@@ -572,6 +641,34 @@ export default function OperativoPage() {
         };
       })();
 
+    // Agrupación para Seguimiento Mensual del Técnico: Técnico -> Mes -> (Efectivas + Fallidas)
+    const tecMonthlyData: Record<string, {
+      id: string;
+      nombre: string;
+      tipoBrigada: string;
+      totalEjec: number;
+      byMonth: Record<string, number>;
+    }> = {};
+
+    rawF.forEach(r => {
+      const day = String(r.Fecha || '');
+      if (!day) return;
+      const month = day.substring(0, 7);
+      const id = String(r.Cedula || r.Nombre || '');
+      if (!id) return;
+      const nombre = String(r.Nombre || id);
+      const tipo = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin tipo');
+      const efec = n(r.Efectivas);
+      const fall = n(r.Fallida_Con_Pago);
+      const ejec = efec + fall;
+
+      const entry = (tecMonthlyData[id] ??= { id, nombre, tipoBrigada: tipo, totalEjec: 0, byMonth: {} });
+      entry.totalEjec += ejec;
+      entry.byMonth[month] = (entry.byMonth[month] || 0) + ejec;
+    });
+
+    const allTecsSorted = Object.values(tecMonthlyData).sort((a, b) => b.totalEjec - a.totalEjec);
+
     // Estado global + alertas accionables
     const alertas: string[] = [];
     if (disponibilidad < 0.40) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
@@ -589,9 +686,48 @@ export default function OperativoPage() {
       chartOrd, chartBrig, chartTipos, chartEvolutivo, evSubtitle, chartEvolutivoFull, evSubtitleFull,
       brigadaDetalle, varHeader, tecnicoDetalle,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
-      evolutivo: raw.evolutivo, evTop, tiposConColor
+      evolutivo: raw.evolutivo, evTop, tiposConColor,
+      mesesArr, allTecsSorted
     };
   }, [raw, filters, mesList, filtroEvolutivo, vistaEvolutivo]);
+
+  const chartTecnicoHorizontal = useMemo(() => {
+    if (!d) return null;
+
+    let filteredTecs = d.allTecsSorted;
+    if (tecSearch.trim()) {
+      filteredTecs = filteredTecs.filter(t => t.nombre.toLowerCase().includes(tecSearch.trim().toLowerCase()));
+    } else if (topLimit > 0) {
+      filteredTecs = filteredTecs.slice(0, topLimit);
+    }
+
+    const labels = filteredTecs.map(t => t.nombre);
+    const meses = d.mesesArr.length ? d.mesesArr : [...new Set(filteredTecs.flatMap(t => Object.keys(t.byMonth)))].sort();
+
+    return {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: meses.map((month, idx) => ({
+          label: month,
+          data: filteredTecs.map(t => t.byMonth[month] || 0),
+          backgroundColor: chartColors[idx % chartColors.length],
+          borderRadius: 4,
+        }))
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 10 } } }
+        },
+        scales: {
+          x: { stacked: false, ticks: { font: { size: 11, weight: 600 }, maxRotation: 55, minRotation: 25 } },
+          y: { stacked: false, min: 0 }
+        }
+      }
+    };
+  }, [d, tecSearch, topLimit, chartColors]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -705,11 +841,11 @@ export default function OperativoPage() {
       </div>
 
       {/* Evolutivos Diarios (NUEVO) */}
-      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Seguimiento Diario de Operación</div>
+      <div style={secH(TEAL)}><span style={dot(TEAL)} /> {vistaEvolutivo === 'mes' ? 'Seguimiento Mensual de Operación' : 'Seguimiento Diario de Operación'}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 12 }}>
-        <ChartCard id="op-ord" title="Evolutivo Diario de Órdenes" config={d.chartOrd as never} height="short" hasDetail detailTableData={d.tableDataOrd as any} />
-        <ChartCard id="op-brig" title="Evolutivo Diario de Brigadas" config={d.chartBrig as never} height="short" hasDetail detailTableData={d.tableDataBrig as any} />
-        <ChartCard id="op-tipos" title="Efectivas por Tipo de Brigada" config={d.chartTipos as never} height="short" hasDetail detailTableData={d.tableDataTipos as any} />
+        <ChartCard id="op-ord" title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Órdenes" : "Evolutivo Diario de Órdenes"} config={d.chartOrd as never} height="short" hasDetail detailTableData={d.tableDataOrd as any} />
+        <ChartCard id="op-brig" title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Brigadas" : "Evolutivo Diario de Brigadas"} config={d.chartBrig as never} height="short" hasDetail detailTableData={d.tableDataBrig as any} />
+        <ChartCard id="op-tipos" title={vistaEvolutivo === 'mes' ? "Efectivas Mensuales por Tipo" : "Efectivas Diarias por Tipo"} config={d.chartTipos as never} height="short" hasDetail detailTableData={d.tableDataTipos as any} />
       </div>
 
       {/* Evolutivo Mensual por Tipo de Brigada */}
@@ -845,6 +981,64 @@ export default function OperativoPage() {
       
       <DisponibilidadSection />
 
+      {/* Seguimiento Mensual del Técnico (SECCIÓN COMPLETA HORIZONTAL 100%) */}
+      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Seguimiento Mensual del Técnico</div>
+      <div style={{ background: 'var(--panel)', borderRadius: 14, padding: 20, marginBottom: 24, boxShadow: '0 2px 6px rgba(20,30,60,.06)', border: '1px solid var(--border)', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Evolutivo de Órdenes Ejecutadas por Técnico</div>
+            <div style={{ fontSize: 11.5, color: MUT, marginTop: 2 }}>Desglose en columnas por técnico y mes (Órdenes Efectivas + Fallidas con pago)</div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Buscar técnico..."
+              value={tecSearch}
+              onChange={e => setTecSearch(e.target.value)}
+              style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: INK, fontSize: 12.5, outline: 'none', width: 180 }}
+            />
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: MUT }}>Mostrar:</label>
+              <select
+                value={topLimit}
+                onChange={e => setTopLimit(Number(e.target.value))}
+                style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: INK, fontSize: 12.5, fontWeight: 600, outline: 'none' }}
+              >
+                <option value={0}>Todos los técnicos ({d.allTecsSorted.length})</option>
+                <option value={10}>Top 10</option>
+                <option value={20}>Top 20</option>
+                <option value={50}>Top 50</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {chartTecnicoHorizontal ? (
+          <div style={{ overflowX: 'auto', paddingBottom: 12 }}>
+            <div style={{
+              height: 480,
+              minWidth: (tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)) > 15
+                ? `${(tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)) * 48}px`
+                : '100%',
+              position: 'relative'
+            }}>
+              <ChartCard
+                id="op-seguimiento-tecnico"
+                title="Órdenes Ejecutadas (Efectivas + Fallidas con pago)"
+                subtitle={`Mostrando ${tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)} técnicos desglosados mensualmente`}
+                config={chartTecnicoHorizontal as never}
+                height="tall"
+                hasDetail={false}
+              />
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: 30, textAlign: 'center', color: MUT, fontSize: 12 }}>No hay información de técnicos para el filtro actual</div>
+        )}
+      </div>
+
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
       {brigadaModalOpen && d && (
         <BrigadaEvolutivoModal
@@ -864,7 +1058,7 @@ export default function OperativoPage() {
         mes: filters.mes.length ? filters.mes.join(',') : 'ALL',
         zona: filters.zona,
         proy: filters.proy,
-        proceso: filters.proceso,
+        proceso: (filters as any).proceso,
       }} />}
     </>
   );

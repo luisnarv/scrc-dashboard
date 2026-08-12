@@ -1,0 +1,70 @@
+{
+  "(D) Brigada Tipo Pesada": {
+    "Enero": 36824889.61,
+    "Febrero": 89144716.02,
+    "Marzo": 104633761.19,
+    "Abril": 87725272.9,
+    "Mayo": 64691012.49,
+    "Junio": 51670672.59,
+    "Julio": 50818977.12
+  },
+  "Brigada Pesada/ MT AT": {
+    "Enero": 90633790.47,
+    "Febrero": 111879079.09,
+    "Marzo": 143758987.94,
+    "Abril": 135878830.16,
+    "Mayo": 119495766.55,
+    "Junio": 122270202.76,
+    "Julio": 129255330.0
+  },
+  "Brigada Tipo Liviana": {
+    "Enero": 54937453.62,
+    "Febrero": 46839744.14,
+    "Marzo": 55368997.0,
+    "Abril": 63161806.34,
+    "Mayo": 52559816.77,
+    "Junio": 61422720.2,
+    "Julio": 46778826.25
+  },
+  "Brigada Tipo Minicanasta": {
+    "Enero": 296442186.7,
+    "Febrero": 362379383.07,
+    "Marzo": 396779005.55,
+    "Abril": 408062081.72,
+    "Mayo": 372451592.53,
+    "Junio": 317607533.77,
+    "Julio": 325259658.59
+  },
+  "Brigada Tipo Pesada": {
+    "Enero": 423086280.2,
+    "Febrero": 459101371.76,
+    "Marzo": 541440589.72,
+    "Abril": 684126887.36,
+    "Mayo": 748924639.46,
+    "Junio": 749108370.74,
+    "Julio": 782190489.65
+  },
+  "Gestor Integral Multi": {
+    "Enero": 124760253.61,
+    "Febrero": 139695039.41,
+    "Marzo": 187423734.32,
+    "Abril": 172579747.01,
+    "Mayo": 174276739.44,
+    "Junio": 148288022.03,
+    "Julio": 170019176.42
+  },
+  "Pesada Disponible": {
+    "Enero": 18969863.12,
+    "Febrero": 25293150.83,
+    "Marzo": 23185388.26,
+    "Abril": 31616438.54,
+    "Mayo": 33724201.1,
+    "Junio": 30037266.16,
+    "Julio": 24673468.63
+  },
+  "Brigada Tipo Canasta": {
+    "Mayo": 80096560.1,
+    "Junio": 101052920.11,
+    "Julio": 127518306.68
+  }
+}

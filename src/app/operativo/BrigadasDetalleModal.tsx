@@ -32,6 +32,18 @@ type SortKey =
   | 'totVis' | 'promVis' | 'promEfec' | 'ingreso';
 
 /* columnas de la tabla: clave, título, ¿es promedio? */
+const isDisponibleType = (tLabel: string) => {
+  const s = tLabel.toLowerCase();
+  return (
+    s.includes('canasta') ||
+    s.includes('minicanasta') ||
+    s.includes('mini canasta') ||
+    s.includes('mt-at') ||
+    s.includes('gestor') ||
+    s.includes('disponible')
+  );
+};
+
 const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean }[] = [
   { key: 'efec', label: 'Efectivas', accent: OK },
   { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
@@ -57,6 +69,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   const [sort, setSort] = useState<SortKey>('totVis');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [q, setQ] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState<'ALL' | 'OPERATIVA' | 'DISPONIBLE'>('ALL');
 
   /* cerrar con Escape + bloquear scroll del fondo */
   useEffect(() => {
@@ -133,16 +146,22 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   }, [raw, filters]);
 
   const brigadasSort = useMemo(() => {
-    const arr = q.trim()
-      ? brigadas.filter(b => b.label.toLowerCase().includes(q.trim().toLowerCase()))
-      : brigadas.slice();
+    let arr = brigadas.slice();
+    if (categoriaFiltro === 'OPERATIVA') {
+      arr = arr.filter(b => !isDisponibleType(b.label));
+    } else if (categoriaFiltro === 'DISPONIBLE') {
+      arr = arr.filter(b => isDisponibleType(b.label));
+    }
+    if (q.trim()) {
+      arr = arr.filter(b => b.label.toLowerCase().includes(q.trim().toLowerCase()));
+    }
     const mult = dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
       if (sort === 'label') return a.label.localeCompare(b.label) * mult;
       return (promValue(a, sort) - promValue(b, sort)) * mult;
     });
     return arr;
-  }, [brigadas, sort, dir, q]);
+  }, [brigadas, sort, dir, q, categoriaFiltro]);
 
   const toggle = (k: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -153,29 +172,71 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   };
 
   const exportCSV = () => {
+    if (!raw) return;
     const rows = [];
-    rows.push(['Fecha', 'Zona', 'Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'PROM vis', 'Prom efec'].join(';'));
+    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'PROM vis', 'Prom efec'].join(';'));
     
-    brigadas.forEach(typeNode => {
-      typeNode.children!.forEach(zoneNode => {
-        zoneNode.children!.forEach(techNode => {
-          const promVis = techNode.dias ? techNode.totVis / techNode.dias : 0;
-          const promEfec = techNode.dias ? techNode.efec / techNode.dias : 0;
-          rows.push([
-            periodo,
-            zoneNode.label,
-            techNode.label.replace(/;/g, ''),
-            techNode.efec,
-            techNode.fall,
-            techNode.perd,
-            techNode.totVis,
-            Math.round(techNode.ingreso),
-            promVis.toFixed(2),
-            promEfec.toFixed(2)
-          ].join(';'));
-        });
-      });
-    });
+    const rowsF = filtRaw(raw.raw, filters);
+    
+    // Agrupar por Mes -> Tipo -> Zona -> Técnico
+    const monthMap: Record<string, Record<string, Record<string, Record<string, { efec: number; fall: number; perd: number; totVis: number; dias: number; ingreso: number; techName: string }>>>> = {};
+
+    for (const r of rowsF) {
+      const month = String(r.Fecha || '').slice(0, 7) || '—';
+      const typeKey = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin Tipo');
+      const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
+      const techKey = String(r.Cedula || '');
+      const techLabel = String(r.Nombre || techKey);
+
+      const mNode = (monthMap[month] ??= {});
+      const tNode = (mNode[typeKey] ??= {});
+      const zNode = (tNode[zoneKey] ??= {});
+      const tech = (zNode[techKey] ??= { efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, techName: techLabel });
+
+      const efec = num(r.Efectivas);
+      const fall = num(r.Fallida_Con_Pago);
+      const perd = num(r.Fallida_Sin_Pago) + num(r.Perdidas);
+      const totVis = efec + fall + perd;
+      const ingreso = num(r.Ingresos);
+
+      tech.efec += efec;
+      tech.fall += fall;
+      tech.perd += perd;
+      tech.totVis += totVis;
+      tech.dias += 1;
+      tech.ingreso += ingreso;
+    }
+
+    const sortedMonths = Object.keys(monthMap).sort();
+    for (const month of sortedMonths) {
+      const types = monthMap[month];
+      for (const typeKey of Object.keys(types).sort()) {
+        const categoria = isDisponibleType(typeKey) ? 'Disponible' : 'Operativa';
+        const zones = types[typeKey];
+        for (const zoneKey of Object.keys(zones).sort()) {
+          const techs = zones[zoneKey];
+          for (const techKey of Object.keys(techs).sort()) {
+            const tech = techs[techKey];
+            const promVis = tech.dias ? tech.totVis / tech.dias : 0;
+            const promEfec = tech.dias ? tech.efec / tech.dias : 0;
+            rows.push([
+              month,
+              zoneKey,
+              typeKey.replace(/;/g, ''),
+              categoria,
+              tech.techName.replace(/;/g, ''),
+              tech.efec,
+              tech.fall,
+              tech.perd,
+              tech.totVis,
+              Math.round(tech.ingreso),
+              promVis.toFixed(2),
+              promEfec.toFixed(2)
+            ].join(';'));
+          }
+        }
+      }
+    }
     
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -226,13 +287,48 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderBottom: `1px solid ${LINE}` }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: `1px solid ${LINE}`, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 1.5, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
             <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
               Jerarquía: Tipo de Brigada → Zona → Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
+          
+          {/* Selector de categoría: Operativas vs Disponibles */}
+          <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 3, borderRadius: 8, border: `1px solid ${LINE}` }}>
+            <button
+              onClick={() => setCategoriaFiltro('ALL')}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                background: categoriaFiltro === 'ALL' ? TEAL : 'transparent',
+                color: categoriaFiltro === 'ALL' ? '#fff' : MUT,
+              }}
+            >
+              Todas ({brigadas.length})
+            </button>
+            <button
+              onClick={() => setCategoriaFiltro('OPERATIVA')}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                background: categoriaFiltro === 'OPERATIVA' ? TEAL : 'transparent',
+                color: categoriaFiltro === 'OPERATIVA' ? '#fff' : MUT,
+              }}
+            >
+              ⚡ Operativas ({brigadas.filter(b => !isDisponibleType(b.label)).length})
+            </button>
+            <button
+              onClick={() => setCategoriaFiltro('DISPONIBLE')}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                background: categoriaFiltro === 'DISPONIBLE' ? TEAL : 'transparent',
+                color: categoriaFiltro === 'DISPONIBLE' ? '#fff' : MUT,
+              }}
+            >
+              📋 Disponibles ({brigadas.filter(b => isDisponibleType(b.label)).length})
+            </button>
+          </div>
+
           <button
             onClick={exportCSV}
             style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
@@ -241,7 +337,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           </button>
           <input
             value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo…"
-            style={{ padding: '8px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, width: 190, outline: 'none', color: INK }}
+            style={{ padding: '8px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, width: 160, outline: 'none', color: INK }}
           />
           <button
             onClick={onClose} aria-label="Cerrar"
@@ -339,6 +435,15 @@ function RowRecursive({
         <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? 'var(--text-body)' : INK, whiteSpace: 'nowrap' }}>
           {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: 'var(--border)', marginRight: 6 }}>└</span>}
           {node.label}
+          {level === 0 && (
+            <span style={{
+              marginLeft: 8, padding: '2px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+              background: isDisponibleType(node.label) ? 'rgba(57,73,171,.12)' : 'rgba(46,125,50,.12)',
+              color: isDisponibleType(node.label) ? 'var(--otc)' : 'var(--ok)',
+            }}>
+              {isDisponibleType(node.label) ? 'Disponible' : 'Operativa'}
+            </span>
+          )}
           {!isLeaf && (
             <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: MUT }}>
               ({node.children!.length})
