@@ -17,8 +17,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="icon" href="/ises_symbol.avif" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('ises_theme');
+if(t!=='dark'&&t!=='light'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+document.body.classList.add('theme-'+t);}catch(e){}})();`,
+          }}
+        />
       </head>
-      <body>
+      <body className="theme-light">
         <ThemeProvider>
           <DashboardProvider>
             <div className="wrap">

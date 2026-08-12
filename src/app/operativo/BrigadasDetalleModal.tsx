@@ -37,7 +37,7 @@ const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMo
   { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
   { key: 'perd', label: 'Perdidas', accent: ERR },
   { key: 'totVis', label: 'Total Visitas' },
-  { key: 'ingreso', label: 'Producción Valorizada', accent: '#00796b', isMoney: true },
+  { key: 'ingreso', label: 'Producción Valorizada', accent: 'var(--otc)', isMoney: true },
   { key: 'promVis', label: 'Prom Vis.', prom: true },
   { key: 'promEfec', label: 'Prom Efec.', prom: true },
 ];
@@ -195,7 +195,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   };
   const tdBase: React.CSSProperties = { padding: '9px 12px', fontSize: 13, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
   const numCell = (v: number, prom = false, accent?: string): React.CSSProperties => ({
-    ...tdBase, textAlign: 'right', color: v === 0 ? '#c2c8d4' : (accent || INK),
+    ...tdBase, textAlign: 'right', color: v === 0 ? 'var(--text-muted)' : (accent || INK),
     fontWeight: prom ? 600 : 500,
   });
   const arrow = (k: SortKey) => (sort === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
@@ -336,7 +336,7 @@ function RowRecursive({
         onClick={() => !isLeaf && onToggle(node.key)}
         style={{ background: rowBg, cursor: isLeaf ? 'default' : 'pointer', borderBottom: `1px solid ${LINE}` }}
       >
-        <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? '#42506b' : INK, whiteSpace: 'nowrap' }}>
+        <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? 'var(--text-body)' : INK, whiteSpace: 'nowrap' }}>
           {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: 'var(--border)', marginRight: 6 }}>└</span>}
           {node.label}
           {!isLeaf && (

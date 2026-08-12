@@ -100,7 +100,7 @@ export default function GerencialPage() {
         <div style={{ fontSize: 12, color: MUT }}>Periodo · <b style={{ color: INK, fontWeight: 600 }}>{d.periodoLabel}</b></div>
       </div>
 
-      <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid #eef0f5' }}>
+      <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid var(--border)' }}>
         <h2>🛠️ 1. Producción Operativa (Estimación)</h2>
         <div className="sec-sub">Basado en tarifarios y órdenes ejecutadas en campo</div>
         <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -111,7 +111,7 @@ export default function GerencialPage() {
         </div>
       </div>
 
-      <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid #eef0f5' }}>
+      <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid var(--border)' }}>
         <h2>💰 2. Resultado Financiero (Real OTC)</h2>
         <div className="sec-sub">Información financiera extraída de la contabilidad</div>
         <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>

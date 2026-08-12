@@ -11,6 +11,7 @@ import { useTheme } from '../components/ThemeProvider';
 import { esFestivo } from '../components/utils/holidays';
 import MapModal from '../components/MapModal';
 import BrigadaEvolutivoModal from './BrigadaEvolutivoModal';
+import { ButtonPrimary, ButtonGhost, SegmentedControl } from '../components/Buttons';
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -437,7 +438,7 @@ export default function OperativoPage() {
               borderCapStyle: 'round',
               pointStyle: 'circle',
               pointRadius: 4,
-              pointBackgroundColor: '#fff',
+              pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
               pointBorderWidth: 2,
               pointBorderColor: color + opacity(x.t),
               tension: 0,
@@ -467,7 +468,7 @@ export default function OperativoPage() {
               max: roundedMax,
               position: 'left',
               grid: {
-                color: '#EDF0E7',
+                color: theme === 'dark' ? '#1E3A5F' : '#EDF0E7',
                 lineWidth: 1,
                 drawBorder: false,
               },
@@ -483,7 +484,7 @@ export default function OperativoPage() {
               border: { display: false },
               ticks: {
                 font: { size: 11.5, weight: 600 },
-                color: '#5c5f5a',
+                color: colors.mut,
               }
             }
           }
@@ -656,7 +657,7 @@ export default function OperativoPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => setModalOpen(true)}
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? '#3b82f6' : '#1976D2', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 1px 3px rgba(25,118,210,${theme === 'dark' ? 0.1 : 0.3})` }}>
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? 'var(--brand-primary)' : 'var(--brand-primary)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 1px 3px rgba(25,118,210,${theme === 'dark' ? 0.1 : 0.3})` }}>
             Detalle de Brigadas
           </button>
           <a href="https://app.powerbi.com/view?r=eyJrIjoiNmRkNzk5ZDQtZTI3OS00MzczLWE1OTAtYmE3MGIxZGQxZGJkIiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
@@ -664,7 +665,7 @@ export default function OperativoPage() {
             Ver Detalle Operativo (Norte-Centro) ↗
           </a>
           <a href="https://app.powerbi.com/view?r=eyJrIjoiMTU3ZjE4ZmItMWZjMy00ZjBkLTlkNGMtODQ1YTMwMmZlMDQ2IiwidCI6IjAwOGU1MWNkLTNiNzItNDA0NS05MjUwLWI0MzY4MzM0NzBkNyJ9" target="_blank" rel="noopener noreferrer"
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? '#14b8a6' : '#0f766e', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? 'var(--brand-secondary)' : 'var(--brand-secondary)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             Ver Detalle Operativo (Sur) ↗
           </a>
         </div>
@@ -719,19 +720,38 @@ export default function OperativoPage() {
           title={vistaEvolutivo === 'mes' ? "Órdenes Mensuales por Tipo de Brigada" : "Órdenes Diarias por Tipo de Brigada"}
           subtitle={d.evSubtitleFull}
           config={d.chartEvolutivo as never}
-          hasDetail
-          onExpand={() => setBrigadaModalOpen(true)}
+          hasDetail={false}
           detailTableData={d.tableDataEvolutivo as any}
           headerExtra={
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
-              <div style={{ display: 'flex', background: '#EDF0E7', borderRadius: 6, overflow: 'hidden', border: '1px solid #E0E0E0' }}>
-                <button onClick={() => setVistaEvolutivo('mes')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'mes' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por mes</button>
-                <button onClick={() => setVistaEvolutivo('dia')} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: vistaEvolutivo === 'dia' ? '#DEE3D3' : 'transparent', color: '#3A3A3A' }}>Por día</button>
-              </div>
+              <SegmentedControl
+                options={[
+                  { value: 'mes', label: 'Por mes' },
+                  { value: 'dia', label: 'Por día' }
+                ]}
+                value={vistaEvolutivo}
+                onChange={(val) => setVistaEvolutivo(val as 'mes' | 'dia')}
+              />
+
               {filtroEvolutivo && (
-                <button onClick={() => setFiltroEvolutivo(null)} style={{ padding: '6px 10px', fontSize: 11, borderRadius: 6, background: '#EDF0E7', color: '#3A3A3A', border: '1px solid #E0E0E0', cursor: 'pointer', fontWeight: 600 }}>Quitar filtro</button>
+                <ButtonGhost onClick={() => setFiltroEvolutivo(null)}>
+                  Quitar filtro
+                </ButtonGhost>
               )}
-              <button onClick={() => setMapOpen(true)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--brand-primary)', color: 'var(--brand-grad-text)', border: 'none', cursor: 'pointer', marginLeft: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>📍 Ver en Mapa</button>
+
+              <ButtonPrimary onClick={() => setMapOpen(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2.2"
+                  strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                Ver en Mapa
+              </ButtonPrimary>
+
+              <ButtonGhost onClick={() => setBrigadaModalOpen(true)}>
+                <span style={{ fontSize: 14 }}>⤢</span> Expandir
+              </ButtonGhost>
             </div>
           }
           customLayout={(canvas) => (
@@ -745,17 +765,17 @@ export default function OperativoPage() {
                   {d.tiposConColor.map((x: any) => {
                      const isFiltered = !filtroEvolutivo || filtroEvolutivo === x.t;
                      return (
-                       <div key={x.t} onClick={() => setFiltroEvolutivo(prev => prev === x.t ? null : x.t)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: '#F4F6EF', borderRadius: '8px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
+                       <div key={x.t} onClick={() => setFiltroEvolutivo(prev => prev === x.t ? null : x.t)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--panel)', borderRadius: '8px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
                          <span style={{ width: 14, height: 3, background: x.color, display: 'inline-block', borderRadius: 2 }} />
-                         <span style={{ fontSize: 11.5, color: '#3A3A3A', fontWeight: 500 }}>{x.t}</span>
+                         <span style={{ fontSize: 11.5, color: 'var(--text-body)', fontWeight: 500 }}>{x.t}</span>
                        </div>
                      );
                   })}
                 </div>
               </div>
               {/* Panel Lateral Ranking */}
-              <div style={{ width: '280px', borderLeft: '1px solid #EDF0E7', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#3A3A3A', marginBottom: 16 }}>Detalle por brigada</div>
+              <div style={{ width: '280px', borderLeft: '1px solid var(--border)', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-title)', marginBottom: 16 }}>Detalle por brigada</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto' }}>
                   {d.brigadaDetalle.slice(0, 10).map((b: any) => {
                     const isFiltered = !filtroEvolutivo || filtroEvolutivo === b.brigada;
@@ -763,8 +783,8 @@ export default function OperativoPage() {
                       <div key={b.brigada} onClick={() => setFiltroEvolutivo(prev => prev === b.brigada ? null : b.brigada)} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', opacity: isFiltered ? 1 : 0.4 }}>
                         <span style={{ width: 4, height: '100%', minHeight: '24px', background: b.color, borderRadius: 2 }} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#3A3A3A' }}>{b.brigada}</div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6E7174', marginTop: 2 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-body)' }}>{b.brigada}</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                             <span>{fmtN(b.total)} ({b.partPct}%)</span>
                           </div>
                         </div>

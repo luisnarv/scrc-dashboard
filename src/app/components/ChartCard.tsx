@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChartConfiguration } from 'chart.js';
 import AnalysisModal from './AnalysisModal';
+import { ButtonGhost } from './Buttons';
 
 interface ChartCardProps {
   id: string;
@@ -77,13 +78,12 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
             {headerExtra}
           </div>
           {hasDetail && (
-            <button
+            <ButtonGhost
               id={`btn-expand-${id}`}
               onClick={() => onExpand ? onExpand() : setModalOpen(true)}
-              style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, background: 'var(--panel)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
-              ⤢ Expandir
-            </button>
+              <span style={{ fontSize: 14 }}>⤢</span> Expandir
+            </ButtonGhost>
           )}
         </div>
         {subtitle && <div className="ch-sub">{subtitle}</div>}

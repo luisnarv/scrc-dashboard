@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { SegmentedControl } from './Buttons';
 import type { ChartConfiguration } from 'chart.js';
 
 export interface AnalysisModalProps {
@@ -212,11 +213,15 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             
             {/* Selector de Modos de Vista */}
-            <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8 }}>
-              <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
-              <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>🗂 Ambos</button>
-              <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
-            </div>
+            <SegmentedControl
+                options={[
+                  { value: 'chart', label: '📈 Gráfico' },
+                  { value: 'split', label: '📁 Ambos' },
+                  { value: 'table', label: '📋 Tabla' }
+                ]}
+                value={viewMode}
+                onChange={(val: string) => setViewMode(val as 'chart' | 'split' | 'table')}
+              />
 
             <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
@@ -245,7 +250,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                   key={cat}
                   onClick={() => toggleCategory(cat)}
                   style={{
-                    background: isActive ? 'rgba(143,209,79,0.12)' : 'var(--card)',
+                    background: isActive ? 'var(--ok-bg)' : 'var(--card)',
                     border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border)'}`,
                     color: isActive ? 'var(--text-title)' : 'var(--text-body)',
                     padding: '6px 14px',
@@ -399,7 +404,7 @@ function HierarchicalRowComponent({ hRow, onRowClick, categoryIndex }: { hRow: {
             textAlign: j === 0 ? 'left' : 'center',
             fontWeight: hasChildren && j === 0 ? 700 : (j === 0 ? 600 : 400)
           }}>
-            {j === 0 && hasChildren ? <span style={{ display: 'inline-block', width: 16, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', color: '#3949AB' }}>▶</span> : null}
+            {j === 0 && hasChildren ? <span style={{ display: 'inline-block', width: 16, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-muted)' }}>▶</span> : null}
             {cell}
           </td>
         ))}

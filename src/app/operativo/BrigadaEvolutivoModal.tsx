@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ChartConfiguration } from 'chart.js';
 import Papa from 'papaparse';
+import { SegmentedControl } from '../components/Buttons';
+import { useDashboard } from '../components/DashboardProvider';
 
 export interface BrigadaRow { brigada: string; total: number; partPct: number; varPct: number | null; color: string; }
 export interface TecnicoRow {
@@ -25,7 +27,9 @@ interface Props {
 
 const nf = (n: number) => (Number(n) || 0).toLocaleString('es-CO');
 const df = (n: number) => (Number(n) || 0).toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const BROWN = '#a06a2c';
+const BROWN = 'var(--warn)';
+const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${MESES_C[Number(mm) - 1] || mm} ${y}`; };
 
 export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, config, brigadaDetalle, tecnicoDetalle, varHeader }: Props) {
   const [viewMode, setViewMode] = useState<'chart' | 'split' | 'table'>('split');
@@ -34,6 +38,12 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
 
+  // Filtros globales editables desde el modal (mes/día). Al cambiarlos, el gráfico y la
+  // tabla se recalculan en la página y llegan como nuevos props (config/brigadaDetalle).
+  const { filters, setFilters, mesList, fechaList } = useDashboard();
+  const [mesOpen, setMesOpen] = useState(false);
+  const mesRef = useRef<HTMLDivElement>(null);
+
   // Cerrar con Esc
   useEffect(() => {
     if (!open) return;
@@ -41,6 +51,13 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
   }, [open, onClose]);
+
+  // Cerrar el dropdown de meses al hacer click afuera
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (mesRef.current && !mesRef.current.contains(e.target as Node)) setMesOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
 
   // Render del grafico (Gráfico / Ambos)
   useEffect(() => {
@@ -110,6 +127,15 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
   const td: React.CSSProperties = { padding: '8px 10px', fontSize: 12, whiteSpace: 'nowrap' };
   const grp: React.CSSProperties = { ...th, top: 0, textAlign: 'center', borderBottom: '1px solid var(--border)', color: 'var(--text-title)' };
 
+  // --- Filtros mes/día ---
+  const toggleMes = (m: string) => {
+    const next = filters.mes.includes(m) ? filters.mes.filter(x => x !== m) : [...filters.mes, m];
+    setFilters({ mes: next, fecha: 'ALL' });
+  };
+  const mesLabel = filters.mes.length === 0 ? 'Todos' : filters.mes.length === 1 ? fmtMes(filters.mes[0]) : `${filters.mes.length} meses`;
+  const fBtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+  const fRow = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer', background: on ? 'var(--hover-bg)' : 'transparent', color: 'var(--text-body)' });
+
   // Panel "Detalle por brigada" (vista Ambos y cabecera)
   const brigadaTable = (
     <div style={{ height: '100%', overflow: 'auto' }}>
@@ -149,17 +175,53 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
             {subtitle && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8 }}>
-              {(['chart', 'split', 'table'] as const).map(m => (
-                <button key={m} onClick={() => setViewMode(m)} style={{ padding: '6px 12px', background: viewMode === m ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === m ? 'var(--text-title)' : 'var(--text-muted)' }}>
-                  {m === 'chart' ? '📈 Gráfico' : m === 'split' ? '🗂 Ambos' : '📋 Tabla'}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={[
+                { value: 'chart', label: '📈 Gráfico' },
+                { value: 'split', label: '📁 Ambos' },
+                { value: 'table', label: '📋 Tabla' }
+              ]}
+              value={viewMode}
+              onChange={(val: string) => setViewMode(val as 'chart' | 'split' | 'table')}
+            />
             <button onClick={exportPng} style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>PNG ⬇</button>
             <button onClick={exportCsv} title="Exporta la tabla de técnicos (CSV, compatible con Excel)" style={{ background: 'var(--brand-primary)', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--brand-grad-text)', fontSize: 12, fontWeight: 700 }}>XLSX ⬇</button>
             <button className="modal-close" onClick={onClose} title="Cerrar (Esc)">✕</button>
           </div>
+        </div>
+
+        {/* Filtros de fecha y día — editables desde el modal (afectan gráfico + tabla en vivo) */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '2px 0 12px', marginBottom: 4, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, color: 'var(--text-muted)' }}>Filtros</span>
+          {/* Mes (multi-select) */}
+          <div ref={mesRef} style={{ position: 'relative' }}>
+            <button onClick={() => setMesOpen(o => !o)} style={fBtn}>Mes: {mesLabel} ▾</button>
+            {mesOpen && (
+              <div style={{ position: 'absolute', top: '112%', left: 0, zIndex: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, minWidth: 170, maxHeight: 300, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,.18)' }}>
+                <label style={fRow(filters.mes.length === 0)}>
+                  <input type="checkbox" checked={filters.mes.length === 0} onChange={() => setFilters({ mes: [], fecha: 'ALL' })} /> Todos
+                </label>
+                {mesList.map(m => {
+                  const on = filters.mes.includes(m);
+                  return (
+                    <label key={m} style={fRow(on)}>
+                      <input type="checkbox" checked={on} onChange={() => toggleMes(m)} /> {fmtMes(m)}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {/* Día */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-muted)' }}>
+            Día:
+            <select value={filters.fecha} onChange={e => setFilters({ fecha: e.target.value })}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 12.5 }}>
+              <option value="ALL">Todos</option>
+              {fechaList.map(f => <option key={f} value={f}>{String(f).slice(0, 10).split('-')[2] || f}</option>)}
+            </select>
+          </label>
+          <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Cambian el mes/día del gráfico y la tabla en vivo</span>
         </div>
 
         {/* Cuerpo */}
@@ -188,7 +250,7 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tecFiltered.length} técnicos · todas las brigadas</div>
                 <div style={{ flex: 1 }} />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Buscar técnico" style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 13, width: 220 }} />
-                <button onClick={() => setOnlyAlert(v => !v)} style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${onlyAlert ? 'var(--err)' : 'var(--border)'}`, background: onlyAlert ? 'rgba(239,68,68,0.10)' : 'var(--panel)', color: onlyAlert ? 'var(--err)' : 'var(--text-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={() => setOnlyAlert(v => !v)} style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${onlyAlert ? 'var(--err)' : 'var(--border)'}`, background: onlyAlert ? 'var(--err-bg)' : 'var(--panel)', color: onlyAlert ? 'var(--err)' : 'var(--text-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
                   ⚠ Solo con alerta ( {alertCount} )
                 </button>
               </div>

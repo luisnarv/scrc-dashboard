@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { SegmentedControl } from '../components/Buttons';
 import { useDashboard } from '../components/DashboardProvider';
 import { useTheme } from '../components/ThemeProvider';
 import { filtDisp } from '../components/utils/filters';
@@ -23,8 +24,8 @@ const modalStyle: React.CSSProperties = {
 
 export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () => void }) {
   const { raw, filters } = useDashboard();
-  // Antes era un array fijo con los verdes del tema claro: sobre navy no leian.
-  const COLORS = useTheme().colors.series;
+  const { colors } = useTheme();
+  const COLORS = colors.series;
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'chart' | 'split' | 'table'>('split');
   const [splitRatio, setSplitRatio] = useState(60);
@@ -126,8 +127,8 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
 
   const getCellColor = (val: number) => {
     if (val === 0) return 'var(--panel)';
-    if (val <= 2) return 'rgba(120, 190, 32, 0.2)';
-    if (val <= 5) return 'rgba(120, 190, 32, 0.6)';
+    if (val <= 2) return colors.sip + '33';
+    if (val <= 5) return colors.sip + '99';
     return 'var(--ok)'; // Verde primario
   };
 
@@ -147,11 +148,15 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
               <h2 style={{ margin: '0 0 4px', fontSize: 24, color: INK, fontWeight: 800 }}>Evolución de Disponibilidad de Brigadas</h2>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 4, borderRadius: 8 }}>
-                <button onClick={() => setViewMode('chart')} style={{ padding: '6px 12px', background: viewMode === 'chart' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'chart' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'chart' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📈 Gráfico</button>
-                <button onClick={() => setViewMode('split')} style={{ padding: '6px 12px', background: viewMode === 'split' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'split' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'split' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>🗂 Ambos</button>
-                <button onClick={() => setViewMode('table')} style={{ padding: '6px 12px', background: viewMode === 'table' ? 'var(--card)' : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: viewMode === 'table' ? 'var(--text-title)' : 'var(--text-muted)', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>📋 Tabla</button>
-              </div>
+              <SegmentedControl
+                options={[
+                  { value: 'chart', label: '📈 Gráfico' },
+                  { value: 'split', label: '📁 Ambos' },
+                  { value: 'table', label: '📋 Tabla' }
+                ]}
+                value={viewMode}
+                onChange={(val: string) => setViewMode(val as 'chart' | 'split' | 'table')}
+              />
 
               <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
@@ -177,7 +182,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
                   key={b}
                   onClick={() => toggleCategory(b)}
                   style={{
-                    background: isActive ? 'rgba(143,209,79,0.12)' : 'var(--card)',
+                    background: isActive ? 'var(--ok-bg)' : 'var(--card)',
                     border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border)'}`,
                     color: isActive ? 'var(--text-title)' : 'var(--text-body)',
                     padding: '6px 14px',

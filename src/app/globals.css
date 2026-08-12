@@ -13,9 +13,12 @@
   --zona-centro: #ad7e42;
   --zona-sur: #823c32;
   --zona-metro: #5f7d8c;
-}
 
-.theme-light {
+  /* RESPALDO DEL PRIMER PINTADO
+     La clase de tema la pone ThemeProvider en un efecto, es decir despues de
+     hidratar. Sin estos valores en :root el primer pintado no resuelve ningun
+     token: fondo blanco, texto negro y header sin degradado. Son los mismos
+     valores de .theme-light. */
   --bg: #FFFFFF;
   --panel: #F4F6EF;
   --card: #FFFFFF;
@@ -23,11 +26,15 @@
   --text-title: #38764C;
   --text-body: #3A3A3A;
   --text-muted: #97999B;
-  
+
   --brand-primary: #78BE20;
   --brand-secondary: #38764C;
   --brand-grad: linear-gradient(135deg, #78BE20 0%, #B5BD00 100%);
-  
+  /* Texto sobre el degradado / sobre --brand-primary. Se usaba en 5 sitios
+     sin estar declarado: la regla se descartaba y el texto heredaba
+     --text-body (gris sobre verde). */
+  --brand-grad-text: #FFFFFF;
+
   --sip: #78BE20;
   --otc: #38764C;
   --sip-bg: #F4F6EF;
@@ -38,6 +45,49 @@
   --ok: #509E2F;
   --warn: #B5BD00;
   --err: #C0392B;
+
+  --ok-bg: rgba(80,158,47,.12);
+  --warn-bg: rgba(181,189,0,.16);
+  --err-bg: rgba(192,57,43,.10);
+
+  --ok-border: rgba(80,158,47,.32);
+  --warn-border: rgba(181,189,0,.38);
+  --err-border: rgba(192,57,43,.28);
+}
+
+.theme-light {
+  --bg: #FFFFFF;
+  --panel: #F4F6EF;
+  --card: #FFFFFF;
+  --border: #E0E0E0;
+  --text-title: #38764C;
+  --text-body: #3A3A3A;
+  --text-muted: #97999B;
+
+  --brand-primary: #78BE20;
+  --brand-secondary: #38764C;
+  --brand-grad: linear-gradient(135deg, #78BE20 0%, #B5BD00 100%);
+  --brand-grad-text: #FFFFFF;
+
+  --sip: #78BE20;
+  --otc: #38764C;
+  --sip-bg: #F4F6EF;
+  --otc-bg: #E8F0EA;
+  --hover-bg: #F4F6EF;
+  --th-bg: #F4F6EF;
+
+  --ok: #509E2F;
+  --warn: #B5BD00;
+  --err: #C0392B;
+
+  /* Fondos tenues de estado, derivados del tema (antes rgba fijos). */
+  --ok-bg: rgba(80,158,47,.12);
+  --warn-bg: rgba(181,189,0,.16);
+  --err-bg: rgba(192,57,43,.10);
+
+  --ok-border: rgba(80,158,47,.32);
+  --warn-border: rgba(181,189,0,.38);
+  --err-border: rgba(192,57,43,.28);
 }
 
 .theme-dark {
@@ -48,13 +98,16 @@
   --text-title: #F2F7FF;
   --text-body: #C9DAEE;
   --text-muted: #85A3C4;
-  
+
   --brand-primary: #3B8AD9;
   --brand-secondary: #2BD98C;
   --brand-grad: linear-gradient(135deg, #3B8AD9 0%, #1E5FA8 100%);
+  --brand-grad-text: #FFFFFF;
 
   --sip: #3B8AD9;
-  --otc: #2BD98C;
+  /* Antes #2BD98C, identico a --ok: un KPI financiero y un indicador
+     "en meta" resultaban indistinguibles. */
+  --otc: #4ADE9E;
   --sip-bg: #0F2744;
   --otc-bg: #0D2340;
   --hover-bg: #16345C;
@@ -63,6 +116,14 @@
   --ok: #2BD98C;
   --warn: #F0C040;
   --err: #FF5A5F;
+
+  --ok-bg: rgba(43,217,140,.14);
+  --warn-bg: rgba(240,192,64,.16);
+  --err-bg: rgba(255,90,95,.15);
+
+  --ok-border: rgba(43,217,140,.35);
+  --warn-border: rgba(240,192,64,.35);
+  --err-border: rgba(255,90,95,.35);
 }
 
 * { box-sizing: border-box; }
@@ -197,6 +258,11 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .kpi:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.06); }
 .kpi.otc { border-left: 3px solid var(--otc); }
 .kpi.sip { border-left: 3px solid var(--sip); }
+/* KpiCard tambien emite cls="ok" | "err" | "neu" (page.tsx). Sin estas reglas
+   la franja que senala margen negativo nunca aparecia. */
+.kpi.ok  { border-left: 3px solid var(--ok); }
+.kpi.err { border-left: 3px solid var(--err); }
+.kpi.neu { border-left: 3px solid var(--text-muted); }
 .kpi .lbl { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; }
 .kpi .val { font-size: 18px; font-weight: 700; color: var(--text-title); }
 .kpi .delta { font-size: 10px; font-weight: 600; margin-top: 2px; }
@@ -231,7 +297,9 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .narrativa .cuerpo { font-size: 12px; line-height: 1.55; color: var(--text-body); }
 .narrativa .cuerpo b { color: var(--text-title); font-weight: 600; }
 
-/* Alertas */
+/* Alertas
+   Antes: pasteles Material fijos en claro (#ffebee / #fff8e1 / #e8f5e9) mas un
+   bloque de override para oscuro. Ahora ambos temas salen de los tokens. */
 .alertas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 900px) { .alertas { grid-template-columns: 1fr; } }
 .alerta {
@@ -246,13 +314,11 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
   transition: all .15s;
 }
 .alerta:hover { transform: translateX(2px); }
-.alerta.rojo { background: #ffebee; border-color: #ffcdd2; color: #b71c1c; }
-.alerta.amarillo { background: #fff8e1; border-color: #ffecb3; color: #e65100; }
-.alerta.verde { background: #e8f5e9; border-color: #c8e6c9; color: #1b5e20; }
-/* Modo oscuro: los pasteles claros se veian como bloques claros. */
-.theme-dark .alerta.rojo { background: rgba(255,90,95,0.15); border-color: rgba(255,90,95,0.35); color: #ffb3b5; }
-.theme-dark .alerta.amarillo { background: rgba(240,192,64,0.15); border-color: rgba(240,192,64,0.35); color: #f5d78a; }
-.theme-dark .alerta.verde { background: rgba(43,217,140,0.15); border-color: rgba(43,217,140,0.35); color: #8fe6bd; }
+.alerta.rojo     { background: var(--err-bg);  border-color: var(--err-border);  color: var(--err); }
+.alerta.amarillo { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.alerta.verde    { background: var(--ok-bg);   border-color: var(--ok-border);   color: var(--ok); }
+/* En claro los tokens de estado son oscuros y funcionan como texto; en oscuro
+   son claros y tambien. No hace falta override por tema. */
 .alerta .icono { font-size: 16px; }
 
 /* Driver */
@@ -275,9 +341,9 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
   margin-right: 6px;
   text-transform: uppercase;
 }
-.driver .tipo.pos { background: rgba(80,158,47,0.2); color: var(--ok); }
-.driver .tipo.neg { background: rgba(192,57,43,0.2); color: var(--err); }
-.driver .tipo.info { background: rgba(56,118,76,0.2); color: var(--text-title); }
+.driver .tipo.pos  { background: var(--ok-bg);   color: var(--ok); }
+.driver .tipo.neg  { background: var(--err-bg);  color: var(--err); }
+.driver .tipo.info { background: var(--hover-bg); color: var(--text-title); }
 
 /* Tables */
 table.det { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -296,13 +362,13 @@ table.det tr:hover { background: var(--hover-bg); }
 .det-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
 
 /* Oport */
-.oport { padding: 8px 10px; background: rgba(80,158,47,0.1); border-left: 3px solid var(--ok); border-radius: 6px; font-size: 12px; margin-bottom: 6px; }
+.oport { padding: 8px 10px; background: var(--ok-bg); border-left: 3px solid var(--ok); border-radius: 6px; font-size: 12px; margin-bottom: 6px; }
 .oport b { color: var(--ok); }
 
 /* Status */
 .status { padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
-.status.ok { background: rgba(80,158,47,0.1); color: var(--ok); }
-.status.err { background: rgba(192,57,43,0.1); color: var(--err); }
+.status.ok { background: var(--ok-bg); color: var(--ok); }
+.status.err { background: var(--err-bg); color: var(--err); }
 
 /* Drop zone */
 .dz {
@@ -448,7 +514,7 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
 /* Btn */
 .btn-detalle {
   background: var(--brand-primary);
-  color: #fff;
+  color: var(--brand-grad-text);
   border: none;
   padding: 4px 10px;
   border-radius: 5px;
@@ -559,10 +625,23 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
   .load-logo, .load-logo-ring::before, .load-bar span, .spinner { animation: none; }
 }
 
-/* Leaflet Theme Overrides */
-.leaflet-container { color: #333 !important; }
-.leaflet-control-layers, .leaflet-bar a { background-color: #fff !important; color: #333 !important; border-color: #ccc !important; }
-.leaflet-popup-content-wrapper, .leaflet-popup-tip { background-color: #fff !important; color: #333 !important; }
+/* Leaflet Theme Overrides
+   Antes estaban forzados a #fff / #333 / #ccc con !important, asi que los
+   controles y los popups del mapa nunca entraban en modo oscuro. */
+.leaflet-container { color: var(--text-body) !important; }
+.leaflet-control-layers,
+.leaflet-bar a {
+  background-color: var(--card) !important;
+  color: var(--text-body) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-bar a:hover { background-color: var(--hover-bg) !important; }
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background-color: var(--card) !important;
+  color: var(--text-body) !important;
+}
+.leaflet-popup-content-wrapper { border: 1px solid var(--border) !important; }
 
 /* ===================== RESPONSIVE (móvil / tablet) =====================
    Complementa los breakpoints ya existentes (grid-2/3 → 1 col en 900px;
@@ -603,4 +682,3 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
   .filtros { flex-direction: column; align-items: stretch; }
   .filtros select, .filtros input { width: 100%; }
 }
-

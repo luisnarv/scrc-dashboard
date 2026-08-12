@@ -121,6 +121,7 @@ export default function DisponibilidadSection() {
 
   const getTextColor = (val: number) => {
     if (val === 0) return 'var(--text-muted)';
+    if (val <= 2) return 'var(--text-body)';
     return '#fff';
   };
 

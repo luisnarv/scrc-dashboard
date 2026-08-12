@@ -15,20 +15,20 @@ export const THEME_COLORS = {
     mut: '#97999B',
     series: [
       '#78BE20', '#38764C', '#B5BD00', '#97999B',
-      '#78BE20', '#38764C', '#B5BD00', '#97999B'
+      '#00A3E0', '#6E3264', '#E87722', '#00B140'
     ]
   },
   dark: {
     sip: '#3B8AD9',
-    otc: '#2BD98C',
+    otc: '#4ADE9E',
     ok: '#2BD98C',
     warn: '#F0C040',
     err: '#FF5A5F',
     ink: '#F2F7FF',
     mut: '#85A3C4',
     series: [
-      '#3B8AD9', '#2BD98C', '#4A9EE8', '#85A3C4',
-      '#3B8AD9', '#2BD98C', '#4A9EE8', '#85A3C4'
+      '#3B8AD9', '#4ADE9E', '#F0C040', '#A78BFA',
+      '#4A9EE8', '#2BD98C', '#FF9F5A', '#85A3C4'
     ]
   }
 };

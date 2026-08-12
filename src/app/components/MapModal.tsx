@@ -358,7 +358,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                 onReset={() => { setFBarrio('ALL'); setFMuni('ALL'); setSelectedNic(null); }} />}
                 
             {!loading && (
-              <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 1000, background: 'rgba(11, 15, 22, 0.85)', backdropFilter: 'blur(8px)', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto', color: 'var(--text-title)', fontFamily: 'inherit', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
+              <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 1000, background: 'rgba(11, 15, 22, 0.85)', backdropFilter: 'blur(8px)', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto', color: '#F2F7FF', fontFamily: 'inherit', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
                 <div style={{ fontSize: 10.5, letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>EFECTIVIDAD DE BARRIO</div>
                 {[
                   { color: 'var(--ok)', label: '≥ 85%', title: 'Verde fuerte: Efectividad ≥ 85% (Rendimiento muy bueno).' },

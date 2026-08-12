@@ -261,7 +261,7 @@ export default function ResumenPage() {
 
   return (
     <>
-      <div className="section" style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '2px solid #eef0f5' }}>
+      <div className="section" style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '2px solid var(--border)' }}>
         <h2>📈 Estratégico · Evolutivos</h2>
         <div className="sec-sub">Análisis histórico 12 meses segmentado por Operación y Resultados Financieros</div>
       </div>

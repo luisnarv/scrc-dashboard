@@ -46,7 +46,7 @@ export default function Filters() {
     borderRadius: 6,
     fontSize: 12,
     background: 'var(--panel)',
-    color: 'var(--text)',
+    color: 'var(--text-body)',
     fontFamily: 'inherit',
     cursor: 'pointer',
   };
@@ -61,7 +61,7 @@ export default function Filters() {
     cursor: 'pointer',
     userSelect: 'none',
     fontWeight: on ? 600 : 400,
-    color: on ? 'var(--text)' : 'var(--text-muted)',
+    color: on ? 'var(--text-title)' : 'var(--text-muted)',
   });
 
   const visibleMeses = filters.ano === 'ALL' ? mesList : mesList.filter(m => m.startsWith(filters.ano));
@@ -171,7 +171,7 @@ export default function Filters() {
         {fechaList.map(f => <option key={f} value={f}>{String(f).slice(0, 10).split('-')[2] || f}</option>)}
       </select>
 
-      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--muted)' }}>
+      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>
         Filtros globales{filters.mes.length ? ` · ${filters.mes.length} mes(es)` : ''}
       </span>
     </div>
