@@ -114,7 +114,7 @@ export function SegmentedControl({ options, value, onChange, style }: SegmentedC
   );
 }
 
-export function buttonMenuOperativo (){
+export function ButtonMenuOperativo() {
     const pathname = usePathname();
   
     // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
@@ -139,5 +139,5 @@ export function buttonMenuOperativo (){
                     );
                   })}
                 </nav>
-  )
+  );
 }

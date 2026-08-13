@@ -5,9 +5,7 @@ import { useDashboard } from '../../components/DashboardProvider';
 import { filtRaw, normProy } from '../../components/utils/filters';
 import { fmtCOP, num as n } from '../../components/utils/formatters';
 import { useTheme } from '../../components/ThemeProvider';
-
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import {ButtonMenuOperativo} from '../../components/Buttons'
 
 interface MonthVal {
   monthLabel: string;
@@ -877,32 +875,10 @@ export default function TecnicoProductivoPage() {
   });
 
 
-    const pathname = usePathname();
-  
-    // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
-    const mainNavItems = [
-      { path: '/operativo', label: '⚙️ Operativo' },
-      { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
-      { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
-    ];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Cabecera del Módulo */}
-      <nav className="dash-nav">
-              {mainNavItems.map(item => {
-                const isActive = pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    href={item.path}
-                    className={`nav-link ${isActive ? 'active' : ''}`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+      <ButtonMenuOperativo/>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK }}>Evolutivo Monetario por Brigada y Técnico (Producción $ COP)</div>

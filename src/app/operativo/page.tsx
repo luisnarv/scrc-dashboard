@@ -11,9 +11,8 @@ import { useTheme } from '../components/ThemeProvider';
 import { esFestivo } from '../components/utils/holidays';
 import MapModal from '../components/MapModal';
 import BrigadaEvolutivoModal from './BrigadaEvolutivoModal';
-import { ButtonPrimary, ButtonGhost, SegmentedControl } from '../components/Buttons';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import { ButtonPrimary, ButtonGhost, SegmentedControl,ButtonMenuOperativo } from '../components/Buttons';
+
 
 function diasHabilesMes(ym: string): number {
   const [y, m] = ym.split('-').map(Number);
@@ -718,31 +717,9 @@ export default function OperativoPage() {
     red: { c: ERR, t: 'Desviación crítica', s: 'Indicadores en nivel crítico:' },
   }[d.nivel];
 
-    const pathname = usePathname();
-  
-    // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
-    const mainNavItems = [
-      { path: '/operativo', label: '⚙️ Operativo' },
-      { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
-      { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
-    ];
-
   return (
     <>
-     <nav className="dash-nav">
-                      {mainNavItems.map(item => {
-                        const isActive = pathname === item.path;
-                        return (
-                          <Link
-                            key={item.path}
-                            href={item.path}
-                            className={`nav-link ${isActive ? 'active' : ''}`}
-                          >
-                            {item.label}
-                          </Link>
-                        );
-                      })}
-                    </nav>
+     <ButtonMenuOperativo/>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 12px' }}>
           
         <div>
