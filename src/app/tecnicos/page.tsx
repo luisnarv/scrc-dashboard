@@ -6,6 +6,9 @@ import { filtRaw, normProy } from '../components/utils/filters';
 import { fmtN, num as n } from '../components/utils/formatters';
 import { useTheme } from '../components/ThemeProvider';
 import ChartCard from '../components/ChartCard';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+
 
 interface MonthVal {
   monthLabel: string; // e.g. '2026-05'
@@ -132,6 +135,8 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
 
   const trendColor = slope >= 0 ? '#2E7D32' : '#C62828';
 
+
+
   return (
     <div style={{
       background: 'var(--panel)',
@@ -146,6 +151,7 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
       boxSizing: 'border-box',
       overflow: 'hidden',
     }}>
+      
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', height: 75, overflow: 'hidden' }}>
         <div style={{ overflow: 'hidden', paddingRight: 8 }}>
           <div
@@ -863,9 +869,34 @@ export default function TecnicosPage() {
     display: 'flex', alignItems: 'center', marginBottom: 12
   });
 
+
+    const { theme, toggleTheme } = useTheme();
+    const pathname = usePathname();
+
+  // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
+  const mainNavItems = [
+    { path: '/operativo', label: '⚙️ Operativo' },
+    { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
+    { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Cabecera del Módulo */}
+       <nav className="dash-nav">
+              {mainNavItems.map(item => {
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={`nav-link ${isActive ? 'active' : ''}`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK }}>Evolutivo Mensual por Brigada y Técnico (Cantidades / Órdenes)</div>
@@ -976,7 +1007,7 @@ export default function TecnicosPage() {
       {filteredCantBrigadasCards.length > 0 && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={secH(INDIGO)}>
-            <span style={dot(INDIGO)} /> Evolutivo de Cantidad de Brigadas por Tipo ({filteredCantBrigadasCards.length} tipos · Base de Datos)
+            <span style={dot(INDIGO)} /> Evolutivo de Cantidad de Brigadas por Tipo ({filteredCantBrigadasCards.length} tipos)
           </div>
 
           <div style={{

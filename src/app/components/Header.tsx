@@ -9,14 +9,27 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
 
-  const navItems = [
+  // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
+  const isOperativoEcosystem =
+    pathname === '/operativo' ||
+    pathname === '/tecnicos' ||
+    pathname.startsWith('/tecnico');
+
+  const mainNavItems = [
     { path: '/', label: '📊 Resumen' },
     { path: '/gerencial', label: '📈 Gerencial' },
     { path: '/estrategico', label: '🎯 Estratégico' },
     { path: '/operativo', label: '⚙️ Operativo' },
-    { path: '/tecnicos', label: '👤 Técnicos' },
+  ];
+
+  const operativoSubItems = [
+    { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
     { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
   ];
+
+  const visibleNavItems = isOperativoEcosystem
+    ? [...mainNavItems, ...operativoSubItems]
+    : mainNavItems;
 
   return (
     <>
@@ -55,8 +68,8 @@ export default function Header() {
         </div>
       </header>
 
-      <nav className="dash-nav">
-        {navItems.map(item => {
+      {/* <nav className="dash-nav">
+        {visibleNavItems.map(item => {
           const isActive = pathname === item.path;
           return (
             <Link
@@ -68,7 +81,7 @@ export default function Header() {
             </Link>
           );
         })}
-      </nav>
+      </nav> */}
     </>
   );
 }

@@ -1,4 +1,6 @@
 import React, { ButtonHTMLAttributes, ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 const CTRL_H = 32;
 
@@ -110,4 +112,32 @@ export function SegmentedControl({ options, value, onChange, style }: SegmentedC
       })}
     </div>
   );
+}
+
+export function buttonMenuOperativo (){
+    const pathname = usePathname();
+  
+    // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
+    const mainNavItems = [
+      { path: '/operativo', label: '⚙️ Operativo' },
+      { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
+      { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+    ];
+
+  return (
+      <nav className="dash-nav">
+                  {mainNavItems.map(item => {
+                    const isActive = pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        className={`nav-link ${isActive ? 'active' : ''}`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </nav>
+  )
 }
