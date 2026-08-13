@@ -72,8 +72,6 @@ export default function OperativoPage() {
   const [brigadaModalOpen, setBrigadaModalOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
   const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia'>('mes');
-  const [tecSearch, setTecSearch] = useState<string>('');
-  const [topLimit, setTopLimit] = useState<number>(0);
 
   useEffect(() => {
     const selectedCount = filters.mes ? filters.mes.length : 0;
@@ -641,34 +639,6 @@ export default function OperativoPage() {
         };
       })();
 
-    // Agrupación para Seguimiento Mensual del Técnico: Técnico -> Mes -> (Efectivas + Fallidas)
-    const tecMonthlyData: Record<string, {
-      id: string;
-      nombre: string;
-      tipoBrigada: string;
-      totalEjec: number;
-      byMonth: Record<string, number>;
-    }> = {};
-
-    rawF.forEach(r => {
-      const day = String(r.Fecha || '');
-      if (!day) return;
-      const month = day.substring(0, 7);
-      const id = String(r.Cedula || r.Nombre || '');
-      if (!id) return;
-      const nombre = String(r.Nombre || id);
-      const tipo = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin tipo');
-      const efec = n(r.Efectivas);
-      const fall = n(r.Fallida_Con_Pago);
-      const ejec = efec + fall;
-
-      const entry = (tecMonthlyData[id] ??= { id, nombre, tipoBrigada: tipo, totalEjec: 0, byMonth: {} });
-      entry.totalEjec += ejec;
-      entry.byMonth[month] = (entry.byMonth[month] || 0) + ejec;
-    });
-
-    const allTecsSorted = Object.values(tecMonthlyData).sort((a, b) => b.totalEjec - a.totalEjec);
-
     // Estado global + alertas accionables
     const alertas: string[] = [];
     if (disponibilidad < 0.40) alertas.push(`Disponibilidad de brigadas en ${fmtPct(disponibilidad)}`);
@@ -687,47 +657,9 @@ export default function OperativoPage() {
       brigadaDetalle, varHeader, tecnicoDetalle,
       tableDataOrd, tableDataBrig, tableDataTipos, tableDataEvolutivo,
       evolutivo: raw.evolutivo, evTop, tiposConColor,
-      mesesArr, allTecsSorted
+      mesesArr
     };
   }, [raw, filters, mesList, filtroEvolutivo, vistaEvolutivo]);
-
-  const chartTecnicoHorizontal = useMemo(() => {
-    if (!d) return null;
-
-    let filteredTecs = d.allTecsSorted;
-    if (tecSearch.trim()) {
-      filteredTecs = filteredTecs.filter(t => t.nombre.toLowerCase().includes(tecSearch.trim().toLowerCase()));
-    } else if (topLimit > 0) {
-      filteredTecs = filteredTecs.slice(0, topLimit);
-    }
-
-    const labels = filteredTecs.map(t => t.nombre);
-    const meses = d.mesesArr.length ? d.mesesArr : [...new Set(filteredTecs.flatMap(t => Object.keys(t.byMonth)))].sort();
-
-    return {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: meses.map((month, idx) => ({
-          label: month,
-          data: filteredTecs.map(t => t.byMonth[month] || 0),
-          backgroundColor: chartColors[idx % chartColors.length],
-          borderRadius: 4,
-        }))
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 10 } } }
-        },
-        scales: {
-          x: { stacked: false, ticks: { font: { size: 11, weight: 600 }, maxRotation: 55, minRotation: 25 } },
-          y: { stacked: false, min: 0 }
-        }
-      }
-    };
-  }, [d, tecSearch, topLimit, chartColors]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -980,64 +912,6 @@ export default function OperativoPage() {
       </div>
       
       <DisponibilidadSection />
-
-      {/* Seguimiento Mensual del Técnico (SECCIÓN COMPLETA HORIZONTAL 100%) */}
-      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Seguimiento Mensual del Técnico</div>
-      <div style={{ background: 'var(--panel)', borderRadius: 14, padding: 20, marginBottom: 24, boxShadow: '0 2px 6px rgba(20,30,60,.06)', border: '1px solid var(--border)', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Evolutivo de Órdenes Ejecutadas por Técnico</div>
-            <div style={{ fontSize: 11.5, color: MUT, marginTop: 2 }}>Desglose en columnas por técnico y mes (Órdenes Efectivas + Fallidas con pago)</div>
-          </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              placeholder="Buscar técnico..."
-              value={tecSearch}
-              onChange={e => setTecSearch(e.target.value)}
-              style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: INK, fontSize: 12.5, outline: 'none', width: 180 }}
-            />
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: MUT }}>Mostrar:</label>
-              <select
-                value={topLimit}
-                onChange={e => setTopLimit(Number(e.target.value))}
-                style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: INK, fontSize: 12.5, fontWeight: 600, outline: 'none' }}
-              >
-                <option value={0}>Todos los técnicos ({d.allTecsSorted.length})</option>
-                <option value={10}>Top 10</option>
-                <option value={20}>Top 20</option>
-                <option value={50}>Top 50</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {chartTecnicoHorizontal ? (
-          <div style={{ overflowX: 'auto', paddingBottom: 12 }}>
-            <div style={{
-              height: 480,
-              minWidth: (tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)) > 15
-                ? `${(tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)) * 48}px`
-                : '100%',
-              position: 'relative'
-            }}>
-              <ChartCard
-                id="op-seguimiento-tecnico"
-                title="Órdenes Ejecutadas (Efectivas + Fallidas con pago)"
-                subtitle={`Mostrando ${tecSearch ? d.allTecsSorted.filter(t => t.nombre.toLowerCase().includes(tecSearch.toLowerCase())).length : (topLimit > 0 ? Math.min(topLimit, d.allTecsSorted.length) : d.allTecsSorted.length)} técnicos desglosados mensualmente`}
-                config={chartTecnicoHorizontal as never}
-                height="tall"
-                hasDetail={false}
-              />
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: 30, textAlign: 'center', color: MUT, fontSize: 12 }}>No hay información de técnicos para el filtro actual</div>
-        )}
-      </div>
 
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
       {brigadaModalOpen && d && (
