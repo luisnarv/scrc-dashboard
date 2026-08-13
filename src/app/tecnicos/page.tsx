@@ -105,6 +105,11 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
   const barCount = brig.monthlyData.length || 1;
   const esDisponible = isDisponibleType(brig.tipoCuadrilla);
 
+  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
+  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
+  const barWidth = barCount >= 8 ? '55%' : '68%';
+
   const points = brig.monthlyData.map((m, i) => {
     const pctX = ((i + 0.5) / barCount) * 100;
     const hPct = (m.val / maxVal) * 100;
@@ -132,14 +137,16 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
       background: 'var(--panel)',
       border: '1px solid var(--border)',
       borderRadius: 14,
-      padding: '16px 18px',
+      padding: '14px 16px',
       boxShadow: '0 2px 6px rgba(20,30,60,.05)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      height: 220,
+      height: 250,
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', height: 75, overflow: 'hidden' }}>
         <div style={{ overflow: 'hidden', paddingRight: 8 }}>
           <div
             title={brig.tipoCuadrilla}
@@ -167,7 +174,7 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
         </div>
 
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-title)', fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-title)', fontVariantNumeric: 'tabular-nums' }}>
             {fmtN(brig.totalAcumulado)}
           </div>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
@@ -179,19 +186,29 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', marginTop: 'auto' }}>
+      <div style={{ position: 'relative', width: '100%', marginTop: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', height: chartHeight, position: 'relative', zIndex: 2 }}>
           {brig.monthlyData.map((m, i) => {
             const hPct = (m.val / maxVal) * 100;
             const barColor = esDisponible ? '#3949AB' : '#00897B';
             return (
-              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-title)', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
+              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{
+                  fontSize: valFontSize,
+                  fontWeight: 700,
+                  color: 'var(--text-title)',
+                  marginBottom: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  lineHeight: 1,
+                  textAlign: 'center'
+                }}>
                   {m.val > 0 ? fmtN(m.val) : '0'}
                 </span>
                 <div style={{
-                  width: '68%',
-                  maxWidth: 24,
+                  width: barWidth,
+                  maxWidth: barMaxWidth,
                   height: `${Math.max(4, (hPct * (chartHeight - 20)) / 100)}px`,
                   background: barColor,
                   borderRadius: '4px 4px 0 0',
@@ -243,9 +260,9 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
           })}
         </svg>
 
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 3 }}>
           {brig.monthlyData.map(m => (
-            <span key={m.monthLabel} style={{ fontSize: 9.5, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center' }}>
+            <span key={m.monthLabel} style={{ fontSize: monthFontSize, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center', lineHeight: 1 }}>
               {m.monthNum}
             </span>
           ))}
@@ -255,12 +272,17 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
   );
 }
 
-/* ---------------- TARJETA DE EVOLUTIVO POR TÉCNICO CON MOVILIDAD DE PROYECTO ---------------- */
+/* ---------------- TARJETA DE EVOLUTIVO POR TÉCNICO CON RESPONSIVIDAD DINÁMICA ---------------- */
 function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
   const maxVal = Math.max(...tec.monthlyData.map(m => m.val), tec.mediaBrigada, 1);
   const chartHeight = 85;
   const barCount = tec.monthlyData.length || 1;
   const esDisponible = isDisponibleType(tec.tipoBrigada);
+
+  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
+  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
+  const barWidth = barCount >= 8 ? '55%' : '68%';
 
   const palette = [
     '#d1eae5', '#b5dfd7', '#86cdbe', '#5ebaa7',
@@ -307,15 +329,16 @@ function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
       background: 'var(--panel)',
       border: '1px solid var(--border)',
       borderRadius: 14,
-      padding: '16px 18px',
+      padding: '14px 16px',
       boxShadow: '0 1px 4px rgba(20,30,60,.04)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      height: 245,
-      transition: 'transform 0.15s, box-shadow 0.15s',
+      height: 250,
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', height: 80, overflow: 'hidden' }}>
         <div style={{ overflow: 'hidden', paddingRight: 8 }}>
           <div
             title={tec.nombre}
@@ -332,44 +355,44 @@ function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
             {tec.nombre}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               {tec.tipoBrigada} · <span style={{ opacity: 0.8 }}>{tec.zona}</span>
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
               background: esDisponible ? 'rgba(57,73,171,.12)' : 'rgba(46,125,50,.12)',
               color: esDisponible ? 'var(--otc)' : 'var(--ok)',
             }}>
               {esDisponible ? 'Disponible' : 'Productiva'}
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
               background: estBg, color: estColor,
             }}>
               {estLabel}
             </span>
             {tec.cambioProyecto !== 'SIN_CAMBIO' && (
               <span style={{
-                padding: '1px 6px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+                padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
                 background: 'rgba(103,58,183,.12)', color: '#673AB7',
               }}>
-                🔄 Traslado: {tec.proyectoInicial} ➔ {tec.proyectoActual}
+                🔄 {tec.proyectoInicial} ➔ {tec.proyectoActual}
               </span>
             )}
           </div>
 
           {/* Badge de Comparación vs Media de Brigada */}
-          <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{
-              padding: '2px 7px',
-              borderRadius: 6,
-              fontSize: 10,
+              padding: '2px 6px',
+              borderRadius: 5,
+              fontSize: 9.5,
               fontWeight: 800,
               background: cumpBg,
               color: cumpColor,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 4
+              gap: 3
             }}>
               <span>{cumpIcon}</span> {cump}% vs Media ({fmtN(tec.mediaBrigada)}/m)
             </span>
@@ -377,31 +400,41 @@ function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
         </div>
 
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-title)', fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-title)', fontVariantNumeric: 'tabular-nums' }}>
             {fmtN(tec.totalEfectivas)}
           </div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
             Prom: {fmtN(tec.promedioMensual)}/mes
           </div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: trendColor, marginTop: 1 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: trendColor, marginTop: 1 }}>
             {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%/mes
           </div>
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', marginTop: 'auto' }}>
+      <div style={{ position: 'relative', width: '100%', marginTop: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', height: chartHeight, position: 'relative', zIndex: 2 }}>
           {tec.monthlyData.map((m, i) => {
             const hPct = (m.val / maxVal) * 100;
             const barColor = palette[i % palette.length];
             return (
-              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-title)', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
+              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{
+                  fontSize: valFontSize,
+                  fontWeight: 700,
+                  color: 'var(--text-title)',
+                  marginBottom: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  lineHeight: 1,
+                  textAlign: 'center'
+                }}>
                   {m.val > 0 ? fmtN(m.val) : '0'}
                 </span>
                 <div style={{
-                  width: '68%',
-                  maxWidth: 22,
+                  width: barWidth,
+                  maxWidth: barMaxWidth,
                   height: `${Math.max(4, (hPct * (chartHeight - 20)) / 100)}px`,
                   background: barColor,
                   borderRadius: '4px 4px 0 0',
@@ -465,9 +498,9 @@ function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
           })}
         </svg>
 
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 3 }}>
           {tec.monthlyData.map(m => (
-            <span key={m.monthLabel} style={{ fontSize: 9.5, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center' }}>
+            <span key={m.monthLabel} style={{ fontSize: monthFontSize, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center', lineHeight: 1 }}>
               {m.monthNum}
             </span>
           ))}

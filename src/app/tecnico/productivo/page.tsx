@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useDashboard } from '../../components/DashboardProvider';
 import { filtRaw, normProy } from '../../components/utils/filters';
 import { fmtCOP, num as n } from '../../components/utils/formatters';
@@ -87,12 +87,28 @@ function getEstadoTecnico(monthlyData: MonthVal[]): 'BAJA' | 'NUEVO' | 'ACTIVO' 
   return 'ACTIVO';
 }
 
+function fmtCOPCompact(v: number | string | undefined | null, is8Plus: boolean): string {
+  const numVal = Number(v);
+  if (!v || isNaN(numVal) || numVal === 0) return '$0';
+  if (!is8Plus) return fmtCOP(numVal);
+  const a = Math.abs(numVal);
+  if (a >= 1e9) return '$' + (numVal / 1e9).toFixed(1) + 'B';
+  if (a >= 1e6) return '$' + (numVal / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return '$' + (numVal / 1e3).toFixed(0) + 'K';
+  return '$' + numVal.toFixed(0);
+}
+
 /* ---------------- TARJETA DE PRODUCCIÓN POR BRIGADA ($ COP) ---------------- */
 function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
   const maxVal = Math.max(...brig.monthlyData.map(m => m.val), 1);
   const chartHeight = 85;
   const barCount = brig.monthlyData.length || 1;
   const esDisponible = isDisponibleType(brig.tipoCuadrilla);
+
+  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
+  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
+  const barWidth = barCount >= 8 ? '55%' : '68%';
 
   const points = brig.monthlyData.map((m, i) => {
     const pctX = ((i + 0.5) / barCount) * 100;
@@ -121,19 +137,21 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
       background: 'var(--panel)',
       border: '1px solid var(--border)',
       borderRadius: 14,
-      padding: '16px 18px',
+      padding: '14px 16px',
       boxShadow: '0 2px 6px rgba(20,30,60,.05)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      height: 220,
+      height: 250,
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', height: 75, overflow: 'hidden' }}>
         <div style={{ overflow: 'hidden', paddingRight: 8 }}>
           <div
             title={brig.tipoCuadrilla}
             style={{
-              fontSize: 14,
+              fontSize: 13.5,
               fontWeight: 800,
               color: 'var(--text-title)',
               whiteSpace: 'nowrap',
@@ -168,19 +186,29 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', marginTop: 'auto' }}>
+      <div style={{ position: 'relative', width: '100%', marginTop: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', height: chartHeight, position: 'relative', zIndex: 2 }}>
           {brig.monthlyData.map((m, i) => {
             const hPct = (m.val / maxVal) * 100;
             const barColor = esDisponible ? '#3949AB' : '#00897B';
             return (
-              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-title)', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
-                  {m.val > 0 ? fmtCOP(m.val) : '$0'}
+              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{
+                  fontSize: valFontSize,
+                  fontWeight: 700,
+                  color: 'var(--text-title)',
+                  marginBottom: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  lineHeight: 1,
+                  textAlign: 'center'
+                }}>
+                  {m.val > 0 ? fmtCOPCompact(m.val, barCount >= 8) : '$0'}
                 </span>
                 <div style={{
-                  width: '68%',
-                  maxWidth: 24,
+                  width: barWidth,
+                  maxWidth: barMaxWidth,
                   height: `${Math.max(4, (hPct * (chartHeight - 20)) / 100)}px`,
                   background: barColor,
                   borderRadius: '4px 4px 0 0',
@@ -232,9 +260,9 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
           })}
         </svg>
 
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 3 }}>
           {brig.monthlyData.map(m => (
-            <span key={m.monthLabel} style={{ fontSize: 9.5, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center' }}>
+            <span key={m.monthLabel} style={{ fontSize: monthFontSize, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center', lineHeight: 1 }}>
               {m.monthNum}
             </span>
           ))}
@@ -244,12 +272,17 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
   );
 }
 
-/* ---------------- TARJETA DE PRODUCCIÓN MONETARIA POR TÉCNICO CON MOVILIDAD ---------------- */
+/* ---------------- TARJETA DE PRODUCCIÓN MONETARIA POR TÉCNICO ---------------- */
 function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
   const maxVal = Math.max(...tec.monthlyData.map(m => m.val), tec.mediaBrigada, 1);
   const chartHeight = 85;
   const barCount = tec.monthlyData.length || 1;
   const esDisponible = isDisponibleType(tec.tipoBrigada);
+
+  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
+  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
+  const barWidth = barCount >= 8 ? '55%' : '68%';
 
   const palette = [
     '#d1eae5', '#b5dfd7', '#86cdbe', '#5ebaa7',
@@ -296,15 +329,16 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
       background: 'var(--panel)',
       border: '1px solid var(--border)',
       borderRadius: 14,
-      padding: '16px 18px',
+      padding: '14px 16px',
       boxShadow: '0 2px 6px rgba(20,30,60,.05)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
-      height: 245,
-      transition: 'transform 0.15s, box-shadow 0.15s',
+      height: 250,
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', height: 80, overflow: 'hidden' }}>
         <div style={{ overflow: 'hidden', paddingRight: 8 }}>
           <div
             title={tec.nombre}
@@ -321,44 +355,44 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
             {tec.nombre}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               {tec.tipoBrigada} · <span style={{ opacity: 0.8 }}>{tec.zona}</span>
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
               background: esDisponible ? 'rgba(57,73,171,.12)' : 'rgba(46,125,50,.12)',
               color: esDisponible ? 'var(--otc)' : 'var(--ok)',
             }}>
               {esDisponible ? 'Disponible' : 'Productiva'}
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
               background: estBg, color: estColor,
             }}>
               {estLabel}
             </span>
             {tec.cambioProyecto !== 'SIN_CAMBIO' && (
               <span style={{
-                padding: '1px 6px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+                padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
                 background: 'rgba(103,58,183,.12)', color: '#673AB7',
               }}>
-                🔄 Traslado: {tec.proyectoInicial} ➔ {tec.proyectoActual}
+                🔄 {tec.proyectoInicial} ➔ {tec.proyectoActual}
               </span>
             )}
           </div>
 
           {/* Badge de Comparación vs Media de Brigada en $ COP */}
-          <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{
-              padding: '2px 7px',
-              borderRadius: 6,
-              fontSize: 10,
+              padding: '2px 6px',
+              borderRadius: 5,
+              fontSize: 9.5,
               fontWeight: 800,
               background: cumpBg,
               color: cumpColor,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 4
+              gap: 3
             }}>
               <span>{cumpIcon}</span> {cump}% vs Media ({fmtCOP(tec.mediaBrigada)}/m)
             </span>
@@ -369,28 +403,38 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
           <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-title)', fontVariantNumeric: 'tabular-nums' }}>
             {fmtCOP(tec.totalProduccion)}
           </div>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
             Prom: {fmtCOP(tec.promedioMensual)}/mes
           </div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: trendColor, marginTop: 1 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: trendColor, marginTop: 1 }}>
             {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%/mes
           </div>
         </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', marginTop: 'auto' }}>
+      <div style={{ position: 'relative', width: '100%', marginTop: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', height: chartHeight, position: 'relative', zIndex: 2 }}>
           {tec.monthlyData.map((m, i) => {
             const hPct = (m.val / maxVal) * 100;
             const barColor = palette[i % palette.length];
             return (
-              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-title)', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
-                  {m.val > 0 ? fmtCOP(m.val) : '$0'}
+              <div key={m.monthLabel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+                <span style={{
+                  fontSize: valFontSize,
+                  fontWeight: 700,
+                  color: 'var(--text-title)',
+                  marginBottom: 2,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  lineHeight: 1,
+                  textAlign: 'center'
+                }}>
+                  {m.val > 0 ? fmtCOPCompact(m.val, barCount >= 8) : '$0'}
                 </span>
                 <div style={{
-                  width: '68%',
-                  maxWidth: 22,
+                  width: barWidth,
+                  maxWidth: barMaxWidth,
                   height: `${Math.max(4, (hPct * (chartHeight - 20)) / 100)}px`,
                   background: barColor,
                   borderRadius: '4px 4px 0 0',
@@ -455,9 +499,9 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
           })}
         </svg>
 
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 3 }}>
           {tec.monthlyData.map(m => (
-            <span key={m.monthLabel} style={{ fontSize: 9.5, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center' }}>
+            <span key={m.monthLabel} style={{ fontSize: monthFontSize, color: 'var(--text-muted)', fontWeight: 600, flex: 1, textAlign: 'center', lineHeight: 1 }}>
               {m.monthNum}
             </span>
           ))}
@@ -470,9 +514,6 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
 export default function TecnicoProductivoPage() {
   const { raw, filters, loading, error } = useDashboard();
   const { colors } = useTheme();
-
-  const [surTecnicosData, setSurTecnicosData] = useState<any[] | null>(null);
-  const [surBrigadasData, setSurBrigadasData] = useState<any[] | null>(null);
 
   const [q, setQ] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState('ALL');
@@ -490,114 +531,7 @@ export default function TecnicoProductivoPage() {
   const MUT = colors.mut;
   const LINE = 'var(--border)';
 
-  // Cargar datos de la plantilla Excel SUR 2026 ("1. Calculo de productividad SCR  SUR- 2026.xlsx")
-  useEffect(() => {
-    Promise.all([
-      fetch('/tecnico_sur_excel_2026.json').then(r => r.json()),
-      fetch('/brigada_sur_excel_2026.json').then(r => r.json()),
-    ]).then(([tecs, brigadas]) => {
-      setSurTecnicosData(tecs);
-      setSurBrigadasData(brigadas);
-    }).catch(err => {
-      console.error('Error cargando JSONs de SUR 2026:', err);
-    });
-  }, []);
-
   const { cardsData, brigadasCardsData, availableBrigadas, mesesList } = useMemo(() => {
-    // Si el filtro de Proyecto es 'Sur' y tenemos cargados los datos de "1. Calculo de productividad SCR  SUR- 2026.xlsx"
-    if (filters.proy === 'Sur' && surTecnicosData && surBrigadasData) {
-      const mesesList = ['2026-07'];
-
-      // 1. Tarjetas de Brigada para Proyecto Sur desde Excel (Valor Final Mes)
-      const brigadasCardsData: BrigadaProductivaData[] = surBrigadasData.map((b: any) => {
-        const monthlyData: MonthVal[] = mesesList.map(m => ({
-          monthLabel: m,
-          monthNum: m.split('-')[1] || m,
-          val: b.monthlyData[m] || 0,
-        }));
-
-        const activeVals = monthlyData.filter(m => m.val > 0);
-        const totalProduccion = activeVals.reduce((s, m) => s + m.val, 0);
-        const promedioMensual = Math.round(totalProduccion / (activeVals.length || 1));
-        const slope = calcSlope(monthlyData);
-
-        return {
-          tipoCuadrilla: b.tipoCuadrilla,
-          totalProduccion,
-          promedioMensual,
-          trendPct: 0,
-          slope,
-          monthlyData,
-        };
-      }).sort((a, b) => b.totalProduccion - a.totalProduccion);
-
-      // 2. Tarjetas de Técnico para Proyecto Sur desde Excel (Valor Final Mes)
-      const tecsListRaw = surTecnicosData.map((tec: any) => {
-        const monthlyData: MonthVal[] = mesesList.map(m => ({
-          monthLabel: m,
-          monthNum: m.split('-')[1] || m,
-          val: tec.monthlyData[m] || 0,
-        }));
-
-        const activeVals = monthlyData.filter(m => m.val > 0);
-        const totalProduccion = activeVals.reduce((s, m) => s + m.val, 0);
-        const promedioMensual = Math.round(totalProduccion / (activeVals.length || 1));
-        const slope = calcSlope(monthlyData);
-        const estadoTecnico = getEstadoTecnico(monthlyData);
-
-        return {
-          id: tec.nombre,
-          nombre: tec.nombre,
-          tipoBrigada: tec.tipoBrigada,
-          zona: 'Sur',
-          totalProduccion,
-          promedioMensual,
-          trendPct: 0,
-          slope,
-          estadoTecnico,
-          cambioProyecto: 'SIN_CAMBIO' as const,
-          monthlyData,
-        };
-      });
-
-      // Calcular media por tipo de brigada en $ COP
-      const brigadaSumProm: Record<string, number> = {};
-      const brigadaCountTec: Record<string, number> = {};
-
-      tecsListRaw.forEach(t => {
-        if (t.tipoBrigada && t.tipoBrigada !== 'Sin Tipo') {
-          brigadaSumProm[t.tipoBrigada] = (brigadaSumProm[t.tipoBrigada] || 0) + t.promedioMensual;
-          brigadaCountTec[t.tipoBrigada] = (brigadaCountTec[t.tipoBrigada] || 0) + 1;
-        }
-      });
-
-      const mediaBrigadaMap: Record<string, number> = {};
-      Object.keys(brigadaSumProm).forEach(tipo => {
-        mediaBrigadaMap[tipo] = Math.round(brigadaSumProm[tipo] / (brigadaCountTec[tipo] || 1));
-      });
-
-      const cardsData: TecnicoProductivoData[] = tecsListRaw.map(tec => {
-        const mediaBrigada = mediaBrigadaMap[tec.tipoBrigada] || tec.promedioMensual || 1;
-        const cumplimientoPct = Math.round((tec.promedioMensual / mediaBrigada) * 100);
-        const diffMedia = tec.promedioMensual - mediaBrigada;
-
-        return {
-          ...tec,
-          mediaBrigada,
-          cumplimientoPct,
-          diffMedia,
-        };
-      });
-
-      const tiposSet = new Set<string>();
-      cardsData.forEach(c => {
-        if (c.tipoBrigada && c.tipoBrigada !== 'Sin Tipo') tiposSet.add(c.tipoBrigada);
-      });
-
-      return { cardsData, brigadasCardsData, availableBrigadas: Array.from(tiposSet).sort(), mesesList };
-    }
-
-    // De lo contrario, usar la Base de Datos con filtRaw(raw.raw, filters)
     if (!raw) {
       return {
         cardsData: [] as TecnicoProductivoData[],
@@ -607,6 +541,7 @@ export default function TecnicoProductivoPage() {
       };
     }
 
+    // Filtrar los registros de PostgreSQL según los Filtros Generales del Dashboard
     const rows = filtRaw(raw.raw, filters);
 
     const mesesSet = new Set<string>();
@@ -802,7 +737,7 @@ export default function TecnicoProductivoPage() {
     const availableBrigadas = Array.from(tiposSet).sort();
 
     return { cardsData, brigadasCardsData, availableBrigadas, mesesList };
-  }, [raw, filters, surTecnicosData, surBrigadasData]);
+  }, [raw, filters]);
 
   // Options de brigadas con filtros aplicados
   const filteredAvailableBrigadas = useMemo(() => {
@@ -916,7 +851,7 @@ export default function TecnicoProductivoPage() {
   const totalPages = Math.ceil(filteredCards.length / pageSize) || 1;
   const paginatedCards = filteredCards.slice((page - 1) * pageSize, page * pageSize);
 
-  if (loading && !surTecnicosData) return <div className="loading-wrap"><div className="spinner" /><span>Cargando datos de producción por técnico…</span></div>;
+  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando datos de producción por técnico…</span></div>;
   if (error) return <div className="status err">{error}</div>;
 
   const countOperativas = cardsData.filter(c => !isDisponibleType(c.tipoBrigada)).length;
@@ -945,7 +880,7 @@ export default function TecnicoProductivoPage() {
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK }}>Evolutivo Monetario por Brigada y Técnico (Producción $ COP)</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>
-            Monitoreo en tiempo real {filters.proy === 'Sur' ? '(Fuente Especializada: "1. Calculo de productividad SCR SUR- 2026.xlsx")' : '(Fuente: Base de Datos PostgreSQL)'} de ingresos monetarios ($ COP) por brigada y técnico
+            Monitoreo en tiempo real (Fuente: Base de Datos PostgreSQL) de ingresos monetarios ($ COP) por brigada y técnico
           </div>
         </div>
 
