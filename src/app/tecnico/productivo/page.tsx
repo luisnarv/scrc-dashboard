@@ -100,7 +100,8 @@ function fmtCOPCompact(v: number | string | undefined | null, is8Plus: boolean):
 }
 
 /* ---------------- TARJETA DE PRODUCCIÓN POR BRIGADA ($ COP) ---------------- */
-function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
+function BrigadaProductivaCard({ brig, porDia }: { brig: BrigadaProductivaData; porDia: boolean }) {
+  const perLabel = porDia ? '/día' : '/mes';
   const maxVal = Math.max(...brig.monthlyData.map(m => m.val), 1);
   const chartHeight = 85;
   const barCount = brig.monthlyData.length || 1;
@@ -179,10 +180,10 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
             {fmtCOP(brig.totalProduccion)}
           </div>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-            Prom: {fmtCOP(brig.promedioMensual)}/mes
+            Prom: {fmtCOP(brig.promedioMensual)}{perLabel}
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, color: trendColor, marginTop: 1 }}>
-            {slope >= 0 ? '▲ +' : '▼ '}{brig.trendPct.toFixed(1)}%/mes
+            {slope >= 0 ? '▲ +' : '▼ '}{brig.trendPct.toFixed(1)}%{perLabel}
           </div>
         </div>
       </div>
@@ -274,7 +275,8 @@ function BrigadaProductivaCard({ brig }: { brig: BrigadaProductivaData }) {
 }
 
 /* ---------------- TARJETA DE PRODUCCIÓN MONETARIA POR TÉCNICO ---------------- */
-function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
+function TecnicoProductivoCard({ tec, porDia }: { tec: TecnicoProductivoData; porDia: boolean }) {
+  const perLabel = porDia ? '/día' : '/mes';
   const maxVal = Math.max(...tec.monthlyData.map(m => m.val), tec.mediaBrigada, 1);
   const chartHeight = 85;
   const barCount = tec.monthlyData.length || 1;
@@ -405,10 +407,10 @@ function TecnicoProductivoCard({ tec }: { tec: TecnicoProductivoData }) {
             {fmtCOP(tec.totalProduccion)}
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-            Prom: {fmtCOP(tec.promedioMensual)}/mes
+            Prom: {fmtCOP(tec.promedioMensual)}{perLabel}
           </div>
           <div style={{ fontSize: 9.5, fontWeight: 700, color: trendColor, marginTop: 1 }}>
-            {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%/mes
+            {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%{perLabel}
           </div>
         </div>
       </div>
@@ -532,23 +534,30 @@ export default function TecnicoProductivoPage() {
   const MUT = colors.mut;
   const LINE = 'var(--border)';
 
-  const { cardsData, brigadasCardsData, availableBrigadas, mesesList } = useMemo(() => {
+  const { cardsData, brigadasCardsData, availableBrigadas, mesesList, porDia } = useMemo(() => {
     if (!raw) {
       return {
         cardsData: [] as TecnicoProductivoData[],
         brigadasCardsData: [] as BrigadaProductivaData[],
         availableBrigadas: [] as string[],
-        mesesList: [] as string[]
+        mesesList: [] as string[],
+        porDia: false
       };
     }
 
     // Filtrar los registros de PostgreSQL según los Filtros Generales del Dashboard
     const rows = filtRaw(raw.raw, filters);
 
+    // Eje temporal adaptable: con UN solo mes seleccionado el desglose es por DÍA
+    // (YYYY-MM-DD); con varios meses (o ninguno) se agrega por MES (YYYY-MM).
+    const porDia = filters.mes.length === 1;
+    const bucketKey = (f: string) => (porDia ? f.substring(0, 10) : f.substring(0, 7));
+    const bucketNum = (b: string) => (porDia ? b.slice(-2) : (b.split('-')[1] || b));
+
     const mesesSet = new Set<string>();
     rows.forEach(r => {
       const d = String(r.Fecha || '');
-      if (d) mesesSet.add(d.substring(0, 7));
+      if (d) mesesSet.add(bucketKey(d));
     });
     const mesesList = Array.from(mesesSet).sort();
 
@@ -584,7 +593,7 @@ export default function TecnicoProductivoPage() {
       ).trim();
       const zona = String(r._Zona || r.Zona || 'Sin Zona');
       const proy = String(r._Proyecto || normProy(r.Zona) || r.Zona || 'Sin Proyecto');
-      const month = String(r.Fecha || '').substring(0, 7);
+      const month = bucketKey(String(r.Fecha || ''));
       const ing = n(r.Ingresos);
 
       if (tipo && tipo !== 'Sin Tipo') tiposSet.add(tipo);
@@ -607,7 +616,7 @@ export default function TecnicoProductivoPage() {
     const brigadasCardsData: BrigadaProductivaData[] = Object.values(brigMap).map(b => {
       const monthlyData: MonthVal[] = mesesList.map(m => ({
         monthLabel: m,
-        monthNum: m.split('-')[1] || m,
+        monthNum: bucketNum(m),
         val: b.byMonth[m] || 0,
       }));
 
@@ -644,7 +653,7 @@ export default function TecnicoProductivoPage() {
 
       const monthlyData: MonthVal[] = mesesList.map(m => ({
         monthLabel: m,
-        monthNum: m.split('-')[1] || m,
+        monthNum: bucketNum(m),
         val: tec.byMonth[m] || 0,
       }));
 
@@ -737,7 +746,7 @@ export default function TecnicoProductivoPage() {
 
     const availableBrigadas = Array.from(tiposSet).sort();
 
-    return { cardsData, brigadasCardsData, availableBrigadas, mesesList };
+    return { cardsData, brigadasCardsData, availableBrigadas, mesesList, porDia };
   }, [raw, filters]);
 
   // Options de brigadas con filtros aplicados
@@ -994,11 +1003,11 @@ export default function TecnicoProductivoPage() {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 16,
           }}>
             {filteredBrigadaCards.map(brig => (
-              <BrigadaProductivaCard key={brig.tipoCuadrilla} brig={brig} />
+              <BrigadaProductivaCard key={brig.tipoCuadrilla} brig={brig} porDia={porDia} />
             ))}
           </div>
         </section>
@@ -1010,11 +1019,11 @@ export default function TecnicoProductivoPage() {
         {paginatedCards.length > 0 ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 16,
           }}>
             {paginatedCards.map(tec => (
-              <TecnicoProductivoCard key={tec.id} tec={tec} />
+              <TecnicoProductivoCard key={tec.id} tec={tec} porDia={porDia} />
             ))}
           </div>
         ) : (

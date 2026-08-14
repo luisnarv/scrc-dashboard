@@ -103,7 +103,8 @@ const isDisponibleType = (tLabel: string) => {
 };
 
 /* ---------------- TARJETA DE CANTIDAD DE BRIGADAS POR TIPO (BASE DE DATOS) ---------------- */
-function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
+function CantidadBrigadaCard({ brig, porDia }: { brig: CantidadBrigadaCardData; porDia: boolean }) {
+  const perLabel = porDia ? '/día' : '/mes';
   const maxVal = Math.max(...brig.monthlyData.map(m => m.val), 1);
   const chartHeight = 85;
   const barCount = brig.monthlyData.length || 1;
@@ -185,10 +186,10 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
             {fmtN(brig.totalAcumulado)}
           </div>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-            Prom: {fmtN(brig.promedioMensual)}/mes
+            Prom: {fmtN(brig.promedioMensual)}{perLabel}
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, color: trendColor, marginTop: 1 }}>
-            {slope >= 0 ? '▲ +' : '▼ '}{brig.trendPct.toFixed(1)}%/mes
+            {slope >= 0 ? '▲ +' : '▼ '}{brig.trendPct.toFixed(1)}%{perLabel}
           </div>
         </div>
       </div>
@@ -280,7 +281,8 @@ function CantidadBrigadaCard({ brig }: { brig: CantidadBrigadaCardData }) {
 }
 
 /* ---------------- TARJETA DE EVOLUTIVO POR TÉCNICO CON RESPONSIVIDAD DINÁMICA ---------------- */
-function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
+function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean }) {
+  const perLabel = porDia ? '/día' : '/mes';
   const maxVal = Math.max(...tec.monthlyData.map(m => m.val), tec.mediaBrigada, 1);
   const chartHeight = 85;
   const barCount = tec.monthlyData.length || 1;
@@ -411,10 +413,10 @@ function TecnicoCard({ tec }: { tec: TecnicoCardData }) {
             {fmtN(tec.totalEfectivas)}
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-            Prom: {fmtN(tec.promedioMensual)}/mes
+            Prom: {fmtN(tec.promedioMensual)}{perLabel}
           </div>
           <div style={{ fontSize: 9.5, fontWeight: 700, color: trendColor, marginTop: 1 }}>
-            {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%/mes
+            {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%{perLabel}
           </div>
         </div>
       </div>
@@ -537,20 +539,27 @@ export default function TecnicosPage() {
   const MUT = colors.mut;
   const LINE = 'var(--border)';
 
-  const { cardsData, cantBrigadasCardsData, tiposBrigadas, mesesList } = useMemo(() => {
+  const { cardsData, cantBrigadasCardsData, tiposBrigadas, mesesList, porDia } = useMemo(() => {
     if (!raw) return {
       cardsData: [] as TecnicoCardData[],
       cantBrigadasCardsData: [] as CantidadBrigadaCardData[],
       tiposBrigadas: [] as string[],
-      mesesList: [] as string[]
+      mesesList: [] as string[],
+      porDia: false
     };
 
     const rows = filtRaw(raw.raw, filters);
 
+    // Eje temporal adaptable: con UN solo mes seleccionado el desglose es por DÍA
+    // (YYYY-MM-DD); con varios meses (o ninguno) se agrega por MES (YYYY-MM).
+    const porDia = filters.mes.length === 1;
+    const bucketKey = (f: string) => (porDia ? f.substring(0, 10) : f.substring(0, 7));
+    const bucketNum = (b: string) => (porDia ? b.slice(-2) : (b.split('-')[1] || b));
+
     const mesesSet = new Set<string>();
     rows.forEach(r => {
       const d = String(r.Fecha || '');
-      if (d) mesesSet.add(d.substring(0, 7));
+      if (d) mesesSet.add(bucketKey(d));
     });
     const mesesList = Array.from(mesesSet).sort();
 
@@ -581,7 +590,7 @@ export default function TecnicosPage() {
       ).trim();
       const zona = String(r._Zona || r.Zona || 'Sin Zona');
       const proy = String(r._Proyecto || normProy(r.Zona) || r.Zona || 'Sin Proyecto');
-      const month = String(r.Fecha || '').substring(0, 7);
+      const month = bucketKey(String(r.Fecha || ''));
       const efec = n(r.Efectivas) + n(r.Fallida_Con_Pago);
 
       if (tipo && tipo !== 'Sin Tipo') tiposSet.add(tipo);
@@ -603,7 +612,7 @@ export default function TecnicosPage() {
     const cantBrigadasCardsData: CantidadBrigadaCardData[] = Object.keys(cantBrigadasMensual).map(tipo => {
       const monthlyData: MonthVal[] = mesesList.map(m => ({
         monthLabel: m,
-        monthNum: m.split('-')[1] || m,
+        monthNum: bucketNum(m),
         val: cantBrigadasMensual[tipo]?.[m]?.size || 0,
       }));
 
@@ -640,7 +649,7 @@ export default function TecnicosPage() {
 
       const monthlyData: MonthVal[] = mesesList.map(m => ({
         monthLabel: m,
-        monthNum: m.split('-')[1] || m,
+        monthNum: bucketNum(m),
         val: tec.byMonth[m] || 0,
       }));
 
@@ -733,7 +742,7 @@ export default function TecnicosPage() {
 
     const tiposBrigadas = Array.from(tiposSet).sort();
 
-    return { cardsData, cantBrigadasCardsData, tiposBrigadas, mesesList };
+    return { cardsData, cantBrigadasCardsData, tiposBrigadas, mesesList, porDia };
   }, [raw, filters]);
 
   // Opciones dinámicas de brigadas
@@ -990,11 +999,11 @@ export default function TecnicosPage() {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 16,
           }}>
             {filteredCantBrigadasCards.map(brig => (
-              <CantidadBrigadaCard key={brig.tipoCuadrilla} brig={brig} />
+              <CantidadBrigadaCard key={brig.tipoCuadrilla} brig={brig} porDia={porDia} />
             ))}
           </div>
         </section>
@@ -1006,11 +1015,11 @@ export default function TecnicosPage() {
         {paginatedCards.length > 0 ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 16,
           }}>
             {paginatedCards.map(tec => (
-              <TecnicoCard key={tec.id} tec={tec} />
+              <TecnicoCard key={tec.id} tec={tec} porDia={porDia} />
             ))}
           </div>
         ) : (

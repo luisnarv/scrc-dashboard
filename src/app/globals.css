@@ -141,7 +141,7 @@ body {
 h1, h2, h3, h4, h5, h6 { font-weight: 600; color: var(--text-title); }
 
 /* Layout */
-.wrap { max-width: 1400px; margin: 0 auto; padding: 14px; }
+.wrap { max-width: none; width: 100%; margin: 0 auto; padding: 14px 24px; }
 
 /* Header */
 header.dash-header {
