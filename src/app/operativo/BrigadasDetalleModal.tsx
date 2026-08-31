@@ -23,13 +23,14 @@ interface Row {
   perd: number;   // fallidas sin pago + perdidas
   totVis: number;
   dias: number;   // técnico-días (denominador de los promedios)
-  ingreso: number; // Ingreso acumulado
+  ingreso: number; // Producción valorizada acumulada ($ COP)
+  costo: number;   // Costo real de la brigada ($ COP)
   children?: Row[];
 }
 
 type SortKey =
   | 'label' | 'efec' | 'fall' | 'perd'
-  | 'totVis' | 'promVis' | 'promEfec' | 'ingreso';
+  | 'totVis' | 'ingreso' | 'costo' | 'cump' | 'promVis' | 'promEfec';
 
 /* columnas de la tabla: clave, título, ¿es promedio? */
 const isDisponibleType = (tLabel: string) => {
@@ -44,12 +45,13 @@ const isDisponibleType = (tLabel: string) => {
   );
 };
 
-const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean }[] = [
+const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean; isPct?: boolean }[] = [
   { key: 'efec', label: 'Efectivas', accent: OK },
   { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
   { key: 'perd', label: 'Perdidas', accent: ERR },
   { key: 'totVis', label: 'Total Visitas' },
   { key: 'ingreso', label: 'Producción Valorizada', accent: 'var(--otc)', isMoney: true },
+  { key: 'cump', label: '% Cumplimiento', isPct: true },
   { key: 'promVis', label: 'Prom Vis.', prom: true },
   { key: 'promEfec', label: 'Prom Efec.', prom: true },
 ];
@@ -57,6 +59,7 @@ const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMo
 function promValue(r: Row, key: SortKey): number {
   const d = r.dias || 1;
   switch (key) {
+    case 'cump': return r.costo > 0 ? (r.ingreso / r.costo) * 100 : 0;
     case 'promVis': return r.totVis / d;
     case 'promEfec': return r.efec / d;
     default: return num((r as unknown as Record<string, number>)[key]);
@@ -95,20 +98,20 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const techLabel = String(r.Nombre || techKey);
 
       // Create/Get Type
-      if (!rootMap[typeKey]) rootMap[typeKey] = { key: typeKey, label: typeKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, children: [] };
+      if (!rootMap[typeKey]) rootMap[typeKey] = { key: typeKey, label: typeKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0, children: [] };
       const typeNode = rootMap[typeKey];
 
       // Create/Get Zone (find inside Type's children)
       let zoneNode = typeNode.children!.find(c => c.key === `${typeKey}::${zoneKey}`);
       if (!zoneNode) {
-        zoneNode = { key: `${typeKey}::${zoneKey}`, label: zoneKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, children: [] };
+        zoneNode = { key: `${typeKey}::${zoneKey}`, label: zoneKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0, children: [] };
         typeNode.children!.push(zoneNode);
       }
 
       // Create/Get Tech (find inside Zone's children)
       let techNode = zoneNode.children!.find(c => c.key === `${typeKey}::${zoneKey}::${techKey}`);
       if (!techNode) {
-        techNode = { key: `${typeKey}::${zoneKey}::${techKey}`, label: techLabel, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 };
+        techNode = { key: `${typeKey}::${zoneKey}::${techKey}`, label: techLabel, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0 };
         zoneNode.children!.push(techNode);
       }
 
@@ -117,10 +120,11 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const perd = num(r.Fallida_Sin_Pago) + num(r.Perdidas);
       const totVis = efec + fall + perd;
       const ingreso = num(r.Ingresos);
+      const costo = num(r.Meta_Facturacion);
 
       for (const acc of [typeNode, zoneNode, techNode]) {
         acc.efec += efec; acc.fall += fall; acc.perd += perd;
-        acc.totVis += totVis; acc.dias += 1; acc.ingreso += ingreso;
+        acc.totVis += totVis; acc.dias += 1; acc.ingreso += ingreso; acc.costo += costo;
       }
     }
 
@@ -134,10 +138,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     });
 
     const total: Row = brigadas.reduce((s, b) => {
-      (['efec', 'fall', 'perd', 'totVis', 'dias', 'ingreso'] as const)
+      (['efec', 'fall', 'perd', 'totVis', 'dias', 'ingreso', 'costo'] as const)
         .forEach(k => { s[k] += b[k]; });
       return s;
-    }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0 } as Row);
+    }, { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0 } as Row);
 
     const fechas = [...new Set(rows.map(r => String(r.Fecha || '')).filter(Boolean))].sort();
     const periodo = fechas.length ? (fechas.length === 1 ? fechas[0] : `${fechas[0]} … ${fechas[fechas.length - 1]}`) : '—';
@@ -174,12 +178,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   const exportCSV = () => {
     if (!raw) return;
     const rows = [];
-    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'PROM vis', 'Prom efec'].join(';'));
+    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', '% Cumplimiento', 'PROM vis', 'Prom efec'].join(';'));
     
     const rowsF = filtRaw(raw.raw, filters);
     
     // Agrupar por Mes -> Tipo -> Zona -> Técnico
-    const monthMap: Record<string, Record<string, Record<string, Record<string, { efec: number; fall: number; perd: number; totVis: number; dias: number; ingreso: number; techName: string }>>>> = {};
+    const monthMap: Record<string, Record<string, Record<string, Record<string, { efec: number; fall: number; perd: number; totVis: number; dias: number; ingreso: number; costo: number; techName: string }>>>> = {};
 
     for (const r of rowsF) {
       const month = String(r.Fecha || '').slice(0, 7) || '—';
@@ -191,13 +195,14 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const mNode = (monthMap[month] ??= {});
       const tNode = (mNode[typeKey] ??= {});
       const zNode = (tNode[zoneKey] ??= {});
-      const tech = (zNode[techKey] ??= { efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, techName: techLabel });
+      const tech = (zNode[techKey] ??= { efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0, techName: techLabel });
 
       const efec = num(r.Efectivas);
       const fall = num(r.Fallida_Con_Pago);
       const perd = num(r.Fallida_Sin_Pago) + num(r.Perdidas);
       const totVis = efec + fall + perd;
       const ingreso = num(r.Ingresos);
+      const costo = num(r.Meta_Facturacion);
 
       tech.efec += efec;
       tech.fall += fall;
@@ -205,6 +210,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       tech.totVis += totVis;
       tech.dias += 1;
       tech.ingreso += ingreso;
+      tech.costo += costo;
     }
 
     const sortedMonths = Object.keys(monthMap).sort();
@@ -219,6 +225,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             const tech = techs[techKey];
             const promVis = tech.dias ? tech.totVis / tech.dias : 0;
             const promEfec = tech.dias ? tech.efec / tech.dias : 0;
+            const cumpPct = tech.costo > 0 ? (tech.ingreso / tech.costo) * 100 : 0;
             rows.push([
               month,
               zoneKey,
@@ -230,6 +237,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               tech.perd,
               tech.totVis,
               Math.round(tech.ingreso),
+              `${cumpPct.toFixed(1)}%`,
               promVis.toFixed(2),
               promEfec.toFixed(2)
             ].join(';'));
@@ -261,11 +269,26 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   });
   const arrow = (k: SortKey) => (sort === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
 
+  const getPctColor = (val: number) => {
+    if (val >= 100) return OK;
+    if (val >= 85) return WARN;
+    return ERR;
+  };
+
   const dataCells = (r: Row, prom = false) => COLS.map(c => {
-    const v = c.prom ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
-    const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
+    const v = (c.prom || c.isPct) ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
+    const displayVal = c.isMoney 
+      ? fmtCOP(v) 
+      : c.isPct 
+      ? `${v.toFixed(1)}%` 
+      : c.prom 
+      ? v.toFixed(2) 
+      : fmtN(v);
+      
+    const cellAccent = c.isPct ? getPctColor(v) : c.accent;
+
     return (
-      <td key={c.key} style={numCell(v, !!c.prom, c.accent)}>
+      <td key={c.key} style={numCell(v, !!(c.prom || c.isPct), cellAccent)}>
         {displayVal}
       </td>
     );
@@ -382,10 +405,17 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                 <tr style={{ position: 'sticky', bottom: 0 }}>
                   <td style={{ ...tdBase, fontWeight: 800, color: INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>Total</td>
                   {COLS.map(c => {
-                    const v = c.prom ? promValue(total, c.key) : num((total as unknown as Record<string, number>)[c.key]);
-                    const displayVal = c.isMoney ? fmtCOP(v) : (c.prom ? v.toFixed(2) : fmtN(v));
+                    const v = (c.prom || c.isPct) ? promValue(total, c.key) : num((total as unknown as Record<string, number>)[c.key]);
+                    const displayVal = c.isMoney 
+                      ? fmtCOP(v) 
+                      : c.isPct 
+                      ? `${v.toFixed(1)}%` 
+                      : c.prom 
+                      ? v.toFixed(2) 
+                      : fmtN(v);
+                    const cellAccent = c.isPct ? getPctColor(v) : c.accent;
                     return (
-                      <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>
+                      <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: cellAccent || INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>
                         {displayVal}
                       </td>
                     );
@@ -398,7 +428,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
 
         <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11.5, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>{brigadasSort.length} agrupaciones principales · {total ? fmtN(total.dias) : 0} técnico-días</span>
-          <span>Prom = valor ÷ técnico-días · Total Visitas = Efectivas + Fallidas + Perdidas</span>
+          <span>Producción = Ingresos valorizados · % Cumplimiento = (Producción ÷ Costo) × 100</span>
         </div>
       </div>
     </div>
