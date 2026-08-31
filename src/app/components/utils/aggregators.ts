@@ -7,25 +7,28 @@ export const OTC_CUENTA_PROVISION = 'PROVISION DE INGRESOS POR INGENIERIA ELECTR
 
 function isRealAccount(cat: string): boolean {
   const c = String(cat || '').toUpperCase();
+  // Ingreso Real Facturado = Facturación bruta principal (clase 4180 / 4105)
+  // Excluye las cuentas de devengo/provisión y las notas/reversiones de cruce
   return (
-    (c.includes('INGRESOS POR INGENIERIA') ||
-     c.includes('CLIENTES NACIONALES') ||
-     c.includes('PERIODO ACTUAL FACTURADO')) &&
+    (c.includes('INGRESOS POR INGENIERIA') || c.includes('CLIENTES NACIONALES')) &&
+    !c.includes('PROVISION') &&
     !c.includes('NO FACTURADO') &&
-    !c.includes('PROVISION')
+    !c.includes('DEVENGADO')
   );
 }
 
 function isProvAccount(cat: string): boolean {
   const c = String(cat || '').toUpperCase();
-  return c.includes('PROVISION') || c.includes('NO FACTURADO') || c.includes('DEVENGADO');
+  // Ingreso Provisional = Devengo o estimación de periodo no facturado (clase 4199)
+  // Ej: 'PROVISION DE INGRESOS POR INGENIERIA ELECTRICA' o 'DEVENGADO PERIODO ACTUAL NO FACTURADO'
+  return c.includes('PROVISION') || c.includes('NO FACTURADO');
 }
 
 /**
  * Suma del ingreso de ingeniería eléctrica sobre filas OTC ya filtradas.
- * Regla por (Mes, Proyecto): si el grupo tiene ingreso REAL válido mayor a 0,
- * se usa ese; si no tiene ingreso real (o es nulo/ajuste negativo),
- * se cae a la PROVISIÓN (estimado provisionado/no facturado).
+ * Regla por (Mes, Proyecto): si el grupo tiene Ingreso Real Facturado válido mayor a 0,
+ * se usa ese exclusivamente; si no tiene Ingreso Real Facturado en ese mes/proyecto,
+ * se usa automáticamente el Ingreso Provisional (devengado no facturado).
  */
 export function ingresoElectrica(rows: CostoRecord[]): number {
   const grupos = new Map<string, { real: number; prov: number; tieneReal: boolean }>();
