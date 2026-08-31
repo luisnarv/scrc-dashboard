@@ -1,29 +1,38 @@
 import type { CostoRecord, OtcAgg, RawRecord } from './types';
 import { num } from './formatters';
 
-// Ingreso de INGENIERÍA ELÉCTRICA del OTC = la cuenta 4180 'INGRESOS POR INGENIERIA
-// ELECTRICA' (factura definitiva). Match EXACTO: excluye consorcios (4190) y
-// devoluciones (4175). El valor ya viene POSITIVO desde la query.
+// Cuentas de Ingreso Real y Provisión de OTC
 export const OTC_CUENTA_INGRESO = 'INGRESOS POR INGENIERIA ELECTRICA';
-// Fallback: cuando un mes/proyecto aún NO tiene facturado el ingreso real, se usa
-// la PROVISIÓN de ese ingreso (cuenta 4199) como estimado. Solo aplica si ese
-// mes/proyecto no tiene NINGUNA fila de 'INGRESOS POR INGENIERIA ELECTRICA'.
 export const OTC_CUENTA_PROVISION = 'PROVISION DE INGRESOS POR INGENIERIA ELECTRICA';
+
+function isRealAccount(cat: string): boolean {
+  const c = String(cat || '').toUpperCase();
+  return (
+    (c.includes('INGRESOS POR INGENIERIA') ||
+     c.includes('CLIENTES NACIONALES') ||
+     c.includes('PERIODO ACTUAL FACTURADO')) &&
+    !c.includes('NO FACTURADO') &&
+    !c.includes('PROVISION')
+  );
+}
+
+function isProvAccount(cat: string): boolean {
+  const c = String(cat || '').toUpperCase();
+  return c.includes('PROVISION') || c.includes('NO FACTURADO') || c.includes('DEVENGADO');
+}
 
 /**
  * Suma del ingreso de ingeniería eléctrica sobre filas OTC ya filtradas.
- * Regla por (Mes, Proyecto): si el grupo tiene ingreso REAL ('INGRESOS POR
- * INGENIERIA ELECTRICA') se usa ese; si no tiene ninguna fila de ingreso real,
- * se cae a la PROVISIÓN ('PROVISION DE INGRESOS POR INGENIERIA ELECTRICA').
- * Así los meses aún no facturados (p.ej. el mes en curso) muestran el estimado
- * provisionado en vez de cero.
+ * Regla por (Mes, Proyecto): si el grupo tiene ingreso REAL válido mayor a 0,
+ * se usa ese; si no tiene ingreso real (o es nulo/ajuste negativo),
+ * se cae a la PROVISIÓN (estimado provisionado/no facturado).
  */
 export function ingresoElectrica(rows: CostoRecord[]): number {
   const grupos = new Map<string, { real: number; prov: number; tieneReal: boolean }>();
   for (const r of rows) {
     const cat = String(r.Categoria || '').toUpperCase();
-    const esReal = cat === OTC_CUENTA_INGRESO;
-    const esProv = cat === OTC_CUENTA_PROVISION;
+    const esReal = isRealAccount(cat);
+    const esProv = isProvAccount(cat);
     if (!esReal && !esProv) continue;
     const k = `${r.Mes || ''}|${r.Proyecto || ''}`;
     const g = grupos.get(k) || { real: 0, prov: 0, tieneReal: false };
@@ -32,15 +41,20 @@ export function ingresoElectrica(rows: CostoRecord[]): number {
     grupos.set(k, g);
   }
   let total = 0;
-  for (const g of grupos.values()) total += g.tieneReal ? g.real : g.prov;
+  for (const g of grupos.values()) {
+    total += (g.tieneReal && g.real > 0) ? g.real : g.prov;
+  }
   return total;
 }
 
 export function otcAgg(rows: CostoRecord[]): OtcAgg {
   const ing = ingresoElectrica(rows);
-  // Costos = todo lo que NO es una cuenta de ingreso (clase 4 lleva 'ingres' en el nombre).
+  // Costos = todo lo que NO sea cuenta de ingreso ni provisión/devengado.
   const cos = rows
-    .filter(r => !String(r.Categoria || '').toLowerCase().includes('ingres'))
+    .filter(r => {
+      const c = String(r.Categoria || '').toLowerCase();
+      return !c.includes('ingres') && !c.includes('provision') && !c.includes('devengado') && !c.includes('nacionales');
+    })
     .reduce((s, r) => s + (Number(r.Valor) || 0), 0);
   return { ingresos: ing, costos: cos, utilidad: ing - cos, margen: ing ? (ing - cos) / ing : null };
 }
