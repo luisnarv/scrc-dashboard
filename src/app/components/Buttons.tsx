@@ -122,6 +122,7 @@ export function ButtonMenuOperativo() {
       { path: '/operativo', label: '⚙️ Operativo' },
       { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
       { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+      { path: '/informes', label: '📑 Informes' },
     ];
 
   return (

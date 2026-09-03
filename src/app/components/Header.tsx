@@ -9,11 +9,13 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
 
-  // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
+  // Los botones de Técnicos, Producción Técnico e Informes se muestran solo en el ecosistema Operativo
   const isOperativoEcosystem =
     pathname === '/operativo' ||
     pathname === '/tecnicos' ||
-    pathname.startsWith('/tecnico');
+    pathname.startsWith('/tecnico') ||
+    pathname === '/informes' ||
+    pathname.startsWith('/informe');
 
   const mainNavItems = [
     { path: '/', label: '📊 Resumen' },
@@ -25,6 +27,7 @@ export default function Header() {
   const operativoSubItems = [
     { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
     { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+    { path: '/informes', label: '📑 Informes' },
   ];
 
   const visibleNavItems = isOperativoEcosystem
