@@ -17,6 +17,8 @@ const baseOpt = {
   plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 10 } } },
 };
 
+
+
 export default function ResumenPage() {
   const { raw, filters, mesList, loading, error } = useDashboard();
   const { colors } = useTheme();
