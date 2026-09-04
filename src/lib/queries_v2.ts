@@ -1,5 +1,6 @@
 import { query } from '../app/lib/db';
 
+
 // Formas de fila que devuelve `pg` en cada consulta. Los agregados (COUNT/SUM)
 // llegan como string, por eso el mapeo los envuelve en Number().
 interface RawRowV2 {
