@@ -225,17 +225,22 @@ export default function InformesPage() {
       });
 
       const rows: ProduccionRow[] = Array.from(agg.values())
-        .map(acc => ({
-          cedula: acc.cedula,
-          tecnico: acc.tecnico,
-          zona: acc.zona,
-          brigada: acc.brigada,
-          ordenes: acc.ordenes,
-          produccion: acc.produccion,
-          meta: acc.meta,
-          faltante: Math.max(0, acc.meta - acc.produccion),
-          cumplimiento: acc.meta > 0 ? (acc.produccion / acc.meta) * 100 : 0,
-        }))
+        .map(acc => {
+          const prodRound = Math.round(acc.produccion);
+          const metaRound = Math.round(acc.meta);
+          const faltRound = Math.max(0, metaRound - prodRound);
+          return {
+            cedula: acc.cedula,
+            tecnico: acc.tecnico,
+            zona: acc.zona,
+            brigada: acc.brigada,
+            ordenes: acc.ordenes,
+            produccion: prodRound,
+            meta: metaRound,
+            faltante: faltRound,
+            cumplimiento: metaRound > 0 ? (prodRound / metaRound) * 100 : 0,
+          };
+        })
         .sort((a, b) => b.produccion - a.produccion);
 
       setProdRows(rows);
@@ -329,9 +334,9 @@ export default function InformesPage() {
       o['Zona'] = r.zona;
       o['Tipo de brigada'] = r.brigada;
       o['Total Órdenes'] = r.ordenes;
-      o['Producción Valorizada ($)'] = r.produccion;
-      o['Meta del Día ($)'] = r.meta;
-      o['Faltante ($)'] = r.faltante;
+      o['Producción Valorizada ($)'] = Math.round(r.produccion);
+      o['Meta del Día ($)'] = Math.round(r.meta);
+      o['Faltante ($)'] = Math.round(r.faltante);
       o['% Cumplimiento'] = `${r.cumplimiento.toFixed(1)}%`;
       return o;
     });
@@ -345,9 +350,9 @@ export default function InformesPage() {
       totalFila['Zona'] = 'TOTAL';
       totalFila['Tipo de brigada'] = '';
       totalFila['Total Órdenes'] = prodTotales.ordenes;
-      totalFila['Producción Valorizada ($)'] = prodTotales.produccion;
-      totalFila['Meta del Día ($)'] = prodTotales.meta;
-      totalFila['Faltante ($)'] = prodTotales.faltante;
+      totalFila['Producción Valorizada ($)'] = Math.round(prodTotales.produccion);
+      totalFila['Meta del Día ($)'] = Math.round(prodTotales.meta);
+      totalFila['Faltante ($)'] = Math.round(prodTotales.faltante);
       const totCumpl = prodTotales.meta > 0 ? (prodTotales.produccion / prodTotales.meta) * 100 : 0;
       totalFila['% Cumplimiento'] = `${totCumpl.toFixed(1)}%`;
       filas.push(totalFila);
@@ -370,9 +375,24 @@ export default function InformesPage() {
       const rowStyle = isLast ? 'background:#e2e8f0;font-weight:bold;' : '';
       return `<tr style="${rowStyle}">` + cols.map(c => {
         const val = r[c];
+        const isMoney = c.includes('($)');
         const isNum = typeof val === 'number';
-        const align = isNum ? 'text-align:right;' : 'text-align:left;';
-        return `<td style="padding:6px 10px;${align}">${esc(val)}</td>`;
+        let msoFormat = '';
+        let align = 'text-align:left;';
+
+        if (isMoney) {
+          msoFormat = 'mso-number-format:"\\$#,##0";';
+          align = 'text-align:right;';
+        } else if (isNum) {
+          msoFormat = 'mso-number-format:"#,##0";';
+          align = 'text-align:right;';
+        } else if (c.includes('%')) {
+          align = 'text-align:right;';
+        } else {
+          msoFormat = 'mso-number-format:"\\@";';
+        }
+
+        return `<td style="padding:6px 10px;${align}${msoFormat}">${esc(val)}</td>`;
       }).join('') + '</tr>';
     }).join('');
 
