@@ -594,4 +594,4 @@ export default function InformesPage() {
       )}
     </div>
   );
-}
+};
