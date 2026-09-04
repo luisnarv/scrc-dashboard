@@ -20,6 +20,7 @@ interface RawRowV2 {
   Perdidas_COP: string;
   Costo_Operativo: string;
   Asignacion: string;
+  valor_fact_base: string;
 }
 
 interface CostoRowV2 {
@@ -174,6 +175,7 @@ export async function getDashboardDataV2(mes?: string) {
       Fallida_Con_Pago: Number(r.Fallida_Con_Pago),
       Fallida_Sin_Pago: Number(r.Fallida_Sin_Pago),
       Ingresos: Number(r.Ingresos),
+      Valor_Orden: Number(r.valor_fact_base),
       Meta_Facturacion: Number(r.Meta_Facturacion),
       Perdidas_COP: Number(r.Perdidas_COP),
       Costo_Operativo: Number(r.Costo_Operativo) || 0,
