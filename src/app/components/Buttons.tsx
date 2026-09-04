@@ -126,9 +126,10 @@ export function ExportButton({ format, onClick, style }: { format: 'excel' | 'cs
   );
 }
 
-    const pathname = usePathname();
-  
-    // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
+export function ButtonMenuOperativo() {
+  const pathname = usePathname();
+
+  // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
     const mainNavItems = [
       { path: '/operativo', label: '⚙️ Operativo' },
       { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
