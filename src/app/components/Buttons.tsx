@@ -114,7 +114,18 @@ export function SegmentedControl({ options, value, onChange, style }: SegmentedC
   );
 }
 
-export function ButtonMenuOperativo() {
+export function ExportButton({ format, onClick, style }: { format: 'excel' | 'csv'; onClick: () => void; style?: React.CSSProperties }) {
+  const label = format === 'excel' ? 'Exportar Excel' : 'Exportar CSV';
+  return (
+    <button
+      onClick={onClick}
+      style={{ ...btnGhostStyle, ...(style || {}) }}
+    >
+      {label}
+    </button>
+  );
+}
+
     const pathname = usePathname();
   
     // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo

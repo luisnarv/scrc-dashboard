@@ -2,11 +2,18 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
+
+import { ButtonMenuOperativo, SegmentedControl, ExportButton } from '../components/Buttons';
+
+import { useTheme } from '../components/ThemeProvider';
+// removed duplicate import
+
 import { useDashboard } from '../components/DashboardProvider';
 import { useTheme } from '../components/ThemeProvider';
 import { ButtonMenuOperativo } from '../components/Buttons';
 import { filtRaw } from '../components/utils/filters';
 import { fmtCOP, fmtN, num as n } from '../components/utils/formatters';
+
 
 /* ─── Tipos auxiliares ─── */
 interface TecnicoProduccion {
@@ -85,6 +92,7 @@ export default function InformesPage() {
     const rawF = filtRaw(raw.raw, filters);
     if (!rawF.length) return null;
 
+
     const agg = new Map<string, {
       nombre: string;
       tipoBrigada: string;
@@ -94,22 +102,45 @@ export default function InformesPage() {
     }>();
 
     rawF.forEach(r => {
-      const cedula = String(r.Cedula || 'SIN_CEDULA');
-      let acc = agg.get(cedula);
+      const key =
+        viewMode === 'tecnico'
+          ? String(r.Cedula || 'SIN_CEDULA')
+          : String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '—');
+
+      let acc = agg.get(key);
       if (!acc) {
         acc = {
-          nombre: String(r.Nombre || 'Desconocido'),
-          tipoBrigada: String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '—'),
+          nombre:
+            viewMode === 'tecnico'
+              ? String(r.Nombre || 'Desconocido')
+              : String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '—'),
+          tipoBrigada:
+            viewMode === 'tecnico'
+              ? String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || '—')
+              : '',
           ordenes: 0,
           produccion: 0,
           meta: 0,
         };
-        agg.set(cedula, acc);
+        agg.set(key, acc);
       }
+
+
+      // Compute orders as sum of efectivas, fallidas (con y sin pago) y perdidas
+      acc.ordenes += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+      // Use Valor_Orden for producción monetaria
+      acc.produccion += n(r.Valor_Orden);
+      // Update meta
+      acc.meta += n(r.Meta_Facturacion);
+
+      // Update nombre only for técnico view
+      if (viewMode === 'tecnico' && r.Nombre && String(r.Nombre).trim()) {
+
       acc.ordenes += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
       acc.produccion += n(r.Ingresos);
       acc.meta += n(r.Meta_Facturacion);
       if (r.Nombre && String(r.Nombre).trim()) {
+
         acc.nombre = String(r.Nombre);
       }
     });
@@ -139,12 +170,107 @@ export default function InformesPage() {
     return { rows: filas, totales };
   }, [raw, filters]);
 
+
+  /* ─── Color semáforo para el faltante ─── */
+  const colorFaltante = (faltante: number, meta: number) => {
+    if (meta <= 0) return MUT;
+    const pct = faltante / meta;
+    if (pct <= 0) return OK;      // Cumplió o superó la meta
+    if (pct < 0.3) return WARN;   // Falta menos del 30%
+    return ERR;                    // Falta 30% o más
+  };
+
+  /* ─── Cumplimiento % ─── */
+  const pctCumplimiento = (produccion: number, meta: number) => {
+    if (meta <= 0) return 0;
+    return Math.min((produccion / meta) * 100, 999);
+  };
+
+  /* ─── Estilos de tabla ─── */
+  const thStyle: React.CSSProperties = {
+    padding: '10px 14px',
+    textAlign: 'left',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: MUT,
+    borderBottom: '2px solid var(--border)',
+    position: 'sticky',
+    top: 0,
+    background: 'var(--panel)',
+    zIndex: 1,
+  };
+
+  const thStyleRight: React.CSSProperties = { ...thStyle, textAlign: 'right' };
+
+  const tdStyle: React.CSSProperties = {
+    padding: '10px 14px',
+    fontSize: 13,
+    color: INK,
+    borderBottom: '1px solid var(--border)',
+  };
+
+  const tdStyleRight: React.CSSProperties = {
+    ...tdStyle,
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+  };
+
+  const secH: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: TEAL,
+    margin: '24px 2px 12px',
+  };
+
+  /* ─── Render ─── */
+  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
+  if (error) return <div className="status err">{error}</div>;
+
+  const [abierto, setAbierto] = useState(false);
+  const [meta, setMeta] = useState<{ zonas: string[]; meses: string[] }>({ zonas: [], meses: [] });
+
+  // Filtros
+  const [zona, setZona] = useState('');       // '' = Todas
+  const [mes, setMes] = useState('');
+  const [fecha, setFecha] = useState('');     // '' = todo el mes
+  const [horaDesde, setHoraDesde] = useState('');
+  const [horaHasta, setHoraHasta] = useState('');
+  const [tipo, setTipo] = useState<'operativas' | 'disponibles' | ''>('');  // '' = ambas
+  const [porTecnico, setPorTecnico] = useState(false);
+
+  // Resultado
+const [viewMode, setViewMode] = useState<'tecnico' | 'operativa'>('tecnico');
+const [prodAbierto, setProdAbierto] = useState(false);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [tienePorTecnico, setTienePorTecnico] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generado, setGenerado] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/informes/digitacion?meta=1')
+      .then(r => r.json())
+      .then(d => {
+        setMeta({ zonas: d.zonas || [], meses: d.meses || [] });
+        if (d.meses?.length) setMes(d.meses[0]);
+      })
+      .catch(() => {});
+  }, []);
+
   // Fila de totales del informe de digitación.
   const totalesDig = useMemo(() => {
     const t: Record<string, number> = {};
     for (const c of COLS) t[c.key] = rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
     return t;
   }, [rows]);
+
 
   /* ─── Generar informe de digitación ─── */
   const generar = async () => {
@@ -193,8 +319,48 @@ export default function InformesPage() {
     URL.revokeObjectURL(url);
   };
 
+
+  // ── Exportación Producción ────────────────────────────────────────────────────────
+  const nombreArchivoProd = () => `informe_produccion_${new Date().toISOString().slice(0,10).replace(/-/g,'')}_${viewMode}`;
+
+  const filasExportProd = () => {
+    if (!informe) return [];
+    return informe.rows.map(r => {
+      const o: Record<string, string | number> = {};
+      if (viewMode === 'tecnico') {
+        o['Técnico'] = r.nombre;
+      } else {
+        o['Operativa'] = r.tipoBrigada;
+      }
+      o['Órdenes'] = r.ordenes;
+      o['Producción'] = r.produccion;
+      o['Meta'] = r.meta;
+      o['Faltante'] = r.faltante;
+      return o;
+    });
+  };
+
+  const exportCSVProd = () => {
+    const csv = Papa.unparse(filasExportProd(), { delimiter: ',' });
+    descargar('﻿' + csv, 'text/csv;charset=utf-8;', 'csv');
+  };
+
+  const exportExcelProd = () => {
+    const data = filasExportProd();
+    const cols = data.length ? Object.keys(data[0]) : [];
+    const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const thead = '<tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+    const tbody = data.map(r => '<tr>' + cols.map(c => `<td>${esc(r[c])}</td>`).join('') + '</tr>').join('');
+    const html = `<html><head><meta charset="utf-8"></head><body><table border="1">${thead}${tbody}</table></body></html>`;
+    descargar(html, 'application/vnd.ms-excel', 'xlsx');
+  };
+
+    // Delimitador ';' (separador de lista de Excel en español) + BOM para los
+    // acentos. Así Excel-ES abre cada campo en su propia columna sin pasos extra.
+
   const exportCSV = () => {
     // Delimitador ';' (separador de lista de Excel en español) + BOM para acentos.
+
     const csv = Papa.unparse(filasExport(), { delimiter: ';' });
     descargar('﻿' + csv, 'text/csv;charset=utf-8;', 'csv');
   };
@@ -262,6 +428,177 @@ export default function InformesPage() {
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: TEAL }} />
         Informe de Producción
       </div>
+
+      {/* Toggle to show/hide the report */}
+      <button
+        onClick={() => setProdAbierto(v => !v)}
+        style={{
+          marginBottom: 12,
+          padding: '6px 12px',
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          cursor: 'pointer',
+        }}
+      >
+        {prodAbierto ? '▲ Ocultar' : '▼ Mostrar'}
+      </button>
+      {prodAbierto && (
+        <>
+          {/* View mode selector */}
+          <div style={{ marginBottom: 12 }}>
+            <SegmentedControl
+              options={[{ label: 'Por Técnico', value: 'tecnico' }, { label: 'Por Operativa', value: 'operativa' }]}
+              value={viewMode}
+              onChange={v => setViewMode(v as 'tecnico' | 'operativa')}
+            />
+          </div>
+          {/* Export buttons */}
+          <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+            <ExportButton format="excel" onClick={exportExcelProd} />
+            <ExportButton format="csv" onClick={exportCSVProd} />
+          </div>
+          {/* Existing report rendering */}
+          {!informe || !informe.rows.length ? (
+            <div style={{
+              ...card,
+              textAlign: 'center',
+              padding: '40px 20px',
+              color: MUT,
+            }}>
+              <span style={{ fontSize: 32 }}>📊</span>
+              <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginTop: 8 }}>
+                Sin datos para el periodo seleccionado
+              </div>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                Ajusta los filtros de fecha para ver el informe de producción.
+              </div>
+            </div>
+          ) : (
+            <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+              {/* Resumen superior */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                gap: 0,
+                borderBottom: '2px solid var(--border)',
+              }}>
+                {[{
+                  label: viewMode === 'tecnico' ? 'Técnicos' : 'Operativas',
+                  value: fmtN(informe.rows.length),
+                  color: TEAL,
+                },
+                { label: 'Total Órdenes', value: fmtN(informe.totales.ordenes), color: INK },
+                { label: 'Producción Total', value: fmtCOP(informe.totales.produccion), color: OK },
+                { label: 'Meta Total', value: fmtCOP(informe.totales.meta), color: INK },
+                { label: 'Faltante Total', value: fmtCOP(informe.totales.faltante), color: colorFaltante(informe.totales.faltante, informe.totales.meta) }]
+                  .map((item, i) => (
+                    <div key={i} style={{
+                      padding: '16px 20px',
+                      borderRight: i < 4 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.7, textTransform: 'uppercase', color: MUT }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: item.color, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              {/* Tabla */}
+              <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, width: 40 }}>#</th>
+                      {viewMode === 'tecnico' ? (
+                        <>
+                          <th style={thStyle}>Técnico</th>
+                          <th style={thStyle}>Tipo Operativa</th>
+                        </>
+                      ) : (
+                        <th style={thStyle}>Operativa</th>
+                      )}
+                      <th style={thStyleRight}># Órdenes</th>
+                      <th style={thStyleRight}>Producción ($)</th>
+                      <th style={thStyleRight}>Meta del Día</th>
+                      <th style={thStyleRight}>Faltante</th>
+                      <th style={{ ...thStyleRight, width: 80 }}>Cumpl.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {informe.rows.map((row, idx) => {
+                      const cumpl = pctCumplimiento(row.produccion, row.meta);
+                      const fColor = colorFaltante(row.faltante, row.meta);
+                      const cumplColor = cumpl >= 100 ? OK : cumpl >= 70 ? WARN : ERR;
+                      return (
+                        <tr
+                          key={idx}
+                          style={{ transition: 'background .15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <td style={{ ...tdStyle, color: MUT, fontSize: 11, fontWeight: 600 }}>{idx + 1}</td>
+                          {viewMode === 'tecnico' ? (
+                            <>
+                              <td style={tdStyle}>{(row as TecnicoProduccion).nombre}</td>
+                              <td style={tdStyle}>{(row as TecnicoProduccion).tipoBrigada}</td>
+                            </>
+                          ) : (
+                            <td style={tdStyle}>{(row as any).operativa}</td>
+                          )}
+                          <td style={tdStyleRight}><span style={{ fontWeight: 600 }}>{fmtN(row.ordenes)}</span></td>
+                          <td style={{ ...tdStyleRight, fontWeight: 700, color: OK }}>{fmtCOP(row.produccion)}</td>
+                          <td style={{ ...tdStyleRight, fontWeight: 600 }}>{fmtCOP(row.meta)}</td>
+                          <td style={{ ...tdStyleRight, fontWeight: 700, color: fColor }}>{row.faltante > 0 ? fmtCOP(row.faltante) : '✓ $0'}</td>
+                          <td style={tdStyleRight}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: cumplColor,
+                              background: cumplColor + '18',
+                            }}>
+                              {cumpl.toFixed(0)}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {/* Totales */}
+                  <tfoot>
+                    <tr style={{ background: 'var(--hover-bg)' }}>
+                      <td style={{ ...tdStyle, fontWeight: 800, fontSize: 12 }} colSpan={viewMode === 'tecnico' ? 3 : 2}>
+                        TOTALES ({informe.rows.length} {viewMode === 'tecnico' ? 'técnicos' : 'operativas'})
+                      </td>
+                      <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtN(informe.totales.ordenes)}</td>
+                      <td style={{ ...tdStyleRight, fontWeight: 800, color: OK }}>{fmtCOP(informe.totales.produccion)}</td>
+                      <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtCOP(informe.totales.meta)}</td>
+                      <td style={{ ...tdStyleRight, fontWeight: 800, color: colorFaltante(informe.totales.faltante, informe.totales.meta) }}>{informe.totales.faltante > 0 ? fmtCOP(informe.totales.faltante) : '✓ $0'}</td>
+                      <td style={tdStyleRight}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 100 ? OK : pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 70 ? WARN : ERR,
+                          background: (pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 100 ? OK : pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 70 ? WARN : ERR) + '18',
+                        }}>{pctCumplimiento(informe.totales.produccion, informe.totales.meta).toFixed(0)}%</span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
 
       {!informe || !informe.rows.length ? (
         <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: MUT }}>
@@ -363,6 +700,7 @@ export default function InformesPage() {
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: TEAL }} />
         Informe digitación
       </div>
+
 
       <button
         onClick={() => setAbierto(v => !v)}
