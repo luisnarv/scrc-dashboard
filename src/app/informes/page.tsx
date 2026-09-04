@@ -4,29 +4,23 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import { useDashboard } from '../components/DashboardProvider';
 import { fmtCOP, fmtN, num as n } from '../components/utils/formatters';
-import { ButtonMenuOperativo, ExportButton } from '../components/Buttons';
+import { ButtonMenuOperativo } from '../components/Buttons';
 import { useTheme } from '../components/ThemeProvider';
 
 /* ─── Tipos auxiliares ─── */
-interface TecnicoProduccion {
-  cedula: string;
-  nombre: string;
-  tipoBrigada: string;
+interface ProduccionRow {
+  cedula?: string;
+  tecnico?: string;
+  zona: string;
+  brigada: string;
   ordenes: number;
   produccion: number;
   meta: number;
   faltante: number;
+  cumplimiento: number;
 }
 
 type Row = Record<string, string | number>;
-
-/* ─── Estilos base ─── */
-const card: React.CSSProperties = {
-  background: 'var(--panel)',
-  borderRadius: 14,
-  padding: '18px 20px',
-  boxShadow: '0 1px 3px rgba(20,30,60,.05)',
-};
 
 // Columnas del informe de digitación (orden y etiqueta visible).
 const COLS: { key: string; label: string }[] = [
@@ -76,21 +70,13 @@ export default function InformesPage() {
   const [prodMes, setProdMes] = useState('');
   const [prodFecha, setProdFecha] = useState('');
   const [prodTipo, setProdTipo] = useState<'operativas' | 'disponibles' | ''>('');
-  const [prodViewMode, setProdViewMode] = useState<'tecnico' | 'operativa'>('tecnico');
-  const [prodGenerado, setProdGenerado] = useState(false);
+  const [prodPorTecnico, setProdPorTecnico] = useState(false);
+
+  const [prodRows, setProdRows] = useState<ProduccionRow[]>([]);
+  const [prodTienePorTecnico, setProdTienePorTecnico] = useState(false);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
-  const [prodData, setProdData] = useState<{
-    rows: TecnicoProduccion[];
-    totales: { ordenes: number; produccion: number; meta: number; faltante: number };
-    filtrosAplicados: {
-      zona: string;
-      mes: string;
-      fecha: string;
-      tipo: string;
-      viewMode: 'tecnico' | 'operativa';
-    };
-  } | null>(null);
+  const [prodGenerado, setProdGenerado] = useState(false);
 
   // ══════════════════════════════════════════════════════════════════
   // INFORME DE DIGITACIÓN (Estado independiente)
@@ -103,6 +89,7 @@ export default function InformesPage() {
   const [digHoraHasta, setDigHoraHasta] = useState('');
   const [digTipo, setDigTipo] = useState<'operativas' | 'disponibles' | ''>('');
   const [digPorTecnico, setDigPorTecnico] = useState(false);
+
   const [digRows, setDigRows] = useState<Row[]>([]);
   const [digTienePorTecnico, setDigTienePorTecnico] = useState(false);
   const [digLoading, setDigLoading] = useState(false);
@@ -125,7 +112,7 @@ export default function InformesPage() {
       .catch(() => {});
   }, []);
 
-  // Meses y Zonas disponibles (usando meta o extrayendo de raw)
+  // Meses y Zonas disponibles
   const availableMeses = useMemo(() => {
     if (meta.meses.length) return meta.meses;
     if (!raw?.raw) return [];
@@ -156,20 +143,11 @@ export default function InformesPage() {
     setProdLoading(true);
     setProdError(null);
     setProdGenerado(true);
+    setProdTienePorTecnico(prodPorTecnico);
 
     try {
       if (!raw?.raw || !raw.raw.length) {
-        setProdData({
-          rows: [],
-          totales: { ordenes: 0, produccion: 0, meta: 0, faltante: 0 },
-          filtrosAplicados: {
-            zona: prodZona,
-            mes: prodMes,
-            fecha: prodFecha,
-            tipo: prodTipo,
-            viewMode: prodViewMode,
-          },
-        });
+        setProdRows([]);
         return;
       }
 
@@ -199,32 +177,34 @@ export default function InformesPage() {
         return true;
       });
 
-      // Agrupar datos según prodViewMode
+      // Agrupar datos según prodPorTecnico
       const agg = new Map<string, {
-        nombre: string;
-        tipoBrigada: string;
+        cedula?: string;
+        tecnico?: string;
+        zona: string;
+        brigada: string;
         ordenes: number;
         produccion: number;
         meta: number;
       }>();
 
       filtered.forEach(r => {
-        const key =
-          prodViewMode === 'tecnico'
-            ? String(r.Cedula || r.Nombre || 'SIN_CEDULA')
-            : String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'SIN CLASIFICAR');
+        const zonaVal = String(r._Zona || r.Zona || r.Zona_Detalle || 'SIN ZONA');
+        const brigadaVal = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'SIN CLASIFICAR');
+        const cedulaVal = String(r.Cedula || '');
+        const tecnicoVal = String(r.Nombre || r.tecnico || (cedulaVal ? `C.C. ${cedulaVal}` : 'Desconocido'));
+
+        const key = prodPorTecnico
+          ? `${cedulaVal || tecnicoVal}|${zonaVal}|${brigadaVal}`
+          : `${zonaVal}|${brigadaVal}`;
 
         let acc = agg.get(key);
         if (!acc) {
           acc = {
-            nombre:
-              prodViewMode === 'tecnico'
-                ? String(r.Nombre || r.tecnico || 'Desconocido')
-                : key,
-            tipoBrigada:
-              prodViewMode === 'tecnico'
-                ? String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || '—')
-                : key,
+            cedula: cedulaVal,
+            tecnico: tecnicoVal,
+            zona: zonaVal,
+            brigada: brigadaVal,
             ordenes: 0,
             produccion: 0,
             meta: 0,
@@ -234,55 +214,51 @@ export default function InformesPage() {
 
         // Sumar órdenes (efectivas + fallidas con pago + fallidas sin pago + perdidas)
         acc.ordenes += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
-        // Sumar producción valorizada
+        // Sumar producción monetaria
         acc.produccion += n(r.Valor_Orden);
         // Sumar meta
         acc.meta += n(r.Meta_Facturacion);
 
-        if (prodViewMode === 'tecnico' && r.Nombre && String(r.Nombre).trim()) {
-          acc.nombre = String(r.Nombre);
+        if (prodPorTecnico && r.Nombre && String(r.Nombre).trim()) {
+          acc.tecnico = String(r.Nombre);
         }
       });
 
-      const rows: TecnicoProduccion[] = Array.from(agg.entries())
-        .map(([key, acc]) => ({
-          cedula: prodViewMode === 'tecnico' ? key : '',
-          nombre: acc.nombre,
-          tipoBrigada: acc.tipoBrigada,
+      const rows: ProduccionRow[] = Array.from(agg.values())
+        .map(acc => ({
+          cedula: acc.cedula,
+          tecnico: acc.tecnico,
+          zona: acc.zona,
+          brigada: acc.brigada,
           ordenes: acc.ordenes,
           produccion: acc.produccion,
           meta: acc.meta,
           faltante: Math.max(0, acc.meta - acc.produccion),
+          cumplimiento: acc.meta > 0 ? (acc.produccion / acc.meta) * 100 : 0,
         }))
         .sort((a, b) => b.produccion - a.produccion);
 
-      const totales = rows.reduce(
-        (t, r) => ({
-          ordenes: t.ordenes + r.ordenes,
-          produccion: t.produccion + r.produccion,
-          meta: t.meta + r.meta,
-          faltante: t.faltante + r.faltante,
-        }),
-        { ordenes: 0, produccion: 0, meta: 0, faltante: 0 }
-      );
-
-      setProdData({
-        rows,
-        totales,
-        filtrosAplicados: {
-          zona: prodZona,
-          mes: prodMes,
-          fecha: prodFecha,
-          tipo: prodTipo,
-          viewMode: prodViewMode,
-        },
-      });
+      setProdRows(rows);
     } catch (e) {
       setProdError(String(e instanceof Error ? e.message : e));
+      setProdRows([]);
     } finally {
       setProdLoading(false);
     }
   };
+
+  // Totales de Producción
+  const prodTotales = useMemo(() => {
+    return prodRows.reduce(
+      (t, r) => ({
+        ordenes: t.ordenes + r.ordenes,
+        produccion: t.produccion + r.produccion,
+        meta: t.meta + r.meta,
+        faltante: t.faltante + r.faltante,
+      }),
+      { ordenes: 0, produccion: 0, meta: 0, faltante: 0 }
+    );
+  }, [prodRows]);
 
   // ── Lógica Informe de Digitación ──────────────────────────────────
   const generarDig = async () => {
@@ -340,81 +316,97 @@ export default function InformesPage() {
   };
 
   // ── Exportación Producción ────────────────────────────────────────
-  const nombreArchivoProd = () => {
-    const f = prodData?.filtrosAplicados;
-    const mesStr = f?.mes || prodMes;
-    const fechaStr = f?.fecha ? `_${f.fecha}` : '';
-    const zonaStr = f?.zona ? `_${f.zona}` : '';
-    const modeStr = f?.viewMode || prodViewMode;
-    return `informe_produccion_${mesStr}${fechaStr}${zonaStr}_${modeStr}`;
-  };
+  const nombreArchivoProd = () =>
+    `informe_produccion_${prodMes}${prodFecha ? '_' + prodFecha : ''}${prodZona ? '_' + prodZona : ''}${prodTipo ? '_' + prodTipo : ''}${prodTienePorTecnico ? '_tecnico' : ''}`;
 
   const filasExportProd = () => {
-    if (!prodData?.rows?.length) return [];
-    const isTecnico = (prodData.filtrosAplicados?.viewMode || prodViewMode) === 'tecnico';
-    const dataFilas = prodData.rows.map(r => {
+    const filas = prodRows.map(r => {
       const o: Record<string, string | number> = {};
-      if (isTecnico) {
-        o['Cédula'] = r.cedula;
-        o['Técnico'] = r.nombre;
-        o['Tipo Operativa'] = r.tipoBrigada;
-      } else {
-        o['Operativa'] = r.tipoBrigada;
+      if (prodTienePorTecnico) {
+        o['Técnico'] = r.tecnico || '';
+        o['Cédula'] = r.cedula || '';
       }
-      o['Órdenes'] = r.ordenes;
-      o['Producción ($)'] = r.produccion;
+      o['Zona'] = r.zona;
+      o['Tipo de brigada'] = r.brigada;
+      o['Total Órdenes'] = r.ordenes;
+      o['Producción Valorizada ($)'] = r.produccion;
       o['Meta del Día ($)'] = r.meta;
       o['Faltante ($)'] = r.faltante;
-      const pct = r.meta > 0 ? ((r.produccion / r.meta) * 100).toFixed(1) + '%' : '0%';
-      o['Cumplimiento'] = pct;
+      o['% Cumplimiento'] = `${r.cumplimiento.toFixed(1)}%`;
       return o;
     });
 
-    // Fila de totales incluida en la exportación
-    const filaTotales: Record<string, string | number> = {};
-    if (isTecnico) {
-      filaTotales['Cédula'] = 'TOTAL';
-      filaTotales['Técnico'] = `TOTAL (${prodData.rows.length} técnicos)`;
-      filaTotales['Tipo Operativa'] = '';
-    } else {
-      filaTotales['Operativa'] = `TOTAL (${prodData.rows.length} operativas)`;
+    if (prodRows.length > 0) {
+      const totalFila: Record<string, string | number> = {};
+      if (prodTienePorTecnico) {
+        totalFila['Técnico'] = `TOTAL (${prodRows.length} registros)`;
+        totalFila['Cédula'] = '';
+      }
+      totalFila['Zona'] = 'TOTAL';
+      totalFila['Tipo de brigada'] = '';
+      totalFila['Total Órdenes'] = prodTotales.ordenes;
+      totalFila['Producción Valorizada ($)'] = prodTotales.produccion;
+      totalFila['Meta del Día ($)'] = prodTotales.meta;
+      totalFila['Faltante ($)'] = prodTotales.faltante;
+      const totCumpl = prodTotales.meta > 0 ? (prodTotales.produccion / prodTotales.meta) * 100 : 0;
+      totalFila['% Cumplimiento'] = `${totCumpl.toFixed(1)}%`;
+      filas.push(totalFila);
     }
-    filaTotales['Órdenes'] = prodData.totales.ordenes;
-    filaTotales['Producción ($)'] = prodData.totales.produccion;
-    filaTotales['Meta del Día ($)'] = prodData.totales.meta;
-    filaTotales['Faltante ($)'] = prodData.totales.faltante;
-    const totPct = prodData.totales.meta > 0 ? ((prodData.totales.produccion / prodData.totales.meta) * 100).toFixed(1) + '%' : '0%';
-    filaTotales['Cumplimiento'] = totPct;
-
-    dataFilas.push(filaTotales);
-    return dataFilas;
+    return filas;
   };
 
   const exportCSVProd = () => {
     const csv = Papa.unparse(filasExportProd(), { delimiter: ',' });
-    descargar('﻿' + csv, 'text/csv;charset=utf-8;', 'csv', nombreArchivoProd());
+    descargar('\uFEFF' + csv, 'text/csv;charset=utf-8;', 'csv', nombreArchivoProd());
   };
 
   const exportExcelProd = () => {
     const data = filasExportProd();
     const cols = data.length ? Object.keys(data[0]) : [];
     const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const thead = '<tr>' + cols.map(c => `<th style="background:#0284c7;color:#fff;font-weight:bold;padding:6px 10px;">${esc(c)}</th>`).join('') + '</tr>';
+    const thead = '<tr>' + cols.map(c => `<th style="background:#0284c7;color:#ffffff;font-weight:bold;padding:7px 10px;text-align:center;">${esc(c)}</th>`).join('') + '</tr>';
     const tbody = data.map((r, idx) => {
       const isLast = idx === data.length - 1;
-      const bg = isLast ? 'background:#e2e8f0;font-weight:bold;' : '';
-      return `<tr style="${bg}">` + cols.map(c => `<td style="padding:5px 8px;">${esc(r[c])}</td>`).join('') + '</tr>';
+      const rowStyle = isLast ? 'background:#e2e8f0;font-weight:bold;' : '';
+      return `<tr style="${rowStyle}">` + cols.map(c => {
+        const val = r[c];
+        const isNum = typeof val === 'number';
+        const align = isNum ? 'text-align:right;' : 'text-align:left;';
+        return `<td style="padding:6px 10px;${align}">${esc(val)}</td>`;
+      }).join('') + '</tr>';
     }).join('');
-    const html = `<html><head><meta charset="utf-8"></head><body><table border="1">${thead}${tbody}</table></body></html>`;
-    descargar(html, 'application/vnd.ms-excel', 'xlsx', nombreArchivoProd());
+
+    // Formato HTML compatible con Microsoft Excel (.xls)
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Informe Producción</x:Name>
+                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+      </head>
+      <body>
+        <table border="1">${thead}${tbody}</table>
+      </body>
+    </html>`;
+
+    descargar(html, 'application/vnd.ms-excel;charset=utf-8', 'xls', nombreArchivoProd());
   };
 
   // ── Exportación Digitación ────────────────────────────────────────
   const nombreArchivoDig = () =>
-    `informe_digitacion_${digMes}${digFecha ? '_' + digFecha : ''}${digTipo ? '_' + digTipo : ''}${digPorTecnico ? '_tecnico' : ''}`;
+    `informe_digitacion_${digMes}${digFecha ? '_' + digFecha : ''}${digZona ? '_' + digZona : ''}${digTipo ? '_' + digTipo : ''}${digTienePorTecnico ? '_tecnico' : ''}`;
 
-  const filasExportDig = () =>
-    digRows.map(r => {
+  const filasExportDig = () => {
+    const filas = digRows.map(r => {
       const o: Record<string, string | number> = { Fecha: String(r.fecha).slice(0, 10) };
       if (digTienePorTecnico) o['Técnico'] = String(r.tecnico ?? r.id_tecnico ?? '');
       o['Zona'] = String(r.zona ?? '');
@@ -423,67 +415,72 @@ export default function InformesPage() {
       return o;
     });
 
+    if (digRows.length > 0) {
+      const totalFila: Record<string, string | number> = { Fecha: 'TOTAL' };
+      if (digTienePorTecnico) totalFila['Técnico'] = '';
+      totalFila['Zona'] = '';
+      totalFila['Tipo de brigada'] = '';
+      for (const c of COLS) totalFila[c.label] = digTotales[c.key];
+      filas.push(totalFila);
+    }
+    return filas;
+  };
+
   const exportCSVDig = () => {
     const csv = Papa.unparse(filasExportDig(), { delimiter: ';' });
-    descargar('﻿' + csv, 'text/csv;charset=utf-8;', 'csv', nombreArchivoDig());
+    descargar('\uFEFF' + csv, 'text/csv;charset=utf-8;', 'csv', nombreArchivoDig());
   };
 
   const exportExcelDig = () => {
     const data = filasExportDig();
     const cols = data.length ? Object.keys(data[0]) : ['Fecha', ...COLS.map(c => c.label)];
     const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const thead = '<tr>' + cols.map(c => `<th style="background:#0284c7;color:#fff;font-weight:bold;padding:6px 10px;">${esc(c)}</th>`).join('') + '</tr>';
-    const tbody = data.map(r => '<tr>' + cols.map(c => `<td>${esc(r[c])}</td>`).join('') + '</tr>').join('');
-    const html = `<html><head><meta charset="utf-8"></head><body><table border="1">${thead}${tbody}</table></body></html>`;
-    descargar(html, 'application/vnd.ms-excel', 'xlsx', nombreArchivoDig());
+    const thead = '<tr>' + cols.map(c => `<th style="background:#0284c7;color:#ffffff;font-weight:bold;padding:7px 10px;text-align:center;">${esc(c)}</th>`).join('') + '</tr>';
+    const tbody = data.map((r, idx) => {
+      const isLast = idx === data.length - 1;
+      const rowStyle = isLast ? 'background:#e2e8f0;font-weight:bold;' : '';
+      return `<tr style="${rowStyle}">` + cols.map(c => {
+        const val = r[c];
+        const isNum = typeof val === 'number';
+        const align = isNum ? 'text-align:right;' : 'text-align:left;';
+        return `<td style="padding:6px 10px;${align}">${esc(val)}</td>`;
+      }).join('') + '</tr>';
+    }).join('');
+
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Informe Digitación</x:Name>
+                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+      </head>
+      <body>
+        <table border="1">${thead}${tbody}</table>
+      </body>
+    </html>`;
+
+    descargar(html, 'application/vnd.ms-excel;charset=utf-8', 'xls', nombreArchivoDig());
   };
 
   /* ─── Color semáforo para el faltante ─── */
   const colorFaltante = (faltante: number, metaVal: number) => {
     if (metaVal <= 0) return MUT;
     const pct = faltante / metaVal;
-    if (pct <= 0) return OK;      // Cumplió o superó la meta
-    if (pct < 0.3) return WARN;   // Falta menos del 30%
-    return ERR;                    // Falta 30% o más
+    if (pct <= 0) return OK;
+    if (pct < 0.3) return WARN;
+    return ERR;
   };
 
-  /* ─── Cumplimiento % ─── */
-  const pctCumplimiento = (produccion: number, metaVal: number) => {
-    if (metaVal <= 0) return 0;
-    return Math.min((produccion / metaVal) * 100, 999);
-  };
-
-  /* ─── Estilos de tabla ─── */
-  const thStyle: React.CSSProperties = {
-    padding: '10px 14px',
-    textAlign: 'left',
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: MUT,
-    borderBottom: '2px solid var(--border)',
-    position: 'sticky',
-    top: 0,
-    background: 'var(--panel)',
-    zIndex: 1,
-  };
-
-  const thStyleRight: React.CSSProperties = { ...thStyle, textAlign: 'right' };
-
-  const tdStyle: React.CSSProperties = {
-    padding: '10px 14px',
-    fontSize: 13,
-    color: INK,
-    borderBottom: '1px solid var(--border)',
-  };
-
-  const tdStyleRight: React.CSSProperties = {
-    ...tdStyle,
-    textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums',
-  };
-
+  /* ─── Estilos de controles y tablas ─── */
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUT, marginBottom: 4, display: 'block', letterSpacing: 0.3 };
   const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-body)', fontSize: 13 };
   const btn = (bg: string): React.CSSProperties => ({ padding: '8px 16px', borderRadius: 8, border: 'none', background: bg, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
@@ -497,6 +494,8 @@ export default function InformesPage() {
     return <div className="status err">{dashError}</div>;
   }
 
+  const totProdCumpl = prodTotales.meta > 0 ? (prodTotales.produccion / prodTotales.meta) * 100 : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <ButtonMenuOperativo />
@@ -507,7 +506,7 @@ export default function InformesPage() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* ═══ INFORME DE PRODUCCIÓN ═══ */}
+      {/* ═══ 1. INFORME DE PRODUCCIÓN ═══ */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <button
         onClick={() => setProdAbierto(v => !v)}
@@ -519,7 +518,7 @@ export default function InformesPage() {
         <span style={{ fontSize: 26 }}>💰</span>
         <span style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: INK }}>Informe de producción</span>
-          <span style={{ fontSize: 12, color: MUT }}>Producción valorizada, meta del día y faltante por técnico u operativa</span>
+          <span style={{ fontSize: 12, color: MUT }}>Producción valorizada, meta del día y faltante por tipo de brigada o técnico</span>
         </span>
         <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>{prodAbierto ? '▲' : '▼'}</span>
       </button>
@@ -561,20 +560,18 @@ export default function InformesPage() {
                 <option value="disponibles">Disponibles</option>
               </select>
             </div>
-            <div>
-              <label style={lbl}>AGRUPACIÓN</label>
-              <select style={inp} value={prodViewMode} onChange={e => setProdViewMode(e.target.value as 'tecnico' | 'operativa')}>
-                <option value="tecnico">Por Técnico</option>
-                <option value="operativa">Por Tipo de Operativa</option>
-              </select>
-            </div>
           </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-body)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={prodPorTecnico} onChange={e => setProdPorTecnico(e.target.checked)} />
+            Discriminar por técnico
+          </label>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button style={btn(colors.sip)} onClick={generarProd} disabled={prodLoading}>
               {prodLoading ? 'Generando…' : 'Generar informe'}
             </button>
-            {prodData && prodData.rows.length > 0 && (
+            {prodRows.length > 0 && (
               <>
                 <button style={btn(colors.ok)} onClick={exportExcelProd}>⬇ Excel</button>
                 <button style={btn(colors.otc)} onClick={exportCSVProd}>⬇ CSV</button>
@@ -591,179 +588,111 @@ export default function InformesPage() {
         </div>
       )}
 
-      {/* Resultados del Informe de Producción */}
+      {/* Tabla y Resultados de Producción */}
       {prodAbierto && prodGenerado && !prodError && (
-        <>
-          {!prodData || prodData.rows.length === 0 ? (
-            <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: MUT }}>
-              <span style={{ fontSize: 32 }}>📊</span>
-              <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginTop: 8 }}>
-                Sin datos para los filtros seleccionados
-              </div>
-              <div style={{ fontSize: 12.5, marginTop: 4 }}>
-                Ajusta los filtros para ver el informe de producción.
-              </div>
-            </div>
-          ) : (
-            <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-              {/* Encabezado / Resumen superior */}
-              <div style={{
-                padding: '14px 20px',
-                borderBottom: '1px solid var(--border)',
-                fontSize: 13.5,
-                fontWeight: 700,
-                color: INK,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 10,
-              }}>
-                <div>
-                  Producción {prodData.filtrosAplicados.mes}
-                  {prodData.filtrosAplicados.fecha ? ` · ${prodData.filtrosAplicados.fecha}` : ''}
-                  {prodData.filtrosAplicados.zona ? ` · ${prodData.filtrosAplicados.zona}` : ''}
-                  {prodData.filtrosAplicados.tipo ? ` · ${prodData.filtrosAplicados.tipo}` : ''}
-                  <span style={{ fontWeight: 500, color: MUT }}>
-                    {' — '}{prodData.rows.length} {prodData.filtrosAplicados.viewMode === 'tecnico' ? 'técnicos' : 'operativas'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <ExportButton format="excel" onClick={exportExcelProd} />
-                  <ExportButton format="csv" onClick={exportCSVProd} />
-                </div>
-              </div>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
+            Producción {prodMes}{prodFecha ? ` · ${prodFecha}` : ''}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
+            <span style={{ fontWeight: 500, color: MUT }}> — {prodRows.length} {prodTienePorTecnico ? 'técnicos' : 'operativas'}</span>
+          </div>
 
-              {/* Resumen KPIs superior */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: 0,
-                borderBottom: '2px solid var(--border)',
-              }}>
-                {[{
-                  label: prodData.filtrosAplicados.viewMode === 'tecnico' ? 'Técnicos' : 'Operativas',
-                  value: fmtN(prodData.rows.length),
-                  color: TEAL,
-                },
-                { label: 'Total Órdenes', value: fmtN(prodData.totales.ordenes), color: INK },
-                { label: 'Producción Total', value: fmtCOP(prodData.totales.produccion), color: OK },
-                { label: 'Meta Total', value: fmtCOP(prodData.totales.meta), color: INK },
-                { label: 'Faltante Total', value: fmtCOP(prodData.totales.faltante), color: colorFaltante(prodData.totales.faltante, prodData.totales.meta) }]
-                  .map((item, i) => (
-                    <div key={i} style={{
-                      padding: '16px 20px',
-                      borderRight: i < 4 ? '1px solid var(--border)' : 'none',
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.7, textTransform: 'uppercase', color: MUT }}>
-                        {item.label}
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: item.color, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-                        {item.value}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Tabla */}
-              <div style={{ maxHeight: 520, overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...thStyle, width: 40 }}>#</th>
-                      {prodData.filtrosAplicados.viewMode === 'tecnico' ? (
-                        <>
-                          <th style={thStyle}>Técnico</th>
-                          <th style={thStyle}>Tipo Operativa</th>
-                        </>
-                      ) : (
-                        <th style={thStyle}>Operativa</th>
-                      )}
-                      <th style={thStyleRight}># Órdenes</th>
-                      <th style={thStyleRight}>Producción ($)</th>
-                      <th style={thStyleRight}>Meta del Día</th>
-                      <th style={thStyleRight}>Faltante</th>
-                      <th style={{ ...thStyleRight, width: 80 }}>Cumpl.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prodData.rows.map((row, idx) => {
-                      const cumpl = pctCumplimiento(row.produccion, row.meta);
-                      const fColor = colorFaltante(row.faltante, row.meta);
-                      const cumplColor = cumpl >= 100 ? OK : cumpl >= 70 ? WARN : ERR;
-                      return (
-                        <tr
-                          key={idx}
-                          style={{ transition: 'background .15s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <td style={{ ...tdStyle, color: MUT, fontSize: 11, fontWeight: 600 }}>{idx + 1}</td>
-                          {prodData.filtrosAplicados.viewMode === 'tecnico' ? (
-                            <>
-                              <td style={tdStyle}>{row.nombre}</td>
-                              <td style={tdStyle}>{row.tipoBrigada}</td>
-                            </>
-                          ) : (
-                            <td style={tdStyle}>{row.tipoBrigada}</td>
-                          )}
-                          <td style={tdStyleRight}><span style={{ fontWeight: 600 }}>{fmtN(row.ordenes)}</span></td>
-                          <td style={{ ...tdStyleRight, fontWeight: 700, color: OK }}>{fmtCOP(row.produccion)}</td>
-                          <td style={{ ...tdStyleRight, fontWeight: 600 }}>{fmtCOP(row.meta)}</td>
-                          <td style={{ ...tdStyleRight, fontWeight: 700, color: fColor }}>{row.faltante > 0 ? fmtCOP(row.faltante) : '✓ $0'}</td>
-                          <td style={tdStyleRight}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: cumplColor,
-                              background: cumplColor + '18',
-                            }}>
-                              {cumpl.toFixed(0)}%
-                            </span>
+          <div style={{ overflowX: 'auto' }}>
+            {prodRows.length === 0 && !prodLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: MUT, fontSize: 13 }}>Sin datos para los filtros seleccionados.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: prodTienePorTecnico ? 1080 : 920 }}>
+                <thead>
+                  <tr style={{ background: 'rgba(128,128,128,0.16)' }}>
+                    <th style={{ ...th, textAlign: 'left', width: 40 }}>#</th>
+                    {prodTienePorTecnico && <th style={{ ...th, textAlign: 'left' }}>Técnico</th>}
+                    <th style={{ ...th, textAlign: 'left' }}>Zona</th>
+                    <th style={{ ...th, textAlign: 'left' }}>Tipo de brigada</th>
+                    <th style={th}>Total Órdenes</th>
+                    <th style={th}>Producción ($)</th>
+                    <th style={th}>Meta del Día ($)</th>
+                    <th style={th}>Faltante ($)</th>
+                    <th style={{ ...th, width: 90 }}>Cumplimiento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prodRows.map((r, i) => {
+                    const fColor = colorFaltante(r.faltante, r.meta);
+                    const cColor = r.cumplimiento >= 100 ? OK : r.cumplimiento >= 70 ? WARN : ERR;
+                    return (
+                      <tr
+                        key={i}
+                        style={{ transition: 'background .15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ ...td, textAlign: 'left', color: MUT, fontSize: 11, fontWeight: 600 }}>{i + 1}</td>
+                        {prodTienePorTecnico && (
+                          <td style={{ ...td, textAlign: 'left', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: INK }} title={r.tecnico}>
+                            {r.tecnico}
                           </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  {/* Totales */}
+                        )}
+                        <td style={{ ...td, textAlign: 'left', color: 'var(--text-body)' }}>{r.zona}</td>
+                        <td style={{ ...td, textAlign: 'left', color: 'var(--text-body)' }}>{r.brigada}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{fmtN(r.ordenes)}</td>
+                        <td style={{ ...td, fontWeight: 700, color: OK }}>{fmtCOP(r.produccion)}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{fmtCOP(r.meta)}</td>
+                        <td style={{ ...td, fontWeight: 700, color: fColor }}>
+                          {r.faltante > 0 ? fmtCOP(r.faltante) : '✓ $0'}
+                        </td>
+                        <td style={td}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: cColor,
+                            background: cColor + '18',
+                          }}>
+                            {r.cumplimiento.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {prodRows.length > 0 && (
                   <tfoot>
-                    <tr style={{ background: 'var(--hover-bg)' }}>
-                      <td style={{ ...tdStyle, fontWeight: 800, fontSize: 12 }} colSpan={prodData.filtrosAplicados.viewMode === 'tecnico' ? 3 : 2}>
-                        TOTALES ({prodData.rows.length} {prodData.filtrosAplicados.viewMode === 'tecnico' ? 'técnicos' : 'operativas'})
+                    <tr style={{ background: 'var(--bg-soft, rgba(127,127,127,.08))', borderTop: '2px solid var(--border)' }}>
+                      <td style={{ ...td, textAlign: 'left', fontWeight: 800, color: INK }}>TOTAL</td>
+                      {prodTienePorTecnico && <td style={td} />}
+                      <td style={td} />
+                      <td style={td} />
+                      <td style={{ ...td, fontWeight: 800, color: INK }}>{fmtN(prodTotales.ordenes)}</td>
+                      <td style={{ ...td, fontWeight: 800, color: OK }}>{fmtCOP(prodTotales.produccion)}</td>
+                      <td style={{ ...td, fontWeight: 800, color: INK }}>{fmtCOP(prodTotales.meta)}</td>
+                      <td style={{ ...td, fontWeight: 800, color: colorFaltante(prodTotales.faltante, prodTotales.meta) }}>
+                        {prodTotales.faltante > 0 ? fmtCOP(prodTotales.faltante) : '✓ $0'}
                       </td>
-                      <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtN(prodData.totales.ordenes)}</td>
-                      <td style={{ ...tdStyleRight, fontWeight: 800, color: OK }}>{fmtCOP(prodData.totales.produccion)}</td>
-                      <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtCOP(prodData.totales.meta)}</td>
-                      <td style={{ ...tdStyleRight, fontWeight: 800, color: colorFaltante(prodData.totales.faltante, prodData.totales.meta) }}>
-                        {prodData.totales.faltante > 0 ? fmtCOP(prodData.totales.faltante) : '✓ $0'}
-                      </td>
-                      <td style={tdStyleRight}>
+                      <td style={td}>
                         <span style={{
                           display: 'inline-block',
                           padding: '2px 8px',
                           borderRadius: 6,
                           fontSize: 11,
                           fontWeight: 700,
-                          color: pctCumplimiento(prodData.totales.produccion, prodData.totales.meta) >= 100 ? OK : pctCumplimiento(prodData.totales.produccion, prodData.totales.meta) >= 70 ? WARN : ERR,
-                          background: (pctCumplimiento(prodData.totales.produccion, prodData.totales.meta) >= 100 ? OK : pctCumplimiento(prodData.totales.produccion, prodData.totales.meta) >= 70 ? WARN : ERR) + '18',
+                          color: totProdCumpl >= 100 ? OK : totProdCumpl >= 70 ? WARN : ERR,
+                          background: (totProdCumpl >= 100 ? OK : totProdCumpl >= 70 ? WARN : ERR) + '18',
                         }}>
-                          {pctCumplimiento(prodData.totales.produccion, prodData.totales.meta).toFixed(0)}%
+                          {totProdCumpl.toFixed(1)}%
                         </span>
                       </td>
                     </tr>
                   </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
+                )}
+              </table>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* ═══ INFORME DE DIGITACIÓN ═══ */}
+      {/* ═══ 2. INFORME DE DIGITACIÓN ═══ */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <button
         onClick={() => setDigAbierto(v => !v)}
