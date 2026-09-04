@@ -850,6 +850,8 @@ export default function TecnicosPage() {
       return a.nombre.localeCompare(b.nombre);
     });
 
+
+    
     return arr;
   }, [cardsData, categoriaFiltro, tipoFiltro, trendFiltro, estadoFiltro, movilidadFiltro, q, sortOrder]);
 
