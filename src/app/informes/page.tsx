@@ -56,11 +56,28 @@ export default function InformesPage() {
   const ERR = colors.err;
   const TEAL = colors.sip;
 
-  /* ─── Cálculo del informe de producción ─── */
-  const informe = useMemo(() => {
-    if (!raw) return null;
+  // ── Cálculo del informe de producción ──
+  const [prodParams, setProdParams] = useState<any>(null);
 
-    const rawF = filtRaw(raw.raw, filters);
+  const generarProduccion = async () => {
+    if (!prodMes) { setError('Selecciona un mes para producción.'); return; }
+    // Build filter object based on production filters
+    const f = {
+      ...filters,
+      zona: prodZona,
+      mes: prodMes,
+      fecha: prodFecha,
+      tipo: prodTipo,
+      horaDesde: '',
+      horaHasta: '',
+    };
+    setProdParams(f);
+    setProdGenerado(true);
+  };
+
+  const informe = useMemo(() => {
+    if (!raw || !prodParams) return null;
+    const rawF = filtRaw(raw.raw, prodParams);
     if (!rawF.length) return null;
 
     // Agrupar datos según modo de vista
@@ -201,7 +218,13 @@ export default function InformesPage() {
   const [abierto, setAbierto] = useState(false);
   const [meta, setMeta] = useState<{ zonas: string[]; meses: string[] }>({ zonas: [], meses: [] });
 
-  // Filtros
+  // Filtros producción (independientes)
+  const [prodZona, setProdZona] = useState(''); // '' = Todas
+  const [prodMes, setProdMes] = useState('');
+  const [prodFecha, setProdFecha] = useState(''); // '' = todo el mes
+  const [prodTipo, setProdTipo] = useState<'operativas' | 'disponibles' | ''>(''); // '' = ambas
+  const [prodGenerado, setProdGenerado] = useState(false);
+
   const [zona, setZona] = useState('');       // '' = Todas
   const [mes, setMes] = useState('');
   const [fecha, setFecha] = useState('');     // '' = todo el mes
@@ -371,7 +394,49 @@ const [prodAbierto, setProdAbierto] = useState(false);
       </button>
       {prodAbierto && (
         <>
-          {/* View mode selector */}
+          {/* Filtros producción independientes */}
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 12 }}>
+  <div>
+    <label style={lbl}>ZONA</label>
+    <select style={inp} value={prodZona} onChange={e => setProdZona(e.target.value)}>
+      <option value="">Todas</option>
+      {meta.zonas.map(z => <option key={z} value={z}>{z}</option>)}
+    </select>
+  </div>
+  <div>
+    <label style={lbl}>MES</label>
+    <select style={inp} value={prodMes} onChange={e => { setProdMes(e.target.value); setProdFecha(''); }}>
+      <option value="">Todas</option>
+      {meta.meses.map(m => <option key={m} value={m}>{m}</option>)}
+    </select>
+  </div>
+  <div>
+    <label style={lbl}>DÍA (opcional)</label>
+    <input type="date" style={inp} value={prodFecha}
+      min={prodMes ? `${prodMes}-01` : undefined}
+      max={prodMes ? `${prodMes}-${String(new Date(Number(prodMes.slice(0,4)), Number(prodMes.slice(5,7)), 0).getDate()).padStart(2,'0')}` : undefined}
+      onChange={e => setProdFecha(e.target.value)} />
+  </div>
+  <div>
+    <label style={lbl}>TIPO DE BRIGADA</label>
+    <select style={inp} value={prodTipo} onChange={e => setProdTipo(e.target.value as typeof prodTipo)}>
+      <option value="">Ambas</option>
+      <option value="operativas">Operativas</option>
+      <option value="disponibles">Disponibles</option>
+    </select>
+  </div>
+</div>
+<button style={btn(colors.sip)} onClick={generarProduccion}>Generar informe</button>
+{/* View mode selector */}
+<div style={{ marginBottom: 12 }}>
+  <SegmentedControl
+    options={[{ label: 'Por Técnico', value: 'tecnico' }, { label: 'Por Operativa', value: 'operativa' }]}
+    value={viewMode}
+    onChange={v => setViewMode(v as 'tecnico' | 'operativa')}
+  />
+</div>
+{/* Export buttons */}
+<div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
           <div style={{ marginBottom: 12 }}>
             <SegmentedControl
               options={[{ label: 'Por Técnico', value: 'tecnico' }, { label: 'Por Operativa', value: 'operativa' }]}
@@ -379,7 +444,12 @@ const [prodAbierto, setProdAbierto] = useState(false);
               onChange={v => setViewMode(v as 'tecnico' | 'operativa')}
             />
           </div>
-          {/* Export buttons */}
+{prodGenerado && informe && (
+  <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+    <ExportButton format="excel" onClick={exportExcelProd} />
+    <ExportButton format="csv" onClick={exportCSVProd} />
+  </div>
+)}
           <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
             <ExportButton format="excel" onClick={exportExcelProd} />
             <ExportButton format="csv" onClick={exportCSVProd} />
