@@ -1,17 +1,12 @@
 'use client';
 
-
-import { useMemo } from 'react';
-import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw } from '../components/utils/filters';
-import { fmtCOP, fmtN, num as n } from '../components/utils/formatters';
-
 import React, { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
-import { ButtonMenuOperativo } from '../components/Buttons';
-
+import { useDashboard } from '../components/DashboardProvider';
 import { useTheme } from '../components/ThemeProvider';
 import { ButtonMenuOperativo } from '../components/Buttons';
+import { filtRaw } from '../components/utils/filters';
+import { fmtCOP, fmtN, num as n } from '../components/utils/formatters';
 
 /* ─── Tipos auxiliares ─── */
 interface TecnicoProduccion {
@@ -56,14 +51,40 @@ export default function InformesPage() {
   const ERR = colors.err;
   const TEAL = colors.sip;
 
-  /* ─── Cálculo del informe de producción ─── */
+  /* ─── Estado del informe de digitación ─── */
+  const [abierto, setAbierto] = useState(false);
+  const [meta, setMeta] = useState<{ zonas: string[]; meses: string[] }>({ zonas: [], meses: [] });
+  const [zona, setZona] = useState('');       // '' = Todas
+  const [mes, setMes] = useState('');
+  const [fecha, setFecha] = useState('');     // '' = todo el mes
+  const [horaDesde, setHoraDesde] = useState('');
+  const [horaHasta, setHoraHasta] = useState('');
+  const [tipo, setTipo] = useState<'operativas' | 'disponibles' | ''>('');  // '' = ambas
+  const [porTecnico, setPorTecnico] = useState(false);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [tienePorTecnico, setTienePorTecnico] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [generado, setGenerado] = useState(false);
+
+  // Cargar opciones (zonas/meses) para los selectores del informe de digitación.
+  useEffect(() => {
+    fetch('/api/informes/digitacion?meta=1')
+      .then(r => r.json())
+      .then(d => {
+        setMeta({ zonas: d.zonas || [], meses: d.meses || [] });
+        if (d.meses?.length) setMes(d.meses[0]);
+      })
+      .catch(() => {});
+  }, []);
+
+  /* ─── Cálculo del informe de producción (datos globales) ─── */
   const informe = useMemo(() => {
     if (!raw) return null;
 
     const rawF = filtRaw(raw.raw, filters);
     if (!rawF.length) return null;
 
-    // Agrupar por Cedula (técnico)
     const agg = new Map<string, {
       nombre: string;
       tipoBrigada: string;
@@ -85,19 +106,15 @@ export default function InformesPage() {
         };
         agg.set(cedula, acc);
       }
-      // Compute orders as sum of efectivas, fallidas (con y sin pago) y perdidas
       acc.ordenes += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
-      // Use Valor_Orden for producción monetaria
-      acc.produccion += n(r.Valor_Orden);
+      acc.produccion += n(r.Ingresos);
       acc.meta += n(r.Meta_Facturacion);
-      // Mantener el nombre más reciente (no vacío)
       if (r.Nombre && String(r.Nombre).trim()) {
         acc.nombre = String(r.Nombre);
       }
     });
 
-    // Convertir a array con faltante calculado
-    const rows: TecnicoProduccion[] = Array.from(agg.entries())
+    const filas: TecnicoProduccion[] = Array.from(agg.entries())
       .map(([cedula, acc]) => ({
         cedula,
         nombre: acc.nombre,
@@ -107,10 +124,9 @@ export default function InformesPage() {
         meta: acc.meta,
         faltante: Math.max(0, acc.meta - acc.produccion),
       }))
-      .sort((a, b) => b.produccion - a.produccion); // Mayor producción primero
+      .sort((a, b) => b.produccion - a.produccion);
 
-    // Totales
-    const totales = rows.reduce(
+    const totales = filas.reduce(
       (t, r) => ({
         ordenes: t.ordenes + r.ordenes,
         produccion: t.produccion + r.produccion,
@@ -120,103 +136,20 @@ export default function InformesPage() {
       { ordenes: 0, produccion: 0, meta: 0, faltante: 0 }
     );
 
-    return { rows, totales };
+    return { rows: filas, totales };
   }, [raw, filters]);
 
-  /* ─── Color semáforo para el faltante ─── */
-  const colorFaltante = (faltante: number, meta: number) => {
-    if (meta <= 0) return MUT;
-    const pct = faltante / meta;
-    if (pct <= 0) return OK;      // Cumplió o superó la meta
-    if (pct < 0.3) return WARN;   // Falta menos del 30%
-    return ERR;                    // Falta 30% o más
-  };
+  // Fila de totales del informe de digitación.
+  const totalesDig = useMemo(() => {
+    const t: Record<string, number> = {};
+    for (const c of COLS) t[c.key] = rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
+    return t;
+  }, [rows]);
 
-  /* ─── Cumplimiento % ─── */
-  const pctCumplimiento = (produccion: number, meta: number) => {
-    if (meta <= 0) return 0;
-    return Math.min((produccion / meta) * 100, 999);
-  };
-
-  /* ─── Estilos de tabla ─── */
-  const thStyle: React.CSSProperties = {
-    padding: '10px 14px',
-    textAlign: 'left',
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: MUT,
-    borderBottom: '2px solid var(--border)',
-    position: 'sticky',
-    top: 0,
-    background: 'var(--panel)',
-    zIndex: 1,
-  };
-
-  const thStyleRight: React.CSSProperties = { ...thStyle, textAlign: 'right' };
-
-  const tdStyle: React.CSSProperties = {
-    padding: '10px 14px',
-    fontSize: 13,
-    color: INK,
-    borderBottom: '1px solid var(--border)',
-  };
-
-  const tdStyleRight: React.CSSProperties = {
-    ...tdStyle,
-    textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums',
-  };
-
-  const secH: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: TEAL,
-    margin: '24px 2px 12px',
-  };
-
-  /* ─── Render ─── */
-  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
-  if (error) return <div className="status err">{error}</div>;
-
-  const [abierto, setAbierto] = useState(false);
-  const [meta, setMeta] = useState<{ zonas: string[]; meses: string[] }>({ zonas: [], meses: [] });
-
-  // Filtros
-  const [zona, setZona] = useState('');       // '' = Todas
-  const [mes, setMes] = useState('');
-  const [fecha, setFecha] = useState('');     // '' = todo el mes
-  const [horaDesde, setHoraDesde] = useState('');
-  const [horaHasta, setHoraHasta] = useState('');
-  const [tipo, setTipo] = useState<'operativas' | 'disponibles' | ''>('');  // '' = ambas
-  const [porTecnico, setPorTecnico] = useState(false);
-
-  // Resultado
-  const [rows, setRows] = useState<Row[]>([]);
-  const [tienePorTecnico, setTienePorTecnico] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [generado, setGenerado] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/informes/digitacion?meta=1')
-      .then(r => r.json())
-      .then(d => {
-        setMeta({ zonas: d.zonas || [], meses: d.meses || [] });
-        if (d.meses?.length) setMes(d.meses[0]);
-      })
-      .catch(() => {});
-  }, []);
-
+  /* ─── Generar informe de digitación ─── */
   const generar = async () => {
-    if (!mes) { setError('Selecciona un mes.'); return; }
-    setLoading(true); setError(null); setGenerado(true);
+    if (!mes) { setGenError('Selecciona un mes.'); return; }
+    setGenLoading(true); setGenError(null); setGenerado(true);
     try {
       const qs = new URLSearchParams({ mes });
       if (zona) qs.set('zona', zona);
@@ -230,21 +163,14 @@ export default function InformesPage() {
       setRows(d.rows || []);
       setTienePorTecnico(!!d.porTecnico);
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
+      setGenError(String(e instanceof Error ? e.message : e));
       setRows([]);
     } finally {
-      setLoading(false);
+      setGenLoading(false);
     }
   };
 
-  // Fila de totales (suma de todas las columnas numéricas).
-  const totales = useMemo(() => {
-    const t: Record<string, number> = {};
-    for (const c of COLS) t[c.key] = rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0);
-    return t;
-  }, [rows]);
-
-  // ── Exportación ────────────────────────────────────────────────────────────
+  /* ─── Exportación (digitación) ─── */
   const nombreArchivo = () =>
     `informe_digitacion_${mes}${fecha ? '_' + fecha : ''}${tipo ? '_' + tipo : ''}${porTecnico ? '_tecnico' : ''}`;
 
@@ -268,8 +194,7 @@ export default function InformesPage() {
   };
 
   const exportCSV = () => {
-    // Delimitador ';' (separador de lista de Excel en español) + BOM para los
-    // acentos. Así Excel-ES abre cada campo en su propia columna sin pasos extra.
+    // Delimitador ';' (separador de lista de Excel en español) + BOM para acentos.
     const csv = Papa.unparse(filasExport(), { delimiter: ';' });
     descargar('﻿' + csv, 'text/csv;charset=utf-8;', 'csv');
   };
@@ -284,12 +209,44 @@ export default function InformesPage() {
     descargar(html, 'application/vnd.ms-excel', 'xlsx');
   };
 
-  // ── Estilos ──────────────────────────────────────────────────────────────
+  /* ─── Semáforo del faltante ─── */
+  const colorFaltante = (faltante: number, metaV: number) => {
+    if (metaV <= 0) return MUT;
+    const pct = faltante / metaV;
+    if (pct <= 0) return OK;
+    if (pct < 0.3) return WARN;
+    return ERR;
+  };
+
+  const pctCumplimiento = (produccion: number, metaV: number) => {
+    if (metaV <= 0) return 0;
+    return Math.min((produccion / metaV) * 100, 999);
+  };
+
+  /* ─── Estilos de tabla (producción) ─── */
+  const thStyle: React.CSSProperties = {
+    padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: 0.8,
+    textTransform: 'uppercase', color: MUT, borderBottom: '2px solid var(--border)',
+    position: 'sticky', top: 0, background: 'var(--panel)', zIndex: 1,
+  };
+  const thStyleRight: React.CSSProperties = { ...thStyle, textAlign: 'right' };
+  const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: 13, color: INK, borderBottom: '1px solid var(--border)' };
+  const tdStyleRight: React.CSSProperties = { ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+  const secH: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700,
+    letterSpacing: 1.4, textTransform: 'uppercase', color: TEAL, margin: '4px 2px 0',
+  };
+
+  /* ─── Estilos del informe de digitación ─── */
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUT, marginBottom: 4, display: 'block', letterSpacing: 0.3 };
   const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-body)', fontSize: 13 };
   const btn = (bg: string): React.CSSProperties => ({ padding: '8px 16px', borderRadius: 8, border: 'none', background: bg, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
   const th: React.CSSProperties = { padding: '9px 10px', fontSize: 11, fontWeight: 800, color: 'var(--text-title)', textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border)' };
   const td: React.CSSProperties = { padding: '7px 10px', fontSize: 12.5, textAlign: 'right', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-body)' };
+
+  /* ─── Render ─── */
+  if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
+  if (error) return <div className="status err">{error}</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -300,7 +257,6 @@ export default function InformesPage() {
         <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>Módulo de informes y reportes operativos</div>
       </div>
 
-
       {/* ═══ INFORME DE PRODUCCIÓN ═══ */}
       <div style={secH}>
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: TEAL }} />
@@ -308,29 +264,15 @@ export default function InformesPage() {
       </div>
 
       {!informe || !informe.rows.length ? (
-        <div style={{
-          ...card,
-          textAlign: 'center',
-          padding: '40px 20px',
-          color: MUT,
-        }}>
+        <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: MUT }}>
           <span style={{ fontSize: 32 }}>📊</span>
-          <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginTop: 8 }}>
-            Sin datos para el periodo seleccionado
-          </div>
-          <div style={{ fontSize: 12.5, marginTop: 4 }}>
-            Ajusta los filtros de fecha para ver el informe de producción.
-          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginTop: 8 }}>Sin datos para el periodo seleccionado</div>
+          <div style={{ fontSize: 12.5, marginTop: 4 }}>Ajusta los filtros de fecha para ver el informe de producción.</div>
         </div>
       ) : (
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           {/* Resumen superior */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: 0,
-            borderBottom: '2px solid var(--border)',
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 0, borderBottom: '2px solid var(--border)' }}>
             {[
               { label: 'Técnicos', value: fmtN(informe.rows.length), color: TEAL },
               { label: 'Total Órdenes', value: fmtN(informe.totales.ordenes), color: INK },
@@ -338,21 +280,14 @@ export default function InformesPage() {
               { label: 'Meta Total', value: fmtCOP(informe.totales.meta), color: INK },
               { label: 'Faltante Total', value: fmtCOP(informe.totales.faltante), color: colorFaltante(informe.totales.faltante, informe.totales.meta) },
             ].map((item, i) => (
-              <div key={i} style={{
-                padding: '16px 20px',
-                borderRight: i < 4 ? '1px solid var(--border)' : 'none',
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.7, textTransform: 'uppercase', color: MUT }}>
-                  {item.label}
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: item.color, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-                  {item.value}
-                </div>
+              <div key={i} style={{ padding: '16px 20px', borderRight: i < 4 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.7, textTransform: 'uppercase', color: MUT }}>{item.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: item.color, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{item.value}</div>
               </div>
             ))}
           </div>
 
-          {/* Tabla */}
+          {/* Tabla de producción */}
           <div style={{ maxHeight: 520, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -371,45 +306,24 @@ export default function InformesPage() {
                   const cumpl = pctCumplimiento(row.produccion, row.meta);
                   const fColor = colorFaltante(row.faltante, row.meta);
                   const cumplColor = cumpl >= 100 ? OK : cumpl >= 70 ? WARN : ERR;
-
                   return (
                     <tr
                       key={row.cedula}
-                      style={{
-                        transition: 'background .15s',
-                      }}
+                      style={{ transition: 'background .15s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <td style={{ ...tdStyle, color: MUT, fontSize: 11, fontWeight: 600 }}>
-                        {idx + 1}
-                      </td>
+                      <td style={{ ...tdStyle, color: MUT, fontSize: 11, fontWeight: 600 }}>{idx + 1}</td>
                       <td style={tdStyle}>
                         <div style={{ fontWeight: 600 }}>{row.nombre}</div>
                         <div style={{ fontSize: 10.5, color: MUT, marginTop: 1 }}>{row.tipoBrigada}</div>
                       </td>
-                      <td style={tdStyleRight}>
-                        <span style={{ fontWeight: 600 }}>{fmtN(row.ordenes)}</span>
-                      </td>
-                      <td style={{ ...tdStyleRight, fontWeight: 700, color: OK }}>
-                        {fmtCOP(row.produccion)}
-                      </td>
-                      <td style={{ ...tdStyleRight, fontWeight: 600 }}>
-                        {fmtCOP(row.meta)}
-                      </td>
-                      <td style={{ ...tdStyleRight, fontWeight: 700, color: fColor }}>
-                        {row.faltante > 0 ? fmtCOP(row.faltante) : '✓ $0'}
-                      </td>
+                      <td style={tdStyleRight}><span style={{ fontWeight: 600 }}>{fmtN(row.ordenes)}</span></td>
+                      <td style={{ ...tdStyleRight, fontWeight: 700, color: OK }}>{fmtCOP(row.produccion)}</td>
+                      <td style={{ ...tdStyleRight, fontWeight: 600 }}>{fmtCOP(row.meta)}</td>
+                      <td style={{ ...tdStyleRight, fontWeight: 700, color: fColor }}>{row.faltante > 0 ? fmtCOP(row.faltante) : '✓ $0'}</td>
                       <td style={{ ...tdStyleRight }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: cumplColor,
-                          background: cumplColor + '18',
-                        }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: cumplColor, background: cumplColor + '18' }}>
                           {cumpl.toFixed(0)}%
                         </span>
                       </td>
@@ -417,48 +331,42 @@ export default function InformesPage() {
                   );
                 })}
               </tbody>
-              {/* Fila de Totales */}
               <tfoot>
                 <tr style={{ background: 'var(--hover-bg)' }}>
-                  <td style={{ ...tdStyle, fontWeight: 800, fontSize: 12 }} colSpan={2}>
-                    TOTALES ({informe.rows.length} técnicos)
-                  </td>
-                  <td style={{ ...tdStyleRight, fontWeight: 800 }}>
-                    {fmtN(informe.totales.ordenes)}
-                  </td>
-                  <td style={{ ...tdStyleRight, fontWeight: 800, color: OK }}>
-                    {fmtCOP(informe.totales.produccion)}
-                  </td>
-                  <td style={{ ...tdStyleRight, fontWeight: 800 }}>
-                    {fmtCOP(informe.totales.meta)}
-                  </td>
+                  <td style={{ ...tdStyle, fontWeight: 800, fontSize: 12 }} colSpan={2}>TOTALES ({informe.rows.length} técnicos)</td>
+                  <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtN(informe.totales.ordenes)}</td>
+                  <td style={{ ...tdStyleRight, fontWeight: 800, color: OK }}>{fmtCOP(informe.totales.produccion)}</td>
+                  <td style={{ ...tdStyleRight, fontWeight: 800 }}>{fmtCOP(informe.totales.meta)}</td>
                   <td style={{ ...tdStyleRight, fontWeight: 800, color: colorFaltante(informe.totales.faltante, informe.totales.meta) }}>
                     {informe.totales.faltante > 0 ? fmtCOP(informe.totales.faltante) : '✓ $0'}
                   </td>
                   <td style={{ ...tdStyleRight }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 100 ? OK : pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 70 ? WARN : ERR,
-                      background: (pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 100 ? OK : pctCumplimiento(informe.totales.produccion, informe.totales.meta) >= 70 ? WARN : ERR) + '18',
-                    }}>
-                      {pctCumplimiento(informe.totales.produccion, informe.totales.meta).toFixed(0)}%
-                    </span>
+                    {(() => {
+                      const p = pctCumplimiento(informe.totales.produccion, informe.totales.meta);
+                      const c = p >= 100 ? OK : p >= 70 ? WARN : ERR;
+                      return (
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c, background: c + '18' }}>
+                          {p.toFixed(0)}%
+                        </span>
+                      );
+                    })()}
                   </td>
                 </tr>
               </tfoot>
             </table>
+          </div>
+        </div>
+      )}
 
-      {/* Botón del informe */}
+      {/* ═══ INFORME DIGITACIÓN ═══ */}
+      <div style={secH}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: TEAL }} />
+        Informe digitación
+      </div>
+
       <button
         onClick={() => setAbierto(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer',
-          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
-        }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}
       >
         <span style={{ fontSize: 26 }}>📋</span>
         <span style={{ display: 'flex', flexDirection: 'column' }}>
@@ -468,7 +376,6 @@ export default function InformesPage() {
         <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>{abierto ? '▲' : '▼'}</span>
       </button>
 
-      {/* Panel de filtros */}
       {abierto && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
@@ -521,8 +428,8 @@ export default function InformesPage() {
           </label>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button style={btn(colors.sip)} onClick={generar} disabled={loading}>
-              {loading ? 'Generando…' : 'Generar informe'}
+            <button style={btn(colors.sip)} onClick={generar} disabled={genLoading}>
+              {genLoading ? 'Generando…' : 'Generar informe'}
             </button>
             {rows.length > 0 && (
               <>
@@ -537,18 +444,16 @@ export default function InformesPage() {
         </div>
       )}
 
-      {/* Error */}
-      {error && <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 14, color: colors.err, fontSize: 13 }}>⚠ {error}</div>}
+      {genError && <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 14, color: colors.err, fontSize: 13 }}>⚠ {genError}</div>}
 
-      {/* Tabla */}
-      {generado && !error && (
+      {generado && !genError && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
             Digitación {mes}{fecha ? ` · ${fecha}` : ''}{zona ? ` · ${zona}` : ''}{tipo ? ` · ${tipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {rows.length} filas</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            {rows.length === 0 && !loading ? (
+            {rows.length === 0 && !genLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: MUT, fontSize: 13 }}>Sin datos para los filtros seleccionados.</div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: tienePorTecnico ? 1180 : 1020 }}>
@@ -583,7 +488,7 @@ export default function InformesPage() {
                       {tienePorTecnico && <td style={td} />}
                       <td style={td} />
                       <td style={td} />
-                      {COLS.map(c => <td key={c.key} style={{ ...td, fontWeight: 800, color: INK }}>{totales[c.key]}</td>)}
+                      {COLS.map(c => <td key={c.key} style={{ ...td, fontWeight: 800, color: INK }}>{totalesDig[c.key]}</td>)}
                     </tr>
                   </tfoot>
                 )}
@@ -594,4 +499,4 @@ export default function InformesPage() {
       )}
     </div>
   );
-};
+}
