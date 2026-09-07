@@ -70,7 +70,8 @@ export default function InformesPage() {
   const [prodMes, setProdMes] = useState('');
   const [prodFecha, setProdFecha] = useState('');
   const [prodTipo, setProdTipo] = useState<'operativas' | 'disponibles' | ''>('');
-  const [prodPorTecnico, setProdPorTecnico] = useState(false);
+  const [prodTodosDias, setProdTodosDias] = useState(false);   // false = filtra al último día
+  const [prodPorTecnico, setProdPorTecnico] = useState(true);  // marcado por defecto
 
   const [prodRows, setProdRows] = useState<ProduccionRow[]>([]);
   const [prodTienePorTecnico, setProdTienePorTecnico] = useState(false);
@@ -88,7 +89,8 @@ export default function InformesPage() {
   const [digHoraDesde, setDigHoraDesde] = useState('');
   const [digHoraHasta, setDigHoraHasta] = useState('');
   const [digTipo, setDigTipo] = useState<'operativas' | 'disponibles' | ''>('');
-  const [digPorTecnico, setDigPorTecnico] = useState(false);
+  const [digTodosDias, setDigTodosDias] = useState(false);   // false = filtra al último día
+  const [digPorTecnico, setDigPorTecnico] = useState(true);  // marcado por defecto
 
   const [digRows, setDigRows] = useState<Row[]>([]);
   const [digTienePorTecnico, setDigTienePorTecnico] = useState(false);
@@ -134,6 +136,33 @@ export default function InformesPage() {
     return Array.from(set).sort();
   }, [meta.zonas, raw]);
 
+  // Último día CON DATOS por mes (para el filtro "Día" por defecto).
+  const ultimoDia = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (raw?.raw) {
+      for (const r of raw.raw) {
+        const f = String(r.Fecha || '').slice(0, 10);
+        if (f.length === 10) {
+          const m = f.slice(0, 7);
+          if (!map[m] || f > map[m]) map[m] = f;
+        }
+      }
+    }
+    return (mesStr: string) => map[mesStr] || '';
+  }, [raw]);
+
+  // Día por defecto = último día del mes seleccionado (salvo "Todos los días").
+  // Conserva un día elegido manualmente que siga dentro del mes.
+  useEffect(() => {
+    if (prodTodosDias) return;
+    setProdFecha(prev => (prev && prev.startsWith(prodMes)) ? prev : ultimoDia(prodMes));
+  }, [ultimoDia, prodMes, prodTodosDias]);
+
+  useEffect(() => {
+    if (digTodosDias) return;
+    setDigFecha(prev => (prev && prev.startsWith(digMes)) ? prev : ultimoDia(digMes));
+  }, [ultimoDia, digMes, digTodosDias]);
+
   // ── Lógica Informe de Producción ──────────────────────────────────
   const generarProd = () => {
     if (!prodMes) {
@@ -157,7 +186,7 @@ export default function InformesPage() {
         // Filtro Mes
         if (prodMes && !fStr.startsWith(prodMes)) return false;
         // Filtro Día
-        if (prodFecha && fStr.slice(0, 10) !== prodFecha) return false;
+        if (!prodTodosDias && prodFecha && fStr.slice(0, 10) !== prodFecha) return false;
         // Filtro Zona
         if (prodZona) {
           const zMatch =
@@ -278,7 +307,7 @@ export default function InformesPage() {
     try {
       const qs = new URLSearchParams({ mes: digMes });
       if (digZona) qs.set('zona', digZona);
-      if (digFecha) qs.set('fecha', digFecha);
+      if (!digTodosDias && digFecha) qs.set('fecha', digFecha);
       if (digHoraDesde && digHoraHasta) {
         qs.set('horaDesde', digHoraDesde);
         qs.set('horaHasta', digHoraHasta);
@@ -323,7 +352,7 @@ export default function InformesPage() {
 
   // ── Exportación Producción ────────────────────────────────────────
   const nombreArchivoProd = () =>
-    `informe_produccion_${prodMes}${prodFecha ? '_' + prodFecha : ''}${prodZona ? '_' + prodZona : ''}${prodTipo ? '_' + prodTipo : ''}${prodTienePorTecnico ? '_tecnico' : ''}`;
+    `informe_produccion_${prodMes}${(!prodTodosDias && prodFecha) ? '_' + prodFecha : '_todos'}${prodZona ? '_' + prodZona : ''}${prodTipo ? '_' + prodTipo : ''}${prodTienePorTecnico ? '_tecnico' : ''}`;
 
   const filasExportProd = () => {
     const filas = prodRows.map(r => {
@@ -424,7 +453,7 @@ export default function InformesPage() {
 
   // ── Exportación Digitación ────────────────────────────────────────
   const nombreArchivoDig = () =>
-    `informe_digitacion_${digMes}${digFecha ? '_' + digFecha : ''}${digZona ? '_' + digZona : ''}${digTipo ? '_' + digTipo : ''}${digTienePorTecnico ? '_tecnico' : ''}`;
+    `informe_digitacion_${digMes}${(!digTodosDias && digFecha) ? '_' + digFecha : '_todos'}${digZona ? '_' + digZona : ''}${digTipo ? '_' + digTipo : ''}${digTienePorTecnico ? '_tecnico' : ''}`;
 
   const filasExportDig = () => {
     const filas = digRows.map(r => {
@@ -562,16 +591,21 @@ export default function InformesPage() {
               </select>
             </div>
             <div>
-              <label style={lbl}>DÍA (opcional)</label>
+              <label style={lbl}>DÍA</label>
               <input
                 key={prodMes}
                 type="date"
-                style={inp}
+                style={{ ...inp, opacity: prodTodosDias ? 0.5 : 1 }}
                 value={prodFecha}
+                disabled={prodTodosDias}
                 min={prodMes ? `${prodMes}-01` : undefined}
                 max={prodMes ? `${prodMes}-${String(new Date(Number(prodMes.slice(0, 4)), Number(prodMes.slice(5, 7)), 0).getDate()).padStart(2, '0')}` : undefined}
                 onChange={e => setProdFecha(e.target.value)}
               />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUT, marginTop: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={prodTodosDias} onChange={e => setProdTodosDias(e.target.checked)} />
+                Todos los días
+              </label>
             </div>
             <div>
               <label style={lbl}>TIPO DE BRIGADA</label>
@@ -613,7 +647,7 @@ export default function InformesPage() {
       {prodAbierto && prodGenerado && !prodError && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
-            Producción {prodMes}{prodFecha ? ` · ${prodFecha}` : ''}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
+            Producción {prodMes}{prodTodosDias ? ' · todos los días' : (prodFecha ? ` · ${prodFecha}` : '')}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {prodRows.length} {prodTienePorTecnico ? 'técnicos' : 'operativas'}</span>
           </div>
 
@@ -748,16 +782,21 @@ export default function InformesPage() {
               </select>
             </div>
             <div>
-              <label style={lbl}>DÍA (opcional)</label>
+              <label style={lbl}>DÍA</label>
               <input
                 key={digMes}
                 type="date"
-                style={inp}
+                style={{ ...inp, opacity: digTodosDias ? 0.5 : 1 }}
                 value={digFecha}
+                disabled={digTodosDias}
                 min={digMes ? `${digMes}-01` : undefined}
                 max={digMes ? `${digMes}-${String(new Date(Number(digMes.slice(0, 4)), Number(digMes.slice(5, 7)), 0).getDate()).padStart(2, '0')}` : undefined}
                 onChange={e => setDigFecha(e.target.value)}
               />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUT, marginTop: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={digTodosDias} onChange={e => setDigTodosDias(e.target.checked)} />
+                Todos los días
+              </label>
             </div>
             <div>
               <label style={lbl}>HORA DESDE</label>
@@ -810,7 +849,7 @@ export default function InformesPage() {
       {digAbierto && digGenerado && !digError && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
-            Digitación {digMes}{digFecha ? ` · ${digFecha}` : ''}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
+            Digitación {digMes}{digTodosDias ? ' · todos los días' : (digFecha ? ` · ${digFecha}` : '')}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {digRows.length} filas</span>
           </div>
           <div style={{ overflowX: 'auto' }}>

@@ -46,6 +46,34 @@ interface EmpRowV2 {
 // columna precalculada historico_mo.brigada_homologada (se computa en la ingesta,
 // ver prototipo_etl/ingesta_bd.py::recomputar_columnas). El dashboard solo la LEE.
 
+// ═══════════════════════════════════════════════════════════════════════════
+// META DIARIA — FUENTE ÚNICA DE VERDAD (leer esto primero)
+// ═══════════════════════════════════════════════════════════════════════════
+// La "meta del día" de cada orden se calcula EXCLUSIVAMENTE con META_DIARIA_SQL.
+// Todo el dashboard (Operativo, Gerencial, Estratégico, Informes, home) consume
+// el campo Meta_Facturacion que sale de aquí — NO se recalcula en ningún otro lado.
+//
+//   • ZONA SUR (acordado) → meta FIJA para Pesada y Liviana:
+//       Pesada  : Lun-Vie $650.000 · Sábado $425.000
+//       Liviana : Lun-Vie $380.000 · Sábado $310.000   (domingo = valor Lun-Vie)
+//   • Resto de zonas (Norte/Centro) y (D) Pesada → Costo(maestro)/184 × (sáb 6h | día 8h)
+//   • Disponibles (MT-AT/Minicanasta/Canasta/Gestor/Pesada Disponible) → Costo/24
+//   (EXTRACT(DOW …)=6 es Sábado. El Costo mensual sale de maestro_metas, join mm.)
+const META_SUR = {
+  pesada:  { semana: 650_000, sabado: 425_000 },
+  liviana: { semana: 380_000, sabado: 310_000 },
+} as const;
+
+const META_DIARIA_SQL = `MAX(CASE
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Pesada'
+            THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.pesada.sabado} ELSE ${META_SUR.pesada.semana} END)
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Liviana'
+            THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.liviana.sabado} ELSE ${META_SUR.liviana.semana} END)
+          WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
+            THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+          ELSE COALESCE(mm.costo,0)/24.0
+        END)`;
+
 export async function getDashboardDataV2(mes?: string) {
   const params: unknown[] = [];
   const activo = !!(mes && mes !== 'ALL');
@@ -108,15 +136,9 @@ export async function getDashboardDataV2(mes?: string) {
           ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) ELSE 0 END)
         END) as "Ingresos_Base",
 
-        -- Meta de facturación diaria (fija por día/sábado, sin prorrateo):
-        --   Grupo A (Pesada / (D) Pesada / Liviana) = Costo/184 * (sábado 6h | día 8h)
-        --   Grupo B (MT-AT / Minicanasta / Canasta / Gestor / Pesada Disponible) = Costo/24
-        -- El Costo mensual sale de maestro_metas (join mm). NO LABORO -> el día no existe -> sin meta.
-        MAX(CASE
-          WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
-            THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
-          ELSE COALESCE(mm.costo,0)/24.0
-        END) as "Meta_Facturacion",
+        -- Meta de facturación diaria. Definición ÚNICA en META_DIARIA_SQL (ver arriba):
+        -- Sur = meta fija Pesada/Liviana; resto = Costo/184; disponibles = Costo/24.
+        ${META_DIARIA_SQL} as "Meta_Facturacion",
         SUM(COALESCE(mo.valor_orden,0)) as "valor_fact_base",
         0 as "valor_produccion",
         0 as "margen_neto",
