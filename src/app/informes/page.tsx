@@ -214,8 +214,9 @@ export default function InformesPage() {
 
         // Sumar órdenes (efectivas + fallidas con pago + fallidas sin pago + perdidas)
         acc.ordenes += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
-        // Sumar producción monetaria
-        acc.produccion += n(r.Valor_Orden);
+        // Producción valorizada SIN el ajuste de incremento (×1.30045647872):
+        // Pesada/Liviana = Σ(valor_orden efectivas); disponibles = meta×prorrateo.
+        acc.produccion += n(r.Ingresos_Base);
         // Sumar meta
         acc.meta += n(r.Meta_Facturacion);
 
@@ -361,7 +362,7 @@ export default function InformesPage() {
   };
 
   const exportCSVProd = () => {
-    const csv = Papa.unparse(filasExportProd(), { delimiter: ',' });
+    const csv = Papa.unparse(filasExportProd(), { delimiter: ';' });
     descargar('\uFEFF' + csv, 'text/csv;charset=utf-8;', 'csv', nombreArchivoProd());
   };
 

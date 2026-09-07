@@ -17,6 +17,7 @@ interface RawRowV2 {
   Fallida_Con_Pago: string;
   Fallida_Sin_Pago: string;
   Ingresos: string;
+  Ingresos_Base: string;
   Meta_Facturacion: string;
   Perdidas_COP: string;
   Costo_Operativo: string;
@@ -94,6 +95,18 @@ export async function getDashboardDataV2(mes?: string) {
             THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
           ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END)
         END) as "Ingresos",
+
+        -- Igual a "Ingresos" pero SIN el ajuste de incremento (×1.30045647872) en
+        -- Pesada/Liviana/(D)Pesada. Las disponibles (meta×prorrateo) no llevan incremento.
+        (CASE
+          WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+            THEN MAX(COALESCE(mm.costo,0)/24.0)
+          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, COUNT(*)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
+          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) ELSE 0 END)
+        END) as "Ingresos_Base",
 
         -- Meta de facturación diaria (fija por día/sábado, sin prorrateo):
         --   Grupo A (Pesada / (D) Pesada / Liviana) = Costo/184 * (sábado 6h | día 8h)
@@ -176,6 +189,7 @@ export async function getDashboardDataV2(mes?: string) {
       Fallida_Con_Pago: Number(r.Fallida_Con_Pago),
       Fallida_Sin_Pago: Number(r.Fallida_Sin_Pago),
       Ingresos: Number(r.Ingresos),
+      Ingresos_Base: Number(r.Ingresos_Base),
       Valor_Orden: Number(r.valor_fact_base),
       Meta_Facturacion: Number(r.Meta_Facturacion),
       Perdidas_COP: Number(r.Perdidas_COP),

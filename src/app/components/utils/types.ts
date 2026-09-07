@@ -10,6 +10,7 @@ export interface RawRecord {
   Fallidas?: number | string;
   Perdidas?: number | string;
   Ingresos?: number | string;
+  Ingresos_Base?: number | string;
   Meta_Facturacion?: number | string;
   Municipio?: string;
   Supervisor?: string;
