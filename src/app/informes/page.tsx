@@ -174,6 +174,8 @@ export default function InformesPage() {
     setProdGenerado(true);
     setProdTienePorTecnico(prodPorTecnico);
 
+    // Diferir el cálculo (síncrono) para que la barra de carga alcance a pintarse.
+    setTimeout(() => {
     try {
       if (!raw?.raw || !raw.raw.length) {
         setProdRows([]);
@@ -280,6 +282,7 @@ export default function InformesPage() {
     } finally {
       setProdLoading(false);
     }
+    }, 60);
   };
 
   // Totales de Producción
@@ -336,6 +339,13 @@ export default function InformesPage() {
     }
     return t;
   }, [digRows]);
+
+  // Columnas de tipo de orden a MOSTRAR: se ocultan las que están TODAS en 0.
+  // 'total' (Total general) siempre se muestra.
+  const visibleColsDig = useMemo(
+    () => COLS.filter(c => c.key === 'total' || (digTotales[c.key] || 0) > 0),
+    [digTotales]
+  );
 
   // ── Helper de Descarga ────────────────────────────────────────────
   const descargar = (contenido: BlobPart, mime: string, ext: string, nombre: string) => {
@@ -461,7 +471,7 @@ export default function InformesPage() {
       if (digTienePorTecnico) o['Técnico'] = String(r.tecnico ?? r.id_tecnico ?? '');
       o['Zona'] = String(r.zona ?? '');
       o['Tipo de brigada'] = String(r.brigada ?? '');
-      for (const c of COLS) o[c.label] = Number(r[c.key]) || 0;
+      for (const c of visibleColsDig) o[c.label] = Number(r[c.key]) || 0;
       return o;
     });
 
@@ -470,7 +480,7 @@ export default function InformesPage() {
       if (digTienePorTecnico) totalFila['Técnico'] = '';
       totalFila['Zona'] = '';
       totalFila['Tipo de brigada'] = '';
-      for (const c of COLS) totalFila[c.label] = digTotales[c.key];
+      for (const c of visibleColsDig) totalFila[c.label] = digTotales[c.key];
       filas.push(totalFila);
     }
     return filas;
@@ -483,7 +493,7 @@ export default function InformesPage() {
 
   const exportExcelDig = () => {
     const data = filasExportDig();
-    const cols = data.length ? Object.keys(data[0]) : ['Fecha', ...COLS.map(c => c.label)];
+    const cols = data.length ? Object.keys(data[0]) : ['Fecha', ...visibleColsDig.map(c => c.label)];
     const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const thead = '<tr>' + cols.map(c => `<th style="background:#0284c7;color:#ffffff;font-weight:bold;padding:7px 10px;text-align:center;">${esc(c)}</th>`).join('') + '</tr>';
     const tbody = data.map((r, idx) => {
@@ -559,7 +569,7 @@ export default function InformesPage() {
       {/* ═══ 1. INFORME DE PRODUCCIÓN ═══ */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <button
-        onClick={() => setProdAbierto(v => !v)}
+        onClick={() => setProdAbierto(true)}
         style={{
           display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer',
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
@@ -570,13 +580,24 @@ export default function InformesPage() {
           <span style={{ fontSize: 15, fontWeight: 800, color: INK }}>Informe de producción</span>
           <span style={{ fontSize: 12, color: MUT }}>Producción valorizada, meta del día y faltante por tipo de brigada o técnico</span>
         </span>
-        <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>{prodAbierto ? '▲' : '▼'}</span>
+        <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>▸ Abrir</span>
       </button>
 
-      {/* Panel de filtros de Producción */}
+      {/* Modal — Informe de Producción */}
       {prodAbierto && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+        <div className="modal-back open" style={{ zIndex: 9999 }} onClick={e => { if (e.target === e.currentTarget) setProdAbierto(false); }}>
+          <div className="modal-box" style={{ width: '95vw', maxWidth: 1400, height: '90vh' }}>
+            <div className="modal-head">
+              <div>
+                <h3>💰 Informe de producción</h3>
+                <div className="sub">Producción valorizada, meta del día y faltante</div>
+              </div>
+              <button className="modal-close" onClick={() => setProdAbierto(false)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ padding: 18, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
             <div>
               <label style={lbl}>ZONA</label>
               <select style={inp} value={prodZona} onChange={e => setProdZona(e.target.value)}>
@@ -633,18 +654,25 @@ export default function InformesPage() {
               </>
             )}
           </div>
-        </div>
-      )}
+              </div>
 
-      {/* Error de producción */}
-      {prodAbierto && prodError && (
+              {/* Error de producción */}
+              {prodError && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 14, color: colors.err, fontSize: 13 }}>
           ⚠ {prodError}
         </div>
       )}
 
-      {/* Tabla y Resultados de Producción */}
-      {prodAbierto && prodGenerado && !prodError && (
+              {/* Barra de carga de producción */}
+              {prodLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <div className="spinner" style={{ width: 20, height: 20, borderWidth: 3 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: INK }}>Buscando información…</span>
+        </div>
+      )}
+
+              {/* Tabla y Resultados de Producción */}
+              {prodGenerado && !prodError && !prodLoading && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
             Producción {prodMes}{prodTodosDias ? ' · todos los días' : (prodFecha ? ` · ${prodFecha}` : '')}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
@@ -744,13 +772,18 @@ export default function InformesPage() {
             )}
           </div>
         </div>
+              )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* ═══ 2. INFORME DE DIGITACIÓN ═══ */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <button
-        onClick={() => setDigAbierto(v => !v)}
+        onClick={() => setDigAbierto(true)}
         style={{
           display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer',
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
@@ -761,13 +794,24 @@ export default function InformesPage() {
           <span style={{ fontSize: 15, fontWeight: 800, color: INK }}>Informe digitación</span>
           <span style={{ fontSize: 12, color: MUT }}>Órdenes digitadas por día y tipo de orden</span>
         </span>
-        <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>{digAbierto ? '▲' : '▼'}</span>
+        <span style={{ marginLeft: 'auto', color: MUT, fontSize: 13 }}>▸ Abrir</span>
       </button>
 
-      {/* Panel de filtros de Digitación */}
+      {/* Modal — Informe de Digitación */}
       {digAbierto && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+        <div className="modal-back open" style={{ zIndex: 9999 }} onClick={e => { if (e.target === e.currentTarget) setDigAbierto(false); }}>
+          <div className="modal-box" style={{ width: '95vw', maxWidth: 1400, height: '90vh' }}>
+            <div className="modal-head">
+              <div>
+                <h3>📋 Informe digitación</h3>
+                <div className="sub">Órdenes digitadas por día y tipo de orden</div>
+              </div>
+              <button className="modal-close" onClick={() => setDigAbierto(false)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ padding: 18, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
             <div>
               <label style={lbl}>ZONA</label>
               <select style={inp} value={digZona} onChange={e => setDigZona(e.target.value)}>
@@ -835,18 +879,25 @@ export default function InformesPage() {
           {(digHoraDesde && !digHoraHasta) || (!digHoraDesde && digHoraHasta) ? (
             <div style={{ fontSize: 11.5, color: colors.warn }}>Para filtrar por hora indica DESDE y HASTA; si no, se ignora.</div>
           ) : null}
-        </div>
-      )}
+              </div>
 
-      {/* Error de digitación */}
-      {digAbierto && digError && (
+              {/* Error de digitación */}
+              {digError && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 14, color: colors.err, fontSize: 13 }}>
           ⚠ {digError}
         </div>
       )}
 
-      {/* Resultados de Digitación */}
-      {digAbierto && digGenerado && !digError && (
+              {/* Barra de carga de digitación */}
+              {digLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <div className="spinner" style={{ width: 20, height: 20, borderWidth: 3 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: INK }}>Buscando información…</span>
+        </div>
+      )}
+
+              {/* Resultados de Digitación */}
+              {digGenerado && !digError && !digLoading && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
             Digitación {digMes}{digTodosDias ? ' · todos los días' : (digFecha ? ` · ${digFecha}` : '')}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
@@ -863,7 +914,7 @@ export default function InformesPage() {
                     {digTienePorTecnico && <th style={{ ...th, textAlign: 'left' }}>Técnico</th>}
                     <th style={{ ...th, textAlign: 'left' }}>Zona</th>
                     <th style={{ ...th, textAlign: 'left' }}>Tipo de brigada</th>
-                    {COLS.map(c => <th key={c.key} style={th}>{c.label}</th>)}
+                    {visibleColsDig.map(c => <th key={c.key} style={th}>{c.label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -877,7 +928,7 @@ export default function InformesPage() {
                       )}
                       <td style={{ ...td, textAlign: 'left', color: 'var(--text-body)' }}>{String(r.zona ?? '')}</td>
                       <td style={{ ...td, textAlign: 'left', color: 'var(--text-body)' }}>{String(r.brigada ?? '')}</td>
-                      {COLS.map(c => (
+                      {visibleColsDig.map(c => (
                         <td key={c.key} style={{ ...td, fontWeight: c.key === 'total' ? 800 : 400, color: c.key === 'total' ? INK : (c.key === 'fallidas' ? colors.err : 'var(--text-body)') }}>
                           {Number(r[c.key]) || 0}
                         </td>
@@ -892,12 +943,17 @@ export default function InformesPage() {
                       {digTienePorTecnico && <td style={td} />}
                       <td style={td} />
                       <td style={td} />
-                      {COLS.map(c => <td key={c.key} style={{ ...td, fontWeight: 800, color: INK }}>{digTotales[c.key]}</td>)}
+                      {visibleColsDig.map(c => <td key={c.key} style={{ ...td, fontWeight: 800, color: INK }}>{digTotales[c.key]}</td>)}
                     </tr>
                   </tfoot>
                 )}
               </table>
             )}
+          </div>
+        </div>
+              )}
+              </div>
+            </div>
           </div>
         </div>
       )}
