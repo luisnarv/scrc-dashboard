@@ -25,41 +25,43 @@ function isProvAccount(cat: string): boolean {
 }
 
 /**
- * Suma del ingreso de ingeniería eléctrica sobre filas OTC ya filtradas.
- * Regla por (Mes, Proyecto): si el grupo tiene Ingreso Real Facturado válido mayor a 0,
- * se usa ese exclusivamente; si no tiene Ingreso Real Facturado en ese mes/proyecto,
- * se usa automáticamente el Ingreso Provisional (devengado no facturado).
+ * Agregación financiera real de la OTC (Opción A: Neto contable exacto igual a la tabla dinámica de Excel).
+ * Suma algebraicamente todos los registros del grupo 01 Ingresos (devengados no facturados vs devengados facturados)
+ * y los costos reales (02 Costos Directos + 03 Otros Costos).
  */
-export function ingresoElectrica(rows: CostoRecord[]): number {
-  const grupos = new Map<string, { real: number; prov: number; tieneReal: boolean }>();
+export function otcAgg(rows: CostoRecord[]): OtcAgg {
+  let ing = 0;
+  let cos = 0;
+
   for (const r of rows) {
-    const cat = String(r.Categoria || '').toUpperCase();
-    const esReal = isRealAccount(cat);
-    const esProv = isProvAccount(cat);
-    if (!esReal && !esProv) continue;
-    const k = `${r.Mes || ''}|${r.Proyecto || ''}`;
-    const g = grupos.get(k) || { real: 0, prov: 0, tieneReal: false };
-    if (esReal) { g.real += Number(r.Valor) || 0; g.tieneReal = true; }
-    else { g.prov += Number(r.Valor) || 0; }
-    grupos.set(k, g);
+    const v = Number(r.Valor) || 0;
+    const cat = (String(r.Categoria || '') + ' ' + String(r.NombreCuenta || '') + ' ' + String(r.CuentaMayor || '')).toUpperCase();
+    const grp = String(r.Grupo || '').toUpperCase();
+    
+    const isIngreso = r.es_ingreso === true || 
+      grp.startsWith('01') ||
+      grp.includes('INGRES') ||
+      cat.includes('DEVENGADO') ||
+      cat.includes('INGRES') ||
+      cat.includes('CLIENTES NACIONALES') ||
+      cat.includes('DEVOLUCIONES EN VENTAS');
+
+    if (isIngreso) {
+      ing += v;
+    } else {
+      cos += v;
+    }
   }
-  let total = 0;
-  for (const g of grupos.values()) {
-    total += (g.tieneReal && g.real > 0) ? g.real : g.prov;
-  }
-  return total;
+
+  const ingPositivo = Math.abs(ing);
+  const utilidad = ingPositivo - cos;
+  const margen = ingPositivo > 0 ? utilidad / ingPositivo : null;
+
+  return { ingresos: ingPositivo, costos: cos, utilidad, margen };
 }
 
-export function otcAgg(rows: CostoRecord[]): OtcAgg {
-  const ing = ingresoElectrica(rows);
-  // Costos = todo lo que NO sea cuenta de ingreso ni provisión/devengado.
-  const cos = rows
-    .filter(r => {
-      const c = String(r.Categoria || '').toLowerCase();
-      return !c.includes('ingres') && !c.includes('provision') && !c.includes('devengado') && !c.includes('nacionales');
-    })
-    .reduce((s, r) => s + (Number(r.Valor) || 0), 0);
-  return { ingresos: ing, costos: cos, utilidad: ing - cos, margen: ing ? (ing - cos) / ing : null };
+export function ingresoElectrica(rows: CostoRecord[]): number {
+  return otcAgg(rows).ingresos;
 }
 
 export function otcAggMes(rows: CostoRecord[], mes: string): OtcAgg {

@@ -27,7 +27,7 @@ export default function ResumenPage() {
   useEffect(() => {
     if (!initMes.current && mesList.length) {
       initMes.current = true;
-      setFilters({ mes: [] });
+      setFilters({ mes: [], fecha: 'ALL' });
     }
   }, [mesList, setFilters]);
 
@@ -61,8 +61,9 @@ export default function ResumenPage() {
     const metaPesos = rawF.reduce((s, r) => s + num(r.Meta_Facturacion), 0);
     const cump = metaPesos ? pSIP.prod / metaPesos : null;
 
-    // ---- Series 12m (Health) ----
-    const meses12 = mesList.slice(-12);
+    // ---- Series del año (2026 / año seleccionado, respetando filtro de mes si hay selección) ----
+    const mesesAno = mesList.filter(m => (F.ano !== 'ALL' ? m.startsWith(F.ano) : m.startsWith('2026')));
+    const meses12 = F.mes.length ? mesesAno.filter(m => F.mes.includes(m)) : mesesAno;
     const seriesOTC = meses12.map(m => otcAggMes(raw.costos.filter(filtBase), m));
     const prodMes = meses12.map(m => {
       const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
@@ -107,9 +108,12 @@ export default function ResumenPage() {
     // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
     const ingElec = ingresoElectrica(cosF);
 
+    const rawBase = raw.raw.filter(filtBase);
+    const cosBase = raw.costos.filter(filtBase);
+
     // Evolutivos 12m
     const efMes = meses12.map(m => {
-      const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
+      const rr = rawBase.filter(x => String(x.Fecha || '').startsWith(m));
       const ef = rr.reduce((s, x) => s + num(x.Efectivas), 0);
       const vi = rr.reduce((s, x) => s + num(x.Visitas), 0);
       const ing = rr.reduce((s, x) => s + num(x.Ingresos), 0);
@@ -123,10 +127,21 @@ export default function ResumenPage() {
         ingXbrig: nb ? ing / nb : 0, 
         costXbrig: nb ? co / nb : 0 
       };
+    }).map((item, idx, arr) => {
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const dEficPp = prev ? item.efic - prev.efic : null;
+      const dCumpPp = prev ? item.cumpProd - prev.cumpProd : null;
+      const dIngBrigPct = prev && prev.ingXbrig > 0 ? ((item.ingXbrig - prev.ingXbrig) / prev.ingXbrig) * 100 : null;
+      return {
+        ...item,
+        dEficPp,
+        dCumpPp,
+        dIngBrigPct,
+      };
     });
 
     const efMesPorTipo = meses12.flatMap(m => {
-      const rr = rawF.filter(x => String(x.Fecha || '').startsWith(m));
+      const rr = rawBase.filter(x => String(x.Fecha || '').startsWith(m));
       const tmap: Record<string, { ef: number; vi: number; ing: number; co: number; me: number; b: Set<unknown>; tecs: Record<string, { nombre: string; ef: number; vi: number; ing: number; co: number; me: number; }> }> = {};
       rr.forEach(r => {
         const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || r['Tipo de cuadrilla '] || 'Sin tipo').trim();
@@ -156,28 +171,85 @@ export default function ResumenPage() {
     });
 
     // Acumulado dinámico: ventana seleccionada vs previa equivalente
-    // "Todos" (mes=[]) => la ventana acumulada abarca TODA la historia (no solo el
-    // último mes); con meses seleccionados, esos meses.
-    const selWin = F.mes.length ? [...F.mes].sort() : [...mesList];
+    // "Todos" (mes=[]) => la ventana acumulada abarca el año seleccionado (2026);
+    // con meses seleccionados, esos meses.
+    const selWin = F.mes.length ? [...F.mes].sort() : [...meses12];
     const prevWin = ventanaPrevia(selWin, mesList);
     const winA = aggVentana(raw.raw, selWin, filtBase);
     const winB = aggVentana(raw.raw, prevWin, filtBase);
     const winIncompleto = prevWin.length < selWin.length;
 
-    // Series Financieras Reales (OTC) 12m
+    // Series Financieras Reales (OTC)
     const evolutivoOTC = meses12.map(m => {
-      const cosM = cosF.filter(c => c.Mes === m);
+      const cosM = cosBase.filter(c => c.Mes === m);
       const agg = otcAgg(cosM);
+      const ing = agg.ingresos || 0;
+      const cost = agg.costos || 0;
+      const utilidad = ing - cost;
+      const margenPct = ing > 0 ? ((ing - cost) / ing) * 100 : 0;
+      const costoPct = ing > 0 ? (cost / ing) * 100 : 0;
       return {
         mes: m,
-        ing: agg.ingresos || 0,
-        cost: agg.costos || 0,
-        margen: agg.utilidad || 0
+        ing,
+        cost,
+        margen: utilidad,
+        margenPct,
+        costoPct,
+      };
+    }).map((item, idx, arr) => {
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const dIngPct = prev && prev.ing > 0 ? ((item.ing - prev.ing) / prev.ing) * 100 : null;
+      const dCostPct = prev && prev.cost > 0 ? ((item.cost - prev.cost) / prev.cost) * 100 : null;
+      const dMargenPp = prev ? item.margenPct - prev.margenPct : null;
+      const dCostPp = prev ? item.costoPct - prev.costoPct : null;
+      return {
+        ...item,
+        dIngPct,
+        dCostPct,
+        dMargenPp,
+        dCostPp,
+      };
+    });
+
+    // Series de Combustible 12m (Gasto Total OTC, Brigadas SIPREM, Ratio por Brigada)
+    // Se toma la sumatoria neta contable de la OTC (igual que la tabla dinámica de Excel),
+    // cancelando automáticamente facturas y sus reversiones de provisión.
+    const isCombustible = (cat: unknown, cuenta?: unknown) => {
+      const s = (String(cat || '') + ' ' + String(cuenta || '')).toUpperCase();
+      return s.includes('COMBUSTIB') || s.includes('GASOLINA') || s.includes('LUBRICANTE');
+    };
+
+    const evolutivoCombustible = meses12.map(m => {
+      const cosM = cosBase.filter(c => c.Mes === m && isCombustible(c.Categoria, c.NombreCuenta));
+      const gastoTotal = cosM.reduce((s, c) => s + num(c.Valor), 0);
+      const cosTotalMes = cosBase.filter(c => c.Mes === m && !c.es_ingreso).reduce((s, c) => s + num(c.Valor), 0);
+
+      const rr = rawBase.filter(x => String(x.Fecha || '').startsWith(m));
+      const brigadas = new Set(rr.map(x => x.Cedula)).size;
+      const ratio = brigadas > 0 ? gastoTotal / brigadas : 0;
+      const pctSobreCosto = cosTotalMes > 0 ? (gastoTotal / cosTotalMes) * 100 : 0;
+
+      return {
+        mes: m,
+        gastoTotal,
+        brigadas,
+        ratio,
+        pctSobreCosto,
+        numRegistros: cosM.length,
+      };
+    }).map((item, idx, arr) => {
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const dGastoPct = prev && prev.gastoTotal > 0 ? ((item.gastoTotal - prev.gastoTotal) / prev.gastoTotal) * 100 : null;
+      const dRatioPct = prev && prev.ratio > 0 ? ((item.ratio - prev.ratio) / prev.ratio) * 100 : null;
+      return {
+        ...item,
+        dGastoPct,
+        dRatioPct,
       };
     });
 
     return {
-      meses12, efMes, efMesPorTipo, evolutivoOTC,
+      meses12, efMes, efMesPorTipo, evolutivoOTC, evolutivoCombustible,
       winA, winB, winIncompleto, selLbl: fmtRangoMeses(selWin), prevLbl: fmtRangoMeses(prevWin)
     };
   }, [raw, filters, mesList]);
@@ -187,27 +259,491 @@ export default function ResumenPage() {
   if (!data) return null;
 
   const {
-    meses12, efMes, efMesPorTipo, evolutivoOTC,
+    meses12, efMes, efMesPorTipo, evolutivoOTC, evolutivoCombustible,
     winA, winB, winIncompleto, selLbl, prevLbl
   } = data;
 
   // ---- Configs de gráficos (evolutivos) ----
   const line = (label: string, arr: number[], kind: 'pct' | 'cop', color?: string) => ({
     type: 'line' as const,
-    data: { labels: meses12, datasets: [{ label, data: arr, borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip), backgroundColor: (color || (kind === 'cop' ? CFG.otc : CFG.sip)) + '33', fill: true, tension: 0.3 }] },
-    options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label,
+          data: arr,
+          borderColor: color || (kind === 'cop' ? CFG.otc : CFG.sip),
+          backgroundColor: (color || (kind === 'cop' ? CFG.otc : CFG.sip)) + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => `${ctx.dataset.label}: ${kind === 'cop' ? fmtCOP(Number(ctx.raw)) : Number(ctx.raw).toFixed(1) + '%'}`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%'),
+          },
+        },
+      },
+    },
   });
 
   // Operativos
-  const eficCfg = line('Eficiencia %', efMes.map((x: any) => x.efic), 'pct', CFG.sip);
-  const cumpProdCfg = line('Cumplimiento %', efMes.map((x: any) => x.cumpProd), 'pct', CFG.sip);
-  const ingBrigCfg = line('Prod. Valorizada / brigada', efMes.map((x: any) => x.ingXbrig), 'cop', CFG.sip);
-  const costBrigCfg = line('Costo Estimado / brigada', efMes.map((x: any) => x.costXbrig), 'cop', CFG.warn);
+  const eficCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Eficiencia %',
+          data: efMes.map((x: any) => x.efic),
+          borderColor: CFG.sip,
+          backgroundColor: CFG.sip + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = efMes[idx];
+              const pct = Number(ctx.raw).toFixed(1) + '%';
+              const varStr = item?.dEficPp !== null && item?.dEficPp !== undefined
+                ? ` · Var: ${item.dEficPp >= 0 ? '+' : ''}${item.dEficPp.toFixed(1)} pp vs mes ant.`
+                : '';
+              const detalle = item ? ` (${fmtN(item.ef)} efectivas / ${fmtN(item.vi)} visitas)` : '';
+              return `Eficiencia: ${pct}${detalle}${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 0,
+          beginAtZero: true,
+          suggestedMax: Math.max(...efMes.map((x: any) => Number(x.efic) || 0), 0) > 0 
+            ? Math.ceil(Math.max(...efMes.map((x: any) => Number(x.efic) || 0), 0) / 5) * 5 
+            : 100,
+          ticks: {
+            callback: (v: unknown) => Number(v).toFixed(1) + '%',
+          },
+        },
+      },
+    },
+  };
+
+  const cumpProdCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Cumplimiento %',
+          data: efMes.map((x: any) => x.cumpProd),
+          borderColor: CFG.sip,
+          backgroundColor: CFG.sip + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = efMes[idx];
+              const pct = Number(ctx.raw).toFixed(1) + '%';
+              const varStr = item?.dCumpPp !== null && item?.dCumpPp !== undefined
+                ? ` · Var: ${item.dCumpPp >= 0 ? '+' : ''}${item.dCumpPp.toFixed(1)} pp vs mes ant.`
+                : '';
+              const detalle = item ? ` (${fmtN(item.ef)} efectivas / ${fmtN(item.me)} asignadas)` : '';
+              return `Cumplimiento: ${pct}${detalle}${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 0,
+          beginAtZero: true,
+          suggestedMax: Math.max(...efMes.map((x: any) => Number(x.cumpProd) || 0), 0) > 0 
+            ? Math.ceil(Math.max(...efMes.map((x: any) => Number(x.cumpProd) || 0), 0) / 5) * 5 
+            : 100,
+          ticks: {
+            callback: (v: unknown) => Number(v).toFixed(1) + '%',
+          },
+        },
+      },
+    },
+  };
+
+  const ingBrigCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Prod. Valorizada / brigada',
+          data: efMes.map((x: any) => x.ingXbrig),
+          borderColor: CFG.sip,
+          backgroundColor: CFG.sip + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = efMes[idx];
+              const cop = fmtCOP(Number(ctx.raw));
+              const varStr = item?.dIngBrigPct !== null && item?.dIngBrigPct !== undefined
+                ? ` · Var: ${item.dIngBrigPct >= 0 ? '+' : ''}${item.dIngBrigPct.toFixed(1)}% vs mes ant.`
+                : '';
+              return `Prod. / brigada: ${cop}${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v: unknown) => fmtCOP(Number(v)),
+          },
+        },
+      },
+    },
+  };
   
   // Financieros OTC
-  const otcIngCfg = line('Ingreso Real (OTC)', evolutivoOTC.map((x: any) => x.ing), 'cop', CFG.otc);
-  const otcCostCfg = line('Costo Real (OTC)', evolutivoOTC.map((x: any) => x.cost), 'cop', CFG.err);
-  const otcMargenCfg = line('Margen Real', evolutivoOTC.map((x: any) => x.margen), 'cop', CFG.ok);
+  const otcIngCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Ingreso Real (OTC)',
+          data: evolutivoOTC.map((x: any) => x.ing),
+          borderColor: CFG.otc,
+          backgroundColor: CFG.otc + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = evolutivoOTC[idx];
+              const cop = fmtCOP(Number(ctx.raw));
+              const varStr = item?.dIngPct !== null && item?.dIngPct !== undefined
+                ? ` · Var: ${item.dIngPct >= 0 ? '+' : ''}${item.dIngPct.toFixed(1)}% vs mes ant.`
+                : '';
+              return `Ingreso Real: ${cop}${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v: unknown) => fmtCOP(Number(v)),
+          },
+        },
+      },
+    },
+  };
+
+  const otcCostCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Costo Real (%)',
+          data: evolutivoOTC.map((x: any) => x.costoPct),
+          borderColor: CFG.err,
+          backgroundColor: CFG.err + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = evolutivoOTC[idx];
+              const pct = Number(ctx.raw).toFixed(1) + '%';
+              const cop = item ? fmtCOP(item.cost) : '';
+              const varStr = item?.dCostPct !== null && item?.dCostPct !== undefined
+                ? ` · Var: ${item.dCostPct >= 0 ? '+' : ''}${item.dCostPct.toFixed(1)}% vs mes ant.`
+                : '';
+              return `Costo Real: ${pct} (${cop})${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v: unknown) => Number(v).toFixed(1) + '%',
+          },
+        },
+      },
+    },
+  };
+
+  const otcMargenCfg = {
+    type: 'line' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          label: 'Margen Real (%)',
+          data: evolutivoOTC.map((x: any) => x.margenPct),
+          borderColor: CFG.ok,
+          backgroundColor: CFG.ok + '33',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      plugins: {
+        ...baseOpt.plugins,
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx: any) => {
+              const idx = ctx.dataIndex;
+              const item = evolutivoOTC[idx];
+              const pct = Number(ctx.raw).toFixed(1) + '%';
+              const cop = item ? fmtCOP(item.margen) : '';
+              const varStr = item?.dMargenPp !== null && item?.dMargenPp !== undefined
+                ? ` · Var: ${item.dMargenPp >= 0 ? '+' : ''}${item.dMargenPp.toFixed(1)} pp vs mes ant.`
+                : '';
+              return `Margen Real: ${pct} (${cop})${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (v: unknown) => Number(v).toFixed(1) + '%',
+          },
+        },
+      },
+    },
+  };
+
+  // Combustible (Barras Brigadas + Línea Ratio + Línea Gasto Total)
+  const combustibleCfg = {
+    type: 'bar' as const,
+    data: {
+      labels: meses12,
+      datasets: [
+        {
+          type: 'bar' as const,
+          label: 'Cantidad de brigadas',
+          data: evolutivoCombustible.map((x: any) => x.brigadas),
+          backgroundColor: 'rgba(57, 73, 171, 0.25)',
+          borderColor: 'rgba(57, 73, 171, 0.7)',
+          borderWidth: 1.5,
+          borderRadius: 4,
+          maxBarThickness: 28,
+          yAxisID: 'yBrigadas',
+          order: 2,
+        },
+        {
+          type: 'line' as const,
+          label: 'Gasto Total Combustible (OTC)',
+          data: evolutivoCombustible.map((x: any) => x.gastoTotal),
+          borderColor: '#C62828',
+          backgroundColor: 'rgba(198, 40, 40, 0.08)',
+          borderWidth: 3.2,
+          pointRadius: 4.5,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#fff',
+          pointBorderColor: '#C62828',
+          pointBorderWidth: 2,
+          yAxisID: 'yTotal',
+          tension: 0.3,
+          fill: false,
+          order: 0,
+        },
+        {
+          type: 'line' as const,
+          label: 'Ratio Combustible / Brigada',
+          data: evolutivoCombustible.map((x: any) => x.ratio),
+          borderColor: '#F57C00',
+          backgroundColor: '#F57C00',
+          borderWidth: 2.5,
+          borderDash: [5, 4],
+          pointStyle: 'rectRot',
+          pointRadius: 4.5,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#fff',
+          pointBorderColor: '#F57C00',
+          pointBorderWidth: 2,
+          yAxisID: 'yRatio',
+          tension: 0.3,
+          fill: false,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      ...baseOpt,
+      interaction: { mode: 'index' as const, intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'bottom' as const,
+          labels: { boxWidth: 12, font: { size: 10.5, weight: 600 } },
+        },
+        tooltip: {
+          mode: 'index' as const,
+          intersect: false,
+          callbacks: {
+            label: (ctx: any) => {
+              const val = Number(ctx.raw) || 0;
+              const item = evolutivoCombustible[ctx.dataIndex];
+              if (ctx.dataset.label?.includes('brigadas')) {
+                return `Brigadas activas: ${fmtN(val)} brigadas`;
+              }
+              if (ctx.dataset.label?.includes('Ratio')) {
+                const varStr = item?.dRatioPct !== null && item?.dRatioPct !== undefined
+                  ? ` (${item.dRatioPct >= 0 ? '+' : ''}${item.dRatioPct.toFixed(1)}% vs mes ant.)`
+                  : '';
+                return `Ratio por brigada: ${fmtCOP(val)}${varStr}`;
+              }
+              const varStr = item?.dGastoPct !== null && item?.dGastoPct !== undefined
+                ? ` (${item.pctSobreCosto.toFixed(1)}% del costo total · ${item.dGastoPct >= 0 ? '+' : ''}${item.dGastoPct.toFixed(1)}% vs mes ant.)`
+                : ` (${item?.pctSobreCosto?.toFixed(1) || 0}% del costo total)`;
+              return `Gasto Total: ${fmtCOP(val)}${varStr}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false } },
+        yTotal: {
+          type: 'linear' as const,
+          position: 'left' as const,
+          beginAtZero: true,
+          ticks: { callback: (v: unknown) => fmtCOP(Number(v)) },
+          title: { display: true, text: 'Gasto Total COP', font: { size: 10.5, weight: 600 }, color: '#C62828' },
+        },
+        yRatio: {
+          type: 'linear' as const,
+          position: 'right' as const,
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: { callback: (v: unknown) => fmtCOP(Number(v)) },
+          title: { display: true, text: 'Ratio / Brigada', font: { size: 10.5, weight: 600 }, color: '#F57C00' },
+        },
+        yBrigadas: {
+          type: 'linear' as const,
+          position: 'right' as const,
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: { precision: 0, callback: (v: unknown) => `${Number(v)} brig.` },
+          title: { display: false },
+        },
+      },
+    },
+  };
+
+  const combustibleTable = {
+    columns: [
+      'Mes',
+      'Gasto Neto Combustible (OTC)',
+      'Registros Contables',
+      'Brigadas Activas (SIPREM)',
+      'Ratio Promedio / Brigada',
+      'Var % Gasto vs Mes Ant.',
+      'Var % Ratio vs Mes Ant.',
+    ],
+    rows: evolutivoCombustible.map((x: any, idx: number) => {
+      const prev = idx > 0 ? evolutivoCombustible[idx - 1] : null;
+      const dGasto = prev && prev.gastoTotal > 0 ? (x.gastoTotal - prev.gastoTotal) / prev.gastoTotal : null;
+      const dRatio = prev && prev.ratio > 0 ? (x.ratio - prev.ratio) / prev.ratio : null;
+
+      const fmtVar = (v: number | null) => {
+        if (v === null || isNaN(v)) return '—';
+        const pct = (v * 100).toFixed(1) + '%';
+        return v > 0 ? `+${pct}` : pct;
+      };
+
+      return [
+        x.mes,
+        fmtCOP(x.gastoTotal),
+        `${x.numRegistros} registros`,
+        fmtN(x.brigadas),
+        fmtCOP(x.ratio),
+        fmtVar(dGasto),
+        fmtVar(dRatio),
+      ];
+    }),
+  };
 
   const buildModalConfig = (metric: 'efic' | 'cumpProd' | 'ingXbrig' | 'costXbrig', kind: 'pct' | 'cop') => {
     const tipos = Array.from(new Set(efMesPorTipo.map((x: any) => x.tipo)));
@@ -223,7 +759,16 @@ export default function ResumenPage() {
     return {
       type: 'line' as const,
       data: { labels: meses12, datasets },
-      options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: true } }, scales: { y: { ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } } } },
+      options: { 
+        ...baseOpt, 
+        plugins: { ...baseOpt.plugins, legend: { display: true } }, 
+        scales: { 
+          y: { 
+            ...(metric === 'cumpProd' || metric === 'efic' ? { min: 0, beginAtZero: true } : {}),
+            ticks: { callback: (v: unknown) => (kind === 'cop' ? fmtCOP(Number(v)) : Number(v).toFixed(1) + '%') } 
+          } 
+        } 
+      },
     };
   };
 
@@ -263,7 +808,7 @@ export default function ResumenPage() {
     <>
       <div className="section" style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '2px solid var(--border)' }}>
         <h2>📈 Estratégico · Evolutivos</h2>
-        <div className="sec-sub">Análisis histórico 12 meses segmentado por Operación y Resultados Financieros</div>
+        <div className="sec-sub">Análisis histórico segmentado por Operación y Resultados Financieros</div>
       </div>
 
       <div className="grid-2" style={{ alignItems: 'start', gap: 24 }}>
@@ -271,12 +816,12 @@ export default function ResumenPage() {
         {/* ---------- IZQUIERDA: OPERACIÓN ---------- */}
         <div>
           <div className="section" style={{ borderTop: `4px solid ${CFG.sip}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ color: CFG.sip, marginBottom: 16 }}>🛠️ [OPERACIÓN]</h2>
+            <h2 style={{ color: CFG.sip, marginBottom: 16 }}>🛠️ OPERACIÓN</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Estimaciones basadas en tarifarios y reportes de terreno</div>
             <div style={{ display: 'grid', gap: 16 }}>
               <ChartCard id="r-efic" title="Evolutivo de Eficiencia %" config={eficCfg as never} modalConfig={eficModalCfg as never} detailTableData={eficTable} height="short" hasDetail />
               <ChartCard id="r-cumpprod" title="Evolutivo de Productividad (Cumplimiento %)" subtitle="Efectivas vs Asignación" config={cumpProdCfg as never} modalConfig={cumpProdModalCfg as never} detailTableData={cumpProdTable} height="short" hasDetail />
-              <ChartCard id="r-ingbrig" title="Producción Valorizada (Estimada)" subtitle="Ingreso teórico promedio por brigada" config={ingBrigCfg as never} modalConfig={ingBrigModalCfg as never} detailTableData={ingBrigTable} height="short" hasDetail />
+              <ChartCard id="r-ingbrig" title="Producción Valorizada (Estimada)" subtitle="Ingreso teórico promedio por brigada y variación % mensual" config={ingBrigCfg as never} modalConfig={ingBrigModalCfg as never} detailTableData={ingBrigTable} height="short" hasDetail />
             </div>
           </div>
         </div>
@@ -284,12 +829,21 @@ export default function ResumenPage() {
         {/* ---------- DERECHA: FINANCIERO ---------- */}
         <div>
           <div className="section" style={{ borderTop: `4px solid ${CFG.otc}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 [FINANCIERO]</h2>
+            <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 FINANCIERO</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales extraídos de la contabilidad (Fuente: OTC)</div>
             <div style={{ display: 'grid', gap: 16 }}>
-              <ChartCard id="r-otc-ing" title="Ingreso Real (OTC)" subtitle="Facturación contable consolidada" config={otcIngCfg as never} height="short" />
-              <ChartCard id="r-otc-cost" title="Costo Real (OTC)" subtitle="Costos reales operativos reportados" config={otcCostCfg as never} height="short" />
-              <ChartCard id="r-otc-mar" title="Margen Real" subtitle="Rentabilidad financiera neta (Ingresos - Costos)" config={otcMargenCfg as never} height="short" />
+              <ChartCard id="r-otc-ing" title="Ingreso Real (OTC)" subtitle="Facturación contable consolidada y variación % mensual" config={otcIngCfg as never} height="short" />
+              <ChartCard id="r-otc-cost" title="Costo Real (%) (OTC)" subtitle="Ratio de costo sobre ingresos: Costos / Ingresos" config={otcCostCfg as never} height="short" />
+              <ChartCard id="r-otc-mar" title="Margen Real (%)" subtitle="Rentabilidad financiera neta: (Ingresos - Costos) / Ingresos" config={otcMargenCfg as never} height="short" />
+              <ChartCard
+                id="r-otc-combustible"
+                title="Evolutivo de Combustible y Brigadas"
+                subtitle="Gasto total (OTC), brigadas activas (SIPREM) y ratio de combustible por brigada"
+                config={combustibleCfg as never}
+                height="normal"
+                hasDetail
+                detailTableData={combustibleTable}
+              />
             </div>
           </div>
         </div>

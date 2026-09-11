@@ -20,12 +20,14 @@ interface ChartCardProps {
     categoryIndex?: number;
   };
   detailActiveFilters?: { label: string; value: string }[];
+  singleCategorySelect?: boolean;
+  defaultSelectedCategory?: string;
   onExpand?: () => void;
   customBody?: React.ReactNode;
   customLayout?: (canvas: React.ReactNode) => React.ReactNode;
 }
 
-export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters, onExpand, customBody, customLayout }: ChartCardProps) {
+export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters, singleCategorySelect, defaultSelectedCategory, onExpand, customBody, customLayout }: ChartCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
@@ -104,6 +106,8 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           modalConfig={modalConfig}
           tableData={detailTableData as any}
           activeFilters={detailActiveFilters}
+          singleCategorySelect={singleCategorySelect}
+          defaultSelectedCategory={defaultSelectedCategory}
         />
       )}
     </>

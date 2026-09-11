@@ -24,8 +24,8 @@ export default function Filters() {
   };
 
   const formatMes = (m: string) => {
-    // Si están viendo "Todos los años", dejamos el año visible para no confundir.
-    if (filters.ano === 'ALL') return m; 
+    if (!m) return '';
+    if (filters.ano === 'ALL') return m;
     const partes = m.split('-');
     if (partes.length !== 2) return m;
     const n = parseInt(partes[1], 10);
@@ -33,9 +33,12 @@ export default function Filters() {
     return nombres[n - 1] || partes[1];
   };
 
+  const mesEjecucion = mesList[mesList.length - 1] || '';
+  const mesActivoNombre = filters.mes.length === 1 ? formatMes(filters.mes[0]) : formatMes(mesEjecucion);
+
   const mesLabel =
     filters.mes.length === 0
-      ? 'Todos'
+      ? `Todos (${formatMes(mesEjecucion)})`
       : filters.mes.length === 1
       ? formatMes(filters.mes[0])
       : `${filters.mes.length} meses`;
@@ -67,7 +70,7 @@ export default function Filters() {
   const visibleMeses = filters.ano === 'ALL' ? mesList : mesList.filter(m => m.startsWith(filters.ano));
 
   return (
-    <div id="filters-container" className="filtros">
+    <div id="filters-container" className="filtros" style={{ position: 'relative' }}>
       <label htmlFor="select-proceso">Proceso</label>
       <select
         id="select-proceso"
@@ -144,7 +147,7 @@ export default function Filters() {
                 checked={filters.mes.length === 0}
                 onChange={() => setFilters({ mes: [], fecha: 'ALL' })}
               />
-              Todos
+              Todos ({formatMes(mesEjecucion)})
             </label>
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
             {visibleMeses.map((m, idx) => {
@@ -165,9 +168,9 @@ export default function Filters() {
         id="select-fecha"
         value={filters.fecha}
         onChange={e => setFilters({ fecha: e.target.value })}
+        style={{ ...ctrl, minWidth: 130 }}
       >
-        <option value="ALL">Todos</option>
-        {/* value = fecha COMPLETA (el filtro compara r.Fecha === F.fecha); se muestra solo el día */}
+        <option value="ALL">Todos los días ({mesActivoNombre})</option>
         {fechaList.map(f => <option key={f} value={f}>{String(f).slice(0, 10).split('-')[2] || f}</option>)}
       </select>
 

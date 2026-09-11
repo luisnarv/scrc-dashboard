@@ -93,6 +93,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const versionsRef = useRef<Record<string, string | null>>({});
   const loadingMonths = useRef<Set<string>>(new Set());
+  const initialDateSet = useRef(false);
 
   const setFilters = useCallback((f: Partial<Filters>) => {
     setFiltersState(prev => ({ ...prev, ...f }));
@@ -148,10 +149,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         if (!actual) { setLoading(false); return; }
         dashboardRepo.setCurrentMonth(actual);
 
-        // 2) Mes actual (cache-first): apenas llega, se muestra.
+        // 2) Mes actual: revalida con el servidor para traer la información más reciente.
         const actualAno = actual.split('-')[0];
         setFiltersState(prev => ({ ...prev, ano: actualAno, mes: [actual] }));
-        const res = await dashboardRepo.getMonth(actual, { serverVersion: versionsRef.current[actual] ?? null });
+        const res = await dashboardRepo.getMonth(actual, { force: true, serverVersion: versionsRef.current[actual] ?? null });
         if (cancel) return;
         mergeMonth(actual, res.payload);
         // 3) Resto de meses (recientes primero) en segundo plano, pero SOLO DEL AÑO ACTUAL.
@@ -252,7 +253,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       raw.raw.filter(r => sel.length === 0 || sel.includes(String(r.Fecha || '').slice(0, 7))).map(r => r.Fecha)
     )].filter((x): x is string => !!x).sort();
     setFechaList(fechas);
-    if (filters.fecha !== 'ALL') setFilters({ fecha: 'ALL' });
+
+    // Solo en la recarga / arranque inicial fija el último día;
+    // al seleccionar un mes por el filtro, se mantienen todos los días ('ALL').
+    if (!initialDateSet.current && fechas.length > 0) {
+      initialDateSet.current = true;
+      const ultimoDia = fechas[fechas.length - 1];
+      setFiltersState(prev => ({ ...prev, fecha: ultimoDia }));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raw, filters.mes]);
 

@@ -20,12 +20,19 @@ export interface AnalysisModalProps {
     categoryIndex?: number;
   };
   activeFilters?: { label: string; value: string }[];
+  singleCategorySelect?: boolean;
+  defaultSelectedCategory?: string;
 }
 
-export default function AnalysisModal({ open, onClose, title, description, config, modalConfig, tableData, activeFilters }: AnalysisModalProps) {
+export default function AnalysisModal({ open, onClose, title, description, config, modalConfig, tableData, activeFilters, singleCategorySelect, defaultSelectedCategory }: AnalysisModalProps) {
   const [viewMode, setViewMode] = useState<'chart' | 'split' | 'table'>('split');
   const [splitRatio, setSplitRatio] = useState(60); // % of chart
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    if (singleCategorySelect && defaultSelectedCategory) {
+      return [defaultSelectedCategory];
+    }
+    return [];
+  });
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
@@ -61,10 +68,6 @@ export default function AnalysisModal({ open, onClose, title, description, confi
 
   const activeConfig = modalConfig || config;
 
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
-  };
-
   const isDatasetCategory = activeConfig?.data?.datasets && activeConfig.data.datasets.length > 1;
 
   const allCategories = useMemo(() => {
@@ -80,6 +83,23 @@ export default function AnalysisModal({ open, onClose, title, description, confi
     }
     return [];
   }, [activeConfig, isDatasetCategory]);
+
+  useEffect(() => {
+    if (singleCategorySelect && selectedCategories.length === 0 && allCategories.length > 0) {
+      const initial = (defaultSelectedCategory && allCategories.includes(defaultSelectedCategory))
+        ? defaultSelectedCategory
+        : allCategories[0];
+      setSelectedCategories([initial]);
+    }
+  }, [singleCategorySelect, defaultSelectedCategory, allCategories, selectedCategories.length]);
+
+  const toggleCategory = (cat: string) => {
+    if (singleCategorySelect) {
+      setSelectedCategories([cat]);
+      return;
+    }
+    setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  };
 
   const filteredConfig = useMemo(() => {
     if (!activeConfig) return null;
@@ -238,34 +258,41 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           </div>
         </div>
 
-        {/* Custom HTML Legend for Multi-Select */}
+        {/* Custom HTML Legend / Filter Buttons */}
         {allCategories.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 12, flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 12, paddingLeft: 20, paddingRight: 20, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
             {allCategories.map((cat, i) => {
-              const isActive = selectedCategories.length === 0 || selectedCategories.includes(cat);
+              const isActive = singleCategorySelect
+                ? selectedCategories.includes(cat)
+                : (selectedCategories.length === 0 || selectedCategories.includes(cat));
               const COLORS = ['var(--warn)', 'var(--brand-primary)', 'var(--ok)', 'var(--otc)', 'var(--text-muted)'];
-              const color = COLORS[i % COLORS.length];
+              const datasetMatch = activeConfig?.data?.datasets?.find((d: any) => String(d.label) === cat);
+              const color = (datasetMatch?.borderColor && typeof datasetMatch.borderColor === 'string')
+                ? datasetMatch.borderColor
+                : COLORS[i % COLORS.length];
+
               return (
                 <button
                   key={cat}
                   onClick={() => toggleCategory(cat)}
                   style={{
-                    background: isActive ? 'var(--ok-bg)' : 'var(--card)',
-                    border: `1px solid ${isActive ? 'var(--brand-primary)' : 'var(--border)'}`,
-                    color: isActive ? 'var(--text-title)' : 'var(--text-body)',
+                    background: isActive ? 'var(--hover-bg, var(--ok-bg))' : 'var(--card)',
+                    border: `1.5px solid ${isActive ? color : 'var(--border)'}`,
+                    color: isActive ? 'var(--text-title)' : 'var(--text-muted)',
                     padding: '6px 14px',
                     borderRadius: 999,
                     fontSize: 12,
-                    fontWeight: 600,
+                    fontWeight: isActive ? 700 : 500,
                     height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    transition: 'all 0.25s'
+                    opacity: (!isActive && singleCategorySelect) ? 0.6 : 1,
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? color : 'var(--text-muted)' }} />
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
                   {cat}
                 </button>
               );

@@ -38,6 +38,7 @@ export interface CostoRecord {
   CuentaMayor?: string;
   NombreCuenta?: string;
   Grupo?: string;
+  es_ingreso?: boolean;
   Valor?: number | string;
   Tercero?: string;
   Proveedor?: string;

@@ -110,30 +110,31 @@ export async function getDashboardDataV2(mes?: string) {
         COUNT(*) as "Visitas",
 
         -- Producción valorizada HÍBRIDA con PRORRATEO (réplica del "valor fact" del manual):
-        --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real (valor_orden x 1.30045647872)
+        --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real de Efectivas + Fallidas con pago
+        --    (valor_orden x 1.1300192, incremento del Excel de productividad)
         --  · Pesada Disponible -> meta fija (sin prorrateo)
         --  · MT-AT / Minicanasta / Canasta -> meta x min(1, Total_Visita / (11 día | 8 sábado))
         --  · Gestor -> meta x min(1, (Efectivas + Fallida_con_pago) / (18 día | 13 sábado))
         (CASE
           WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
-            THEN MAX(COALESCE(mm.costo,0)/24.0)
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * 1.1300192
           WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
-            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, COUNT(*)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END)) * 1.1300192
           WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
-            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
-          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END)
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END)) * 1.1300192
+          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) THEN COALESCE(mo.valor_orden,0) * 1.1300192 ELSE 0 END)
         END) as "Ingresos",
 
-        -- Igual a "Ingresos" pero SIN el ajuste de incremento (×1.30045647872) en
+        -- Igual a "Ingresos" pero SIN el ajuste de incremento (×1.1300192) en
         -- Pesada/Liviana/(D)Pesada. Las disponibles (meta×prorrateo) no llevan incremento.
         (CASE
           WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
             THEN MAX(COALESCE(mm.costo,0)/24.0)
           WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
-            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, COUNT(*)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+            THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
           WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
             THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
-          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) ELSE 0 END)
+          ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) THEN COALESCE(mo.valor_orden,0) ELSE 0 END)
         END) as "Ingresos_Base",
 
         -- Meta de facturación diaria. Definición ÚNICA en META_DIARIA_SQL (ver arriba):
@@ -225,6 +226,7 @@ export async function getDashboardDataV2(mes?: string) {
       Proyecto: r.Proyecto || '',   // 'SCR Sur' / 'SCR Norte - Centro'
       Brigada: r.Brigada || undefined,   // brigada del empleado (NULL en ingresos/costos no-personales)
       Categoria: r.Categoria,   // nombre_cuenta real (p.ej. 'INGRESOS POR INGENIERIA ELECTRICA')
+      es_ingreso: r.es_ingreso ?? undefined,
       Valor: Number(r.Valor),
       Tercero: ''
     }));
@@ -256,7 +258,7 @@ export async function getDashboardDataV2(mes?: string) {
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
                COUNT(*) as "Visitas",
-               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END) as "Ingresos_COP",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) THEN COALESCE(mo.valor_orden,0) * 1.1300192 ELSE 0 END) as "Ingresos_COP",
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
                -- Conteos por tipo de gestión (réplica de las banderas _EV_* del ETL):
                -- suspensión/mantiene/reconexión/pqr = sobre Efectivas; imposibilidad = Fallida; resistencia = Perdida.
