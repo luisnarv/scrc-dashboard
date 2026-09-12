@@ -10,9 +10,62 @@ const TEAL = 'var(--sip)';
 const INK = 'var(--text-title)';
 const MUT = 'var(--text-muted)';
 const OK = 'var(--ok)';
-const WARN = 'var(--warn)';
+const WARN = '#8A6D00'; // Ámbar/oliva accesible sobre fondo claro
 const ERR = 'var(--err)';
 const LINE = 'var(--border)';
+
+// Color FIJO por tipo de brigada para los rieles
+const COLOR_BRIGADA: Record<string, string> = {
+  'SCR PESADA': '#38764C',                // verde oscuro
+  'SCR LIVIANA': '#2E6FB5',               // azul
+  'SCR MULTIFAMILIAR': '#78BE20',         // verde lima
+  'SCR PESADA DISPONIBILIDAD': '#3E9E56', // verde
+  'SCR MINI CANASTA': '#7E56C2',          // morado
+  'SCR MEDIDA ESPECIAL': '#B5BD00',       // oliva
+  'CANASTA': '#D64A2A',                   // rojo-naranja
+  'WEB': '#8F5A24',                       // cafe
+  'SCR DISPONIBLE': '#97999B',            // gris
+  'BRIGADA PESADA': '#38764C',
+  'BRIGADA TIPO PESADA': '#38764C',
+  'GESTOR INTEGRAL MULTI': '#78BE20',
+  'BRIGADA LIVIANA': '#2E6FB5',
+  'BRIGADA TIPO LIVIANA': '#2E6FB5',
+  'PESADA MT-AT': '#B5BD00',
+  'BRIGADA PESADA/ MT AT': '#B5BD00',
+  'BRIGADA CANASTA': '#D64A2A',
+  'BRIGADA TIPO CANASTA': '#D64A2A',
+  'BRIGADA MINICANASTA': '#7E56C2',
+  'BRIGADA TIPO MINICANASTA': '#7E56C2',
+  '(D) BRIGADA PESADA': '#4FA3E0',
+  '(D) BRIGADA TIPO PESADA': '#4FA3E0',
+  'BRIGADA PESADA MT-AT': '#8F5A24',
+  'PESADA DISPONIBLE': '#3E9E56',
+};
+
+const HOMOLOGACION_BRIGADA: Record<string, string> = {
+  'BRIGADA PESADA': 'SCR PESADA',
+  'BRIGADA TIPO PESADA': 'SCR PESADA',
+  'PESADA': 'SCR PESADA',
+  'BRIGADA LIVIANA': 'SCR LIVIANA',
+  'BRIGADA TIPO LIVIANA': 'SCR LIVIANA',
+  'LIVIANA': 'SCR LIVIANA',
+  'GESTOR INTEGRAL MULTI': 'SCR MULTIFAMILIAR',
+  'GESTOR INTEGRAL': 'SCR MULTIFAMILIAR',
+  'GESTOR MULTI': 'SCR MULTIFAMILIAR',
+  'PESADA MT-AT': 'SCR MEDIDA ESPECIAL',
+  'BRIGADA PESADA/ MT AT': 'SCR MEDIDA ESPECIAL',
+  'BRIGADA PESADA MT-AT': 'SCR MEDIDA ESPECIAL',
+  'PESADA MT': 'SCR MEDIDA ESPECIAL',
+  'PESADA/ MT AT': 'SCR MEDIDA ESPECIAL',
+  'BRIGADA MINICANASTA': 'SCR MINI CANASTA',
+  'BRIGADA TIPO MINICANASTA': 'SCR MINI CANASTA',
+  'BRIGADA CANASTA': 'CANASTA',
+  'BRIGADA TIPO CANASTA': 'CANASTA',
+  'SCR CANASTA': 'CANASTA',
+  '(D) BRIGADA PESADA': 'SCR PESADA DISPONIBILIDAD',
+  '(D) BRIGADA TIPO PESADA': 'SCR PESADA DISPONIBILIDAD',
+  'PESADA DISPONIBLE': 'SCR PESADA DISPONIBILIDAD',
+};
 
 /* ---------- modelo de fila (jerárquico) ---------- */
 interface Row {
@@ -32,7 +85,7 @@ type SortKey =
   | 'label' | 'efec' | 'fall' | 'perd'
   | 'totVis' | 'ingreso' | 'costo' | 'cump' | 'promVis' | 'promEfec';
 
-/* columnas de la tabla: clave, título, ¿es promedio? */
+/* columnas de la tabla */
 const isDisponibleType = (tLabel: string) => {
   const s = tLabel.toLowerCase();
   return (
@@ -45,15 +98,15 @@ const isDisponibleType = (tLabel: string) => {
   );
 };
 
-const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean; isPct?: boolean }[] = [
-  { key: 'efec', label: 'Efectivas', accent: OK },
-  { key: 'fall', label: 'Fallidas (Con Pago)', accent: WARN },
-  { key: 'perd', label: 'Perdidas', accent: ERR },
-  { key: 'totVis', label: 'Total Visitas' },
-  { key: 'ingreso', label: 'Producción Valorizada', accent: 'var(--otc)', isMoney: true },
-  { key: 'cump', label: '% Cumplimiento', isPct: true },
-  { key: 'promVis', label: 'Prom Vis.', prom: true },
-  { key: 'promEfec', label: 'Prom Efec.', prom: true },
+const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean; isPct?: boolean; borderLeft?: boolean }[] = [
+  { key: 'efec', label: 'EFECTIVAS', accent: OK },
+  { key: 'fall', label: 'FALLIDAS C/PAGO', accent: WARN },
+  { key: 'perd', label: 'PERDIDAS', accent: ERR },
+  { key: 'totVis', label: 'TOTAL' },
+  { key: 'ingreso', label: 'VALORIZADA (MILES)', accent: 'var(--otc)', isMoney: true, borderLeft: true },
+  { key: 'cump', label: '% CUMPL.', isPct: true },
+  { key: 'promVis', label: 'VISITAS', prom: true, borderLeft: true },
+  { key: 'promEfec', label: 'EFECTIVAS', prom: true },
 ];
 
 function promValue(r: Row, key: SortKey): number {
@@ -92,7 +145,8 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     const rootMap: Record<string, Row> = {};
 
     for (const r of rows) {
-      const typeKey = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin Tipo');
+      const rawType = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'Sin tipo').trim();
+      const typeKey = HOMOLOGACION_BRIGADA[rawType.toUpperCase()] || rawType || 'Sin tipo';
       const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
       const techKey = String(r.Cedula || '');
       const techLabel = String(r.Nombre || techKey);
@@ -149,6 +203,29 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     return { brigadas, total, periodo };
   }, [raw, filters]);
 
+  /* Filtro recursivo para q (tipo, zona o técnico) */
+  const filterTreeRecursive = (node: Row, query: string): Row | null => {
+    const qLower = query.toLowerCase();
+    const matchesSelf = node.label.toLowerCase().includes(qLower);
+    if (!node.children || node.children.length === 0) {
+      return matchesSelf ? node : null;
+    }
+    const matchedChildren: Row[] = [];
+    for (const child of node.children) {
+      const filteredChild = filterTreeRecursive(child, query);
+      if (filteredChild) {
+        matchedChildren.push(filteredChild);
+      }
+    }
+    if (matchesSelf || matchedChildren.length > 0) {
+      return {
+        ...node,
+        children: matchesSelf && matchedChildren.length === 0 ? node.children : matchedChildren,
+      };
+    }
+    return null;
+  };
+
   const brigadasSort = useMemo(() => {
     let arr = brigadas.slice();
     if (categoriaFiltro === 'OPERATIVA') {
@@ -157,7 +234,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       arr = arr.filter(b => isDisponibleType(b.label));
     }
     if (q.trim()) {
-      arr = arr.filter(b => b.label.toLowerCase().includes(q.trim().toLowerCase()));
+      const filtered: Row[] = [];
+      for (const b of arr) {
+        const res = filterTreeRecursive(b, q.trim());
+        if (res) filtered.push(res);
+      }
+      arr = filtered;
     }
     const mult = dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
@@ -166,6 +248,46 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     });
     return arr;
   }, [brigadas, sort, dir, q, categoriaFiltro]);
+
+  /* Total del pie: SOLO sobre lo mostrado (respeta operativas/disponibles y la búsqueda). */
+  const totalMostrado = useMemo(() => {
+    const t: Row = { key: '__total', label: 'Total', efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0 };
+    for (const b of brigadasSort) {
+      (['efec', 'fall', 'perd', 'totVis', 'dias', 'ingreso', 'costo'] as const).forEach(k => { t[k] += b[k]; });
+    }
+    return t;
+  }, [brigadasSort]);
+
+  /* Todas las claves jerárquicas para Desplegar / Contraer todo */
+  const allParentKeys = useMemo(() => {
+    const keys = new Set<string>();
+    const collect = (nodes: Row[]) => {
+      for (const n of nodes) {
+        if (n.children && n.children.length > 0) {
+          keys.add(n.key);
+          collect(n.children);
+        }
+      }
+    };
+    collect(brigadasSort);
+    return keys;
+  }, [brigadasSort]);
+
+  const allExpanded = useMemo(() => {
+    if (allParentKeys.size === 0) return false;
+    for (const k of allParentKeys) {
+      if (!expanded.has(k)) return false;
+    }
+    return true;
+  }, [allParentKeys, expanded]);
+
+  const toggleAll = () => {
+    if (allExpanded) {
+      setExpanded(new Set());
+    } else {
+      setExpanded(new Set(allParentKeys));
+    }
+  };
 
   const toggle = (k: string) =>
     setExpanded(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -187,7 +309,8 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
 
     for (const r of rowsF) {
       const month = String(r.Fecha || '').slice(0, 7) || '—';
-      const typeKey = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || 'Sin Tipo');
+      const rawType = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'Sin tipo').trim();
+      const typeKey = HOMOLOGACION_BRIGADA[rawType.toUpperCase()] || rawType || 'Sin tipo';
       const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
       const techKey = String(r.Cedula || '');
       const techLabel = String(r.Nombre || techKey);
@@ -257,15 +380,11 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   };
 
   /* --------------------------------- estilos --------------------------------- */
-  const th: React.CSSProperties = {
-    padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap',
-    textTransform: 'uppercase', letterSpacing: 0.4, userSelect: 'none', cursor: 'pointer',
-    position: 'sticky', top: 0, background: TEAL, zIndex: 2,
-  };
-  const tdBase: React.CSSProperties = { padding: '9px 12px', fontSize: 13, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
-  const numCell = (v: number, prom = false, accent?: string): React.CSSProperties => ({
-    ...tdBase, textAlign: 'right', color: v === 0 ? 'var(--text-muted)' : (accent || INK),
+  const tdBase: React.CSSProperties = { padding: '8px 12px', fontSize: 12.5, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
+  const numCell = (v: number, prom = false, accent?: string, borderLeft = false): React.CSSProperties => ({
+    ...tdBase, textAlign: 'right', color: v === 0 ? MUT : (accent || INK),
     fontWeight: prom ? 600 : 500,
+    borderLeft: borderLeft ? `1px solid ${LINE}` : undefined,
   });
   const arrow = (k: SortKey) => (sort === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
 
@@ -275,20 +394,37 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     return ERR;
   };
 
-  const dataCells = (r: Row, prom = false) => COLS.map(c => {
+  const dataCells = (r: Row) => COLS.map(c => {
     const v = (c.prom || c.isPct) ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
+    
+    if (c.isPct) {
+      const pctVal = promValue(r, 'cump');
+      const pctColor = getPctColor(pctVal);
+      const fillW = Math.min(100, Math.max(0, pctVal));
+      return (
+        <td key={c.key} style={numCell(v, true, pctColor, c.borderLeft)}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
+            <div style={{ width: 44, height: 6, borderRadius: 3, background: 'var(--hover-bg)', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ width: `${fillW}%`, height: '100%', borderRadius: 3, background: pctColor }} />
+            </div>
+            <span style={{ minWidth: 46, textAlign: 'right', fontWeight: 700, color: pctColor }}>
+              {pctVal.toFixed(1)}%
+            </span>
+          </div>
+        </td>
+      );
+    }
+
     const displayVal = c.isMoney 
-      ? fmtCOP(v) 
-      : c.isPct 
-      ? `${v.toFixed(1)}%` 
+      ? `$${fmtN(Math.round(v / 1000))}` 
       : c.prom 
       ? v.toFixed(2) 
       : fmtN(v);
       
-    const cellAccent = c.isPct ? getPctColor(v) : c.accent;
+    const cellAccent = c.accent;
 
     return (
-      <td key={c.key} style={numCell(v, !!(c.prom || c.isPct), cellAccent)}>
+      <td key={c.key} style={numCell(v, !!c.prom, cellAccent, c.borderLeft)}>
         {displayVal}
       </td>
     );
@@ -310,15 +446,67 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: `1px solid ${LINE}`, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 260 }}>
+        {/* Fila 1: Título y Cerrar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 10px', gap: 14 }}>
+          <div>
             <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 1.5, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
             <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
-              Jerarquía: Tipo de Brigada → Zona → Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
+              Tipo de Brigada › Zona › Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
-          
-          {/* Selector de categoría: Operativas vs Disponibles */}
+          <button
+            onClick={onClose} aria-label="Cerrar"
+            style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          >×</button>
+        </div>
+
+        {/* Fila 2: Franja de resumen del periodo */}
+        {total && (
+          <div style={{ padding: '0 20px 12px' }}>
+            <div style={{
+              background: 'var(--hover-bg)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              borderLeft: `3px solid ${TEAL}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 16,
+            }}>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>EFECTIVAS</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: OK }}>{fmtN(total.efec)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL VISITAS</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.totVis)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>PERDIDAS</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ERR }}>{fmtN(total.perd)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA (MILES)</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--otc)' }}>${fmtN(Math.round(total.ingreso / 1000))}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: getPctColor(promValue(total, 'cump')) }}>{promValue(total, 'cump').toFixed(1)}%</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TÉCNICO-DÍAS</div>
+                <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.dias)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fila 3: Barra de herramientas */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 14px', flexWrap: 'wrap' }}>
+          {/* Segmentado de categoría */}
           <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 3, borderRadius: 8, border: `1px solid ${LINE}` }}>
             <button
               onClick={() => setCategoriaFiltro('ALL')}
@@ -338,7 +526,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                 color: categoriaFiltro === 'OPERATIVA' ? '#fff' : MUT,
               }}
             >
-              ⚡ Operativas ({brigadas.filter(b => !isDisponibleType(b.label)).length})
+              Operativas ({brigadas.filter(b => !isDisponibleType(b.label)).length})
             </button>
             <button
               onClick={() => setCategoriaFiltro('DISPONIBLE')}
@@ -348,35 +536,104 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                 color: categoriaFiltro === 'DISPONIBLE' ? '#fff' : MUT,
               }}
             >
-              📋 Disponibles ({brigadas.filter(b => isDisponibleType(b.label)).length})
+              Disponibles ({brigadas.filter(b => isDisponibleType(b.label)).length})
             </button>
           </div>
 
-          <button
-            onClick={exportCSV}
-            style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-          >
-            Exportar CSV
-          </button>
           <input
-            value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo…"
-            style={{ padding: '8px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 13, width: 160, outline: 'none', color: INK }}
+            value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo, zona o técnico"
+            style={{ padding: '6px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 12.5, width: 220, outline: 'none', background: 'var(--card)', color: INK }}
           />
+
           <button
-            onClick={onClose} aria-label="Cerrar"
-            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
-          >×</button>
+            onClick={toggleAll}
+            style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--card)', color: INK, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            {allExpanded ? 'Contraer todo' : 'Desplegar todo'}
+          </button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 11.5, color: MUT }}>
+              {brigadasSort.length} agrupaciones · {fmtN(totalMostrado.dias)} técnico-días
+            </span>
+            <button
+              onClick={exportCSV}
+              style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Exportar CSV
+            </button>
+          </div>
         </div>
 
-        <div style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
+        {/* Tabla jerárquica con encabezado de 2 niveles y celdas fijas */}
+        <div style={{ overflow: 'auto', flex: 1 }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
+              {/* Nivel 1 de encabezado: Grupos */}
               <tr>
-                <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => clickSort('label')}>
-                  Agrupación{arrow('label')}
+                <th
+                  rowSpan={2}
+                  onClick={() => clickSort('label')}
+                  style={{
+                    position: 'sticky', top: 0, left: 0, zIndex: 10,
+                    background: 'var(--panel)', padding: '8px 14px',
+                    fontSize: 10, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 0.8,
+                    borderBottom: `2px solid ${TEAL}`, borderRight: `1px solid ${LINE}`,
+                    textAlign: 'left', cursor: 'pointer', userSelect: 'none', minWidth: 260,
+                  }}
+                >
+                  AGRUPACIÓN{arrow('label')}
                 </th>
+                <th
+                  colSpan={4}
+                  style={{
+                    position: 'sticky', top: 0, zIndex: 6,
+                    background: 'var(--panel)', padding: '6px 8px',
+                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    borderBottom: `1px solid ${LINE}`, textAlign: 'center', userSelect: 'none',
+                  }}
+                >
+                  VISITAS
+                </th>
+                <th
+                  colSpan={2}
+                  style={{
+                    position: 'sticky', top: 0, zIndex: 6,
+                    background: 'var(--panel)', padding: '6px 8px',
+                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    borderBottom: `1px solid ${LINE}`, borderLeft: `1px solid ${LINE}`,
+                    textAlign: 'center', userSelect: 'none',
+                  }}
+                >
+                  PRODUCCIÓN
+                </th>
+                <th
+                  colSpan={2}
+                  style={{
+                    position: 'sticky', top: 0, zIndex: 6,
+                    background: 'var(--panel)', padding: '6px 8px',
+                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    borderBottom: `1px solid ${LINE}`, borderLeft: `1px solid ${LINE}`,
+                    textAlign: 'center', userSelect: 'none',
+                  }}
+                >
+                  PROMEDIO / DÍA
+                </th>
+              </tr>
+              {/* Nivel 2 de encabezado: Columnas individuales */}
+              <tr>
                 {COLS.map(c => (
-                  <th key={c.key} style={{ ...th, textAlign: 'right' }} onClick={() => clickSort(c.key)}>
+                  <th
+                    key={c.key}
+                    onClick={() => clickSort(c.key)}
+                    style={{
+                      position: 'sticky', top: 27, zIndex: 5,
+                      background: 'var(--panel)', padding: '8px 10px',
+                      fontSize: 10, fontWeight: 700, color: MUT, textTransform: 'uppercase', letterSpacing: 0.4,
+                      borderBottom: `2px solid ${TEAL}`, borderLeft: c.borderLeft ? `1px solid ${LINE}` : undefined,
+                      textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+                    }}
+                  >
                     {c.label}{arrow(c.key)}
                   </th>
                 ))}
@@ -392,30 +649,73 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   expanded={expanded} 
                   onToggle={toggle} 
                   dataCells={dataCells} 
+                  autoOpen={Boolean(q.trim())}
                 />
               ))}
               {brigadasSort.length === 0 && (
-                <tr><td colSpan={COLS.length + 1} style={{ ...tdBase, textAlign: 'center', color: MUT, padding: 28 }}>
-                  No hay registros para el filtro actual.
-                </td></tr>
+                <tr>
+                  <td colSpan={COLS.length + 1} style={{ ...tdBase, textAlign: 'center', color: MUT, padding: 32 }}>
+                    No hay registros para el filtro actual.
+                  </td>
+                </tr>
               )}
             </tbody>
-            {total && (
+            {brigadasSort.length > 0 && (
               <tfoot>
-                <tr style={{ position: 'sticky', bottom: 0 }}>
-                  <td style={{ ...tdBase, fontWeight: 800, color: INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>Total</td>
+                <tr style={{ position: 'sticky', bottom: 0, zIndex: 4 }}>
+                  <td
+                    style={{
+                      ...tdBase, fontWeight: 800, color: INK,
+                      position: 'sticky', left: 0, zIndex: 5,
+                      background: 'var(--panel)', borderTop: `2px solid ${TEAL}`, borderRight: `1px solid ${LINE}`,
+                    }}
+                  >
+                    Total
+                  </td>
                   {COLS.map(c => {
-                    const v = (c.prom || c.isPct) ? promValue(total, c.key) : num((total as unknown as Record<string, number>)[c.key]);
+                    const v = (c.prom || c.isPct) ? promValue(totalMostrado, c.key) : num((totalMostrado as unknown as Record<string, number>)[c.key]);
+                    
+                    if (c.isPct) {
+                      const pctVal = promValue(totalMostrado, 'cump');
+                      const pctColor = getPctColor(pctVal);
+                      const fillW = Math.min(100, Math.max(0, pctVal));
+                      return (
+                        <td
+                          key={c.key}
+                          style={{
+                            ...tdBase, textAlign: 'right', fontWeight: 800,
+                            background: 'var(--panel)', borderTop: `2px solid ${TEAL}`,
+                            borderLeft: c.borderLeft ? `1px solid ${LINE}` : undefined,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7 }}>
+                            <div style={{ width: 44, height: 6, borderRadius: 3, background: 'var(--hover-bg)', overflow: 'hidden', flexShrink: 0 }}>
+                              <div style={{ width: `${fillW}%`, height: '100%', borderRadius: 3, background: pctColor }} />
+                            </div>
+                            <span style={{ minWidth: 46, textAlign: 'right', fontWeight: 800, color: pctColor }}>
+                              {pctVal.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    }
+
                     const displayVal = c.isMoney 
-                      ? fmtCOP(v) 
-                      : c.isPct 
-                      ? `${v.toFixed(1)}%` 
+                      ? `$${fmtN(Math.round(v / 1000))}` 
                       : c.prom 
                       ? v.toFixed(2) 
                       : fmtN(v);
-                    const cellAccent = c.isPct ? getPctColor(v) : c.accent;
+                    const cellAccent = c.accent;
+
                     return (
-                      <td key={c.key} style={{ ...tdBase, textAlign: 'right', fontWeight: 800, color: cellAccent || INK, background: 'var(--th-bg)', borderTop: `2px solid ${TEAL}` }}>
+                      <td
+                        key={c.key}
+                        style={{
+                          ...tdBase, textAlign: 'right', fontWeight: 800, color: cellAccent || INK,
+                          background: 'var(--panel)', borderTop: `2px solid ${TEAL}`,
+                          borderLeft: c.borderLeft ? `1px solid ${LINE}` : undefined,
+                        }}
+                      >
                         {displayVal}
                       </td>
                     );
@@ -426,35 +726,43 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           </table>
         </div>
 
-        <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11.5, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <span>{brigadasSort.length} agrupaciones principales · {total ? fmtN(total.dias) : 0} técnico-días</span>
-          <span>Producción = Ingresos valorizados · % Cumplimiento = (Producción ÷ Costo) × 100</span>
+        {/* Pie informativo */}
+        <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <span>Clic en una fila para desplegar zonas y técnicos · clic en un encabezado para ordenar</span>
+          <span>Producción en miles de pesos · % Cumplimiento = (producción ÷ costo) × 100</span>
         </div>
       </div>
     </div>
   );
 }
 
-/* ------- Fila recursiva ------- */
+/* ------- Fila recursiva con riel de color y columna fija ------- */
 function RowRecursive({
-  node, level, zebra, expanded, onToggle, dataCells,
+  node, level, zebra, expanded, onToggle, dataCells, autoOpen,
 }: {
   node: Row; level: number; zebra: boolean; expanded: Set<string>; onToggle: (k: string) => void;
-  dataCells: (r: Row, prom?: boolean) => React.ReactNode;
+  dataCells: (r: Row) => React.ReactNode; autoOpen?: boolean;
 }) {
-  const open = expanded.has(node.key);
+  const open = autoOpen || expanded.has(node.key);
   const isLeaf = !node.children || node.children.length === 0;
   
   let rowBg = 'var(--panel)';
   if (level === 0) rowBg = open ? 'var(--hover-bg)' : zebra ? 'var(--card)' : 'var(--panel)';
-  else if (level === 1) rowBg = open ? 'var(--hover-bg)' : 'var(--panel)';
+  else if (level === 1) rowBg = open ? 'var(--hover-bg)' : 'var(--card)';
+
+  const railColor = level === 0 
+    ? (COLOR_BRIGADA[node.label.trim().toUpperCase()] || '#97999B')
+    : level === 1 
+    ? '#9E9E9E' 
+    : 'var(--border)';
 
   const chev: React.CSSProperties = {
-    display: 'inline-block', width: 16, transition: 'transform .18s',
-    transform: open ? 'rotate(90deg)' : 'none', color: level === 0 ? TEAL : MUT, fontSize: 12,
+    display: 'inline-block', width: 12, transition: 'transform .18s',
+    transform: open ? 'rotate(90deg)' : 'none', color: railColor, fontSize: 8.5,
+    marginRight: 4, textAlign: 'center',
   };
 
-  const padLeft = level * 24 + 12;
+  const padLeft = level * 20 + 12;
 
   return (
     <>
@@ -462,8 +770,26 @@ function RowRecursive({
         onClick={() => !isLeaf && onToggle(node.key)}
         style={{ background: rowBg, cursor: isLeaf ? 'default' : 'pointer', borderBottom: `1px solid ${LINE}` }}
       >
-        <td style={{ padding: `8px 12px 8px ${padLeft}px`, fontSize: 13.5 - level * 0.5, fontWeight: level === 0 ? 700 : 500, color: isLeaf ? 'var(--text-body)' : INK, whiteSpace: 'nowrap' }}>
-          {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: 'var(--border)', marginRight: 6 }}>└</span>}
+        <td
+          style={{
+            padding: `7px 12px 7px ${padLeft}px`, fontSize: 13 - level * 0.5, fontWeight: level === 0 ? 700 : 500,
+            color: isLeaf ? 'var(--text-body)' : INK, whiteSpace: 'nowrap',
+            position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: `1px solid ${LINE}`,
+          }}
+        >
+          {/* Riel de color vertical */}
+          <span style={{
+            display: 'inline-block',
+            width: 3,
+            height: level === 0 ? 17 : 13,
+            borderRadius: 2,
+            background: railColor,
+            marginRight: 8,
+            verticalAlign: 'middle',
+            flexShrink: 0,
+          }} />
+
+          {!isLeaf ? <span style={chev}>▶</span> : <span style={{ color: 'var(--border)', marginRight: 6, fontSize: 11 }}>└</span>}
           {node.label}
           {level === 0 && (
             <span style={{
@@ -475,7 +801,7 @@ function RowRecursive({
             </span>
           )}
           {!isLeaf && (
-            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: MUT }}>
+            <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: MUT }}>
               ({node.children!.length})
             </span>
           )}
@@ -483,7 +809,7 @@ function RowRecursive({
         </td>
         {dataCells(node)}
       </tr>
-      {open && !isLeaf && node.children!.map((child, i) => (
+      {open && !isLeaf && node.children!.map((child) => (
         <RowRecursive 
           key={child.key} 
           node={child} 
@@ -492,6 +818,7 @@ function RowRecursive({
           expanded={expanded} 
           onToggle={onToggle} 
           dataCells={dataCells} 
+          autoOpen={autoOpen}
         />
       ))}
     </>
