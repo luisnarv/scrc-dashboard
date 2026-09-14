@@ -56,22 +56,67 @@ interface EmpRowV2 {
 //   • ZONA SUR (acordado) → meta FIJA para Pesada y Liviana:
 //       Pesada  : Lun-Vie $650.000 · Sábado $425.000
 //       Liviana : Lun-Vie $380.000 · Sábado $310.000   (domingo = valor Lun-Vie)
-//   • Resto de zonas (Norte/Centro) y (D) Pesada → Costo(maestro)/184 × (sáb 6h | día 8h)
+//   • NORTE/CENTRO:
+//       - Costos mensuales actualizados a partir de Junio 2026 (Liviana $6.683.910, Pesada $16.267.057, etc.)
+//       - Antes de Septiembre 2026: jornada 46h (8h L-V, 6h Sáb, divisor 184h)
+//       - Desde Septiembre 2026: jornada 44h (8h L-J, 7h Vie, 5h Sáb, divisor 176h)
 //   • Disponibles (MT-AT/Minicanasta/Canasta/Gestor/Pesada Disponible) → Costo/24
-//   (EXTRACT(DOW …)=6 es Sábado. El Costo mensual sale de maestro_metas, join mm.)
 const META_SUR = {
   pesada:  { semana: 650_000, sabado: 425_000 },
   liviana: { semana: 380_000, sabado: 310_000 },
 } as const;
 
+const COSTO_MENSUAL_NC_SQL = `(CASE 
+  WHEN mo.fecha_cierre >= '2026-06-01' AND UPPER(COALESCE(mo.zona,'')) NOT LIKE '%SUR%' THEN
+    CASE mo.brigada_homologada
+      WHEN 'Brigada Liviana'         THEN 6183910.20
+      WHEN 'Gestor Integral Multi'   THEN 8576399.37
+      WHEN 'Brigada Minicanasta'     THEN 56697622.89
+      WHEN 'Brigada Pesada'          THEN 15267057.00
+      WHEN '(D) Brigada Pesada'      THEN 15267057.00
+      WHEN 'Brigada Pesada MT-AT'    THEN 24673468.63
+      WHEN 'Pesada Disponible'       THEN 24673468.63
+      WHEN 'Brigada Canasta'         THEN 72631786.33
+      ELSE COALESCE(mm.costo, 0)
+    END
+  ELSE COALESCE(mm.costo, 0)
+END)`;
+
 const META_DIARIA_SQL = `MAX(CASE
+          -- ZONA SUR (Valores fijos Pesada y Liviana)
           WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Pesada'
             THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.pesada.sabado} ELSE ${META_SUR.pesada.semana} END)
           WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Liviana'
             THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.liviana.sabado} ELSE ${META_SUR.liviana.semana} END)
+
+          -- ZONA NORTE Y CENTRO: DESDE SEPTIEMBRE 2026 (Valores exactos con nueva jornada 44h)
+          WHEN mo.fecha_cierre >= '2026-09-01' AND UPPER(COALESCE(mo.zona,'')) NOT LIKE '%SUR%' THEN
+            CASE mo.brigada_homologada
+              WHEN 'Brigada Liviana' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 175679.27
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 245950.97
+                      ELSE 281086.83 END)
+              WHEN 'Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
+                      ELSE 693957.14 END)
+              WHEN '(D) Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
+                      ELSE 693957.14 END)
+              WHEN 'Gestor Integral Multi' THEN 357349.97
+              WHEN 'Brigada Minicanasta' THEN 2362400.95
+              WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
+              WHEN 'Pesada Disponible' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=0 THEN 1387882.61 ELSE 1028061.19 END)
+              WHEN 'Brigada Canasta' THEN 3026324.43
+              ELSE ${COSTO_MENSUAL_NC_SQL} / 24.0
+            END
+
+          -- ZONA NORTE Y CENTRO: ANTES DE SEPTIEMBRE 2026
           WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
-            THEN COALESCE(mm.costo,0)/184.0 * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
-          ELSE COALESCE(mm.costo,0)/24.0
+            THEN (${COSTO_MENSUAL_NC_SQL} / 184.0) * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+          ELSE ${COSTO_MENSUAL_NC_SQL} / 24.0
         END)`;
 
 export async function getDashboardDataV2(mes?: string) {
