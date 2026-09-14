@@ -87,7 +87,7 @@ type SortKey =
 
 /* columnas de la tabla */
 const isDisponibleType = (tLabel: string) => {
-  const s = tLabel.toLowerCase();
+  const s = String(tLabel || '').toLowerCase().trim();
   return (
     s.includes('canasta') ||
     s.includes('minicanasta') ||
@@ -96,7 +96,10 @@ const isDisponibleType = (tLabel: string) => {
     s.includes('mt at') ||
     s.includes('medida especial') ||
     s.includes('gestor') ||
-    s.includes('disponible')
+    s.includes('disponible') ||
+    s.includes('disponibilidad') ||
+    s.includes('multifamiliar') ||
+    s.includes('multi')
   );
 };
 
