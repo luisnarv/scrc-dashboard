@@ -188,8 +188,7 @@ export default function ResumenPage() {
       const utilidad = ing - cost;
       const margenPct = ing > 0 ? ((ing - cost) / ing) * 100 : 0;
       const costoPct = ing > 0 ? (cost / ing) * 100 : 0;
-
-      // Un mes se considera provisional si no tiene facturación definitiva y su ingreso proviene de devengo/provisión
+      // Identifica si el mes tiene facturación definitiva o es provisional (devengo)
       const ingRows = cosM.filter(r => r.es_ingreso || String(r.Categoria || '').toUpperCase().includes('INGRES') || String(r.Categoria || '').toUpperCase().includes('DEVENGADO'));
       const hasReal = ingRows.some(r => {
         const c = String(r.Categoria || '').toUpperCase();
@@ -476,21 +475,8 @@ export default function ResumenPage() {
           backgroundColor: CFG.otc + '33',
           fill: true,
           tension: 0.3,
-          pointRadius: evolutivoOTC.map((x: any) => (x.isProvisional ? 6 : 4)),
-          pointHoverRadius: evolutivoOTC.map((x: any) => (x.isProvisional ? 8 : 6)),
-          pointBackgroundColor: evolutivoOTC.map((x: any) => (x.isProvisional ? CFG.warn : CFG.otc)),
-          pointBorderColor: evolutivoOTC.map((x: any) => (x.isProvisional ? '#E65100' : CFG.otc)),
-          pointBorderWidth: evolutivoOTC.map((x: any) => (x.isProvisional ? 2 : 1)),
-          segment: {
-            borderColor: (ctx: any) => {
-              const p1 = evolutivoOTC[ctx.p1DataIndex];
-              return p1?.isProvisional ? CFG.warn : CFG.otc;
-            },
-            borderDash: (ctx: any) => {
-              const p1 = evolutivoOTC[ctx.p1DataIndex];
-              return p1?.isProvisional ? [5, 4] : undefined;
-            },
-          },
+          pointRadius: 4,
+          pointHoverRadius: 6,
         },
       ],
     },
@@ -501,6 +487,13 @@ export default function ResumenPage() {
         legend: { display: false },
         tooltip: {
           callbacks: {
+            title: (items: any[]) => {
+              if (!items.length) return '';
+              const idx = items[0].dataIndex;
+              const item = evolutivoOTC[idx];
+              const etiqueta = item?.isProvisional ? '(Facturación provisional)' : '(Facturación)';
+              return `${items[0].label} ${etiqueta}`;
+            },
             label: (ctx: any) => {
               const idx = ctx.dataIndex;
               const item = evolutivoOTC[idx];
@@ -508,8 +501,8 @@ export default function ResumenPage() {
               const varStr = item?.dIngPct !== null && item?.dIngPct !== undefined
                 ? ` · Var: ${item.dIngPct >= 0 ? '+' : ''}${item.dIngPct.toFixed(1)}% vs mes ant.`
                 : '';
-              const provTag = item?.isProvisional ? ' (Provisional)' : '';
-              return `Ingreso Real${provTag}: ${cop}${varStr}`;
+              const etiqueta = item?.isProvisional ? '(Facturación provisional)' : '(Facturación)';
+              return `Ingreso Real ${etiqueta}: ${cop}${varStr}`;
             },
           },
         },
@@ -856,7 +849,7 @@ export default function ResumenPage() {
             <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 FINANCIERO</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales extraídos de la contabilidad (Fuente: OTC)</div>
             <div style={{ display: 'grid', gap: 16 }}>
-              <ChartCard id="r-otc-ing" title="Ingreso Real (OTC)" subtitle="Facturación contable consolidada (Azul: Facturado definitivo · Naranja: Valor provisional)" config={otcIngCfg as never} height="short" />
+              <ChartCard id="r-otc-ing" title="Ingreso Real (OTC)" subtitle="Facturación contable consolidada: Ene-May (Facturación) · Jun-Jul (Facturación provisional)" config={otcIngCfg as never} height="short" />
               <ChartCard id="r-otc-cost" title="Costo Real (%) (OTC)" subtitle="Ratio de costo sobre ingresos: Costos / Ingresos" config={otcCostCfg as never} height="short" />
               <ChartCard id="r-otc-mar" title="Margen Real (%)" subtitle="Rentabilidad financiera neta: (Ingresos - Costos) / Ingresos" config={otcMargenCfg as never} height="short" />
               <ChartCard

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { useDashboard } from '../components/DashboardProvider';
 import { fmtCOP, fmtN, num as n } from '../components/utils/formatters';
@@ -49,6 +49,256 @@ const isDisponibleType = (tLabel: string) => {
   );
 };
 
+interface MultiDayDropdownProps {
+  mes: string;
+  fechas: string[];
+  onChangeFechas: (fechas: string[]) => void;
+  todosDias: boolean;
+  onChangeTodosDias: (todos: boolean) => void;
+  availableDays: string[];
+  colors: { sip: string; ok: string; warn: string; err: string; ink: string; mut: string };
+}
+
+function MultiDayDropdown({
+  mes,
+  fechas,
+  onChangeFechas,
+  todosDias,
+  onChangeTodosDias,
+  availableDays,
+  colors,
+}: MultiDayDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  const formatDia = (fechaStr: string) => {
+    const partes = fechaStr.split('-');
+    if (partes.length !== 3) return fechaStr;
+    const y = parseInt(partes[0], 10);
+    const m = parseInt(partes[1], 10);
+    const d = parseInt(partes[2], 10);
+    const dateObj = new Date(y, m - 1, d);
+    const nomDia = diasSemana[dateObj.getDay()] || '';
+    return `${partes[2]} - ${nomDia}`;
+  };
+
+  const toggleDia = (d: string) => {
+    if (todosDias) {
+      onChangeTodosDias(false);
+      onChangeFechas(availableDays.filter(x => x !== d));
+      return;
+    }
+    if (fechas.includes(d)) {
+      const next = fechas.filter(x => x !== d);
+      onChangeFechas(next);
+    } else {
+      const next = [...fechas, d].sort();
+      if (next.length === availableDays.length && availableDays.length > 0) {
+        onChangeTodosDias(true);
+      }
+      onChangeFechas(next);
+    }
+  };
+
+  const seleccionarTodos = () => {
+    onChangeTodosDias(true);
+    onChangeFechas([...availableDays]);
+  };
+
+  const limpiar = () => {
+    onChangeTodosDias(false);
+    onChangeFechas([]);
+  };
+
+  let btnLabel = '';
+  if (todosDias) {
+    btnLabel = `Todos los días (${availableDays.length})`;
+  } else if (fechas.length === 0) {
+    btnLabel = 'Seleccionar días…';
+  } else if (fechas.length === 1) {
+    btnLabel = `1 día (${formatDia(fechas[0])})`;
+  } else {
+    btnLabel = `${fechas.length} días seleccionados`;
+  }
+
+  const isChecked = (d: string) => todosDias || fechas.includes(d);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          padding: '7px 10px',
+          borderRadius: 8,
+          border: '1px solid var(--border)',
+          background: 'var(--card)',
+          color: 'var(--text-body)',
+          fontSize: 13,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {btnLabel}
+        </span>
+        <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            width: '100%',
+            minWidth: 230,
+            background: 'var(--panel, var(--card, #fff))',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(20,30,60,.22)',
+            zIndex: 1000,
+            padding: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          {/* Botones de acción rápida: Seleccionar todos / Limpiar */}
+          <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
+            <button
+              type="button"
+              onClick={seleccionarTodos}
+              style={{
+                flex: 1,
+                padding: '5px 8px',
+                borderRadius: 6,
+                border: `1px solid ${todosDias ? colors.sip : 'var(--border)'}`,
+                background: todosDias ? colors.sip + '18' : 'transparent',
+                color: todosDias ? colors.sip : 'var(--text-body)',
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              ✓ Seleccionar todos
+            </button>
+            <button
+              type="button"
+              onClick={limpiar}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-muted, #888)',
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Limpiar
+            </button>
+          </div>
+
+          {/* Checkbox "Todos los días" */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '5px 6px',
+              fontSize: 12,
+              borderRadius: 5,
+              cursor: 'pointer',
+              userSelect: 'none',
+              fontWeight: todosDias ? 700 : 500,
+              color: todosDias ? colors.sip : 'var(--text-body)',
+              background: todosDias ? colors.sip + '12' : 'transparent',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={todosDias}
+              onChange={e => {
+                if (e.target.checked) {
+                  seleccionarTodos();
+                } else {
+                  onChangeTodosDias(false);
+                }
+              }}
+            />
+            Todos los días del mes ({availableDays.length})
+          </label>
+
+          <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+
+          {/* Lista scrolleable de días individuales */}
+          <div style={{ maxHeight: 210, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {availableDays.length === 0 ? (
+              <div style={{ padding: '8px 6px', fontSize: 11.5, color: 'var(--text-muted, #888)' }}>
+                No hay días registrados en {mes}
+              </div>
+            ) : (
+              availableDays.map(d => {
+                const checked = isChecked(d);
+                return (
+                  <label
+                    key={d}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: '4px 6px',
+                      fontSize: 12,
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      fontWeight: checked ? 600 : 400,
+                      color: checked ? 'var(--text-title)' : 'var(--text-body)',
+                      background: checked ? 'rgba(128,128,128,0.12)' : 'transparent',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDia(d)}
+                      />
+                      <span>{formatDia(d)}</span>
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted, #888)', fontFamily: 'monospace' }}>
+                      {d}
+                    </span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InformesPage() {
   const { raw, loading: dashLoading, error: dashError } = useDashboard();
   const { colors } = useTheme();
@@ -60,7 +310,7 @@ export default function InformesPage() {
   const TEAL = colors.sip;
 
   // Metadatos globales para selectores
-  const [meta, setMeta] = useState<{ zonas: string[]; meses: string[] }>({ zonas: [], meses: [] });
+  const [meta, setMeta] = useState<{ zonas: string[]; meses: string[]; fechas: string[] }>({ zonas: [], meses: [], fechas: [] });
 
   // ══════════════════════════════════════════════════════════════════
   // INFORME DE PRODUCCIÓN (Estado independiente)
@@ -68,7 +318,7 @@ export default function InformesPage() {
   const [prodAbierto, setProdAbierto] = useState(false);
   const [prodZona, setProdZona] = useState('');
   const [prodMes, setProdMes] = useState('');
-  const [prodFecha, setProdFecha] = useState('');
+  const [prodFechas, setProdFechas] = useState<string[]>([]);
   const [prodTipo, setProdTipo] = useState<'operativas' | 'disponibles' | ''>('');
   const [prodTodosDias, setProdTodosDias] = useState(false);   // false = filtra al último día
   const [prodPorTecnico, setProdPorTecnico] = useState(true);  // marcado por defecto
@@ -85,7 +335,7 @@ export default function InformesPage() {
   const [digAbierto, setDigAbierto] = useState(false);
   const [digZona, setDigZona] = useState('');
   const [digMes, setDigMes] = useState('');
-  const [digFecha, setDigFecha] = useState('');
+  const [digFechas, setDigFechas] = useState<string[]>([]);
   const [digHoraDesde, setDigHoraDesde] = useState('');
   const [digHoraHasta, setDigHoraHasta] = useState('');
   const [digTipo, setDigTipo] = useState<'operativas' | 'disponibles' | ''>('');
@@ -105,7 +355,8 @@ export default function InformesPage() {
       .then(d => {
         const zonas = d.zonas || [];
         const meses = d.meses || [];
-        setMeta({ zonas, meses });
+        const fechas = d.fechas || [];
+        setMeta({ zonas, meses, fechas });
         if (meses.length) {
           setProdMes(prev => prev || meses[0]);
           setDigMes(prev => prev || meses[0]);
@@ -148,20 +399,71 @@ export default function InformesPage() {
         }
       }
     }
+    if (meta.fechas) {
+      for (const f of meta.fechas) {
+        if (f.length === 10) {
+          const m = f.slice(0, 7);
+          if (!map[m] || f > map[m]) map[m] = f;
+        }
+      }
+    }
     return (mesStr: string) => map[mesStr] || '';
-  }, [raw]);
+  }, [raw, meta.fechas]);
 
-  // Día por defecto = último día del mes seleccionado (salvo "Todos los días").
-  // Conserva un día elegido manualmente que siga dentro del mes.
+  // Días disponibles con datos para un mes determinado
+  const getDiasMes = useMemo(() => {
+    return (mesStr: string) => {
+      if (!mesStr) return [];
+      const set = new Set<string>();
+      if (raw?.raw) {
+        for (const r of raw.raw) {
+          const f = String(r.Fecha || '').slice(0, 10);
+          if (f.startsWith(mesStr) && f.length === 10) set.add(f);
+        }
+      }
+      if (meta.fechas) {
+        for (const f of meta.fechas) {
+          if (f.startsWith(mesStr) && f.length === 10) set.add(f);
+        }
+      }
+      if (set.size === 0 && mesStr.length === 7) {
+        const [yStr, mStr] = mesStr.split('-');
+        const y = parseInt(yStr, 10);
+        const m = parseInt(mStr, 10);
+        if (!isNaN(y) && !isNaN(m)) {
+          const totalDias = new Date(y, m, 0).getDate();
+          for (let d = 1; d <= totalDias; d++) {
+            set.add(`${mesStr}-${String(d).padStart(2, '0')}`);
+          }
+        }
+      }
+      return Array.from(set).sort();
+    };
+  }, [raw, meta.fechas]);
+
+  const diasProd = useMemo(() => getDiasMes(prodMes), [getDiasMes, prodMes]);
+  const diasDig = useMemo(() => getDiasMes(digMes), [getDiasMes, digMes]);
+
+  // Sincronización de días seleccionados con el mes
   useEffect(() => {
     if (prodTodosDias) return;
-    setProdFecha(prev => (prev && prev.startsWith(prodMes)) ? prev : ultimoDia(prodMes));
-  }, [ultimoDia, prodMes, prodTodosDias]);
+    setProdFechas(prev => {
+      const valid = prev.filter(f => f.startsWith(prodMes));
+      if (valid.length > 0) return valid;
+      const u = ultimoDia(prodMes);
+      return u ? [u] : (diasProd.length ? [diasProd[diasProd.length - 1]] : []);
+    });
+  }, [ultimoDia, prodMes, prodTodosDias, diasProd]);
 
   useEffect(() => {
     if (digTodosDias) return;
-    setDigFecha(prev => (prev && prev.startsWith(digMes)) ? prev : ultimoDia(digMes));
-  }, [ultimoDia, digMes, digTodosDias]);
+    setDigFechas(prev => {
+      const valid = prev.filter(f => f.startsWith(digMes));
+      if (valid.length > 0) return valid;
+      const u = ultimoDia(digMes);
+      return u ? [u] : (diasDig.length ? [diasDig[diasDig.length - 1]] : []);
+    });
+  }, [ultimoDia, digMes, digTodosDias, diasDig]);
 
   // ── Lógica Informe de Producción ──────────────────────────────────
   const generarProd = () => {
@@ -188,7 +490,7 @@ export default function InformesPage() {
         // Filtro Mes
         if (prodMes && !fStr.startsWith(prodMes)) return false;
         // Filtro Día
-        if (!prodTodosDias && prodFecha && fStr.slice(0, 10) !== prodFecha) return false;
+        if (!prodTodosDias && prodFechas.length > 0 && !prodFechas.includes(fStr.slice(0, 10))) return false;
         // Filtro Zona
         if (prodZona) {
           const zMatch =
@@ -310,7 +612,7 @@ export default function InformesPage() {
     try {
       const qs = new URLSearchParams({ mes: digMes });
       if (digZona) qs.set('zona', digZona);
-      if (!digTodosDias && digFecha) qs.set('fecha', digFecha);
+      if (!digTodosDias && digFechas.length > 0) qs.set('fechas', digFechas.join(','));
       if (digHoraDesde && digHoraHasta) {
         qs.set('horaDesde', digHoraDesde);
         qs.set('horaHasta', digHoraHasta);
@@ -360,9 +662,17 @@ export default function InformesPage() {
     URL.revokeObjectURL(url);
   };
 
+  const descDiasProd = () => {
+    if (prodTodosDias || prodFechas.length === 0) return 'todos los días';
+    if (prodFechas.length === 1) return prodFechas[0];
+    return `${prodFechas.length} días`;
+  };
+
   // ── Exportación Producción ────────────────────────────────────────
-  const nombreArchivoProd = () =>
-    `informe_produccion_${prodMes}${(!prodTodosDias && prodFecha) ? '_' + prodFecha : '_todos'}${prodZona ? '_' + prodZona : ''}${prodTipo ? '_' + prodTipo : ''}${prodTienePorTecnico ? '_tecnico' : ''}`;
+  const nombreArchivoProd = () => {
+    const dStr = prodTodosDias || prodFechas.length === 0 ? 'todos' : prodFechas.length === 1 ? prodFechas[0] : `${prodFechas.length}dias`;
+    return `informe_produccion_${prodMes}_${dStr}${prodZona ? '_' + prodZona : ''}${prodTipo ? '_' + prodTipo : ''}${prodTienePorTecnico ? '_tecnico' : ''}`;
+  };
 
   const filasExportProd = () => {
     const filas = prodRows.map(r => {
@@ -461,9 +771,17 @@ export default function InformesPage() {
     descargar(html, 'application/vnd.ms-excel;charset=utf-8', 'xls', nombreArchivoProd());
   };
 
+  const descDiasDig = () => {
+    if (digTodosDias || digFechas.length === 0) return 'todos los días';
+    if (digFechas.length === 1) return digFechas[0];
+    return `${digFechas.length} días`;
+  };
+
   // ── Exportación Digitación ────────────────────────────────────────
-  const nombreArchivoDig = () =>
-    `informe_digitacion_${digMes}${(!digTodosDias && digFecha) ? '_' + digFecha : '_todos'}${digZona ? '_' + digZona : ''}${digTipo ? '_' + digTipo : ''}${digTienePorTecnico ? '_tecnico' : ''}`;
+  const nombreArchivoDig = () => {
+    const dStr = digTodosDias || digFechas.length === 0 ? 'todos' : digFechas.length === 1 ? digFechas[0] : `${digFechas.length}dias`;
+    return `informe_digitacion_${digMes}_${dStr}${digZona ? '_' + digZona : ''}${digTipo ? '_' + digTipo : ''}${digTienePorTecnico ? '_tecnico' : ''}`;
+  };
 
   const filasExportDig = () => {
     const filas = digRows.map(r => {
@@ -607,26 +925,21 @@ export default function InformesPage() {
             </div>
             <div>
               <label style={lbl}>MES</label>
-              <select style={inp} value={prodMes} onChange={e => { setProdMes(e.target.value); setProdFecha(''); }}>
+              <select style={inp} value={prodMes} onChange={e => { setProdMes(e.target.value); setProdFechas([]); }}>
                 {availableMeses.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
-              <label style={lbl}>DÍA</label>
-              <input
-                key={prodMes}
-                type="date"
-                style={{ ...inp, opacity: prodTodosDias ? 0.5 : 1 }}
-                value={prodFecha}
-                disabled={prodTodosDias}
-                min={prodMes ? `${prodMes}-01` : undefined}
-                max={prodMes ? `${prodMes}-${String(new Date(Number(prodMes.slice(0, 4)), Number(prodMes.slice(5, 7)), 0).getDate()).padStart(2, '0')}` : undefined}
-                onChange={e => setProdFecha(e.target.value)}
+              <label style={lbl}>DÍAS</label>
+              <MultiDayDropdown
+                mes={prodMes}
+                fechas={prodFechas}
+                onChangeFechas={setProdFechas}
+                todosDias={prodTodosDias}
+                onChangeTodosDias={setProdTodosDias}
+                availableDays={diasProd}
+                colors={colors}
               />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUT, marginTop: 6, cursor: 'pointer' }}>
-                <input type="checkbox" checked={prodTodosDias} onChange={e => setProdTodosDias(e.target.checked)} />
-                Todos los días
-              </label>
             </div>
             <div>
               <label style={lbl}>TIPO DE BRIGADA</label>
@@ -675,7 +988,7 @@ export default function InformesPage() {
               {prodGenerado && !prodError && !prodLoading && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
-            Producción {prodMes}{prodTodosDias ? ' · todos los días' : (prodFecha ? ` · ${prodFecha}` : '')}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
+            Producción {prodMes} · {descDiasProd()}{prodZona ? ` · ${prodZona}` : ''}{prodTipo ? ` · ${prodTipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {prodRows.length} {prodTienePorTecnico ? 'técnicos' : 'operativas'}</span>
           </div>
 
@@ -821,26 +1134,21 @@ export default function InformesPage() {
             </div>
             <div>
               <label style={lbl}>MES</label>
-              <select style={inp} value={digMes} onChange={e => { setDigMes(e.target.value); setDigFecha(''); }}>
+              <select style={inp} value={digMes} onChange={e => { setDigMes(e.target.value); setDigFechas([]); }}>
                 {meta.meses.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
-              <label style={lbl}>DÍA</label>
-              <input
-                key={digMes}
-                type="date"
-                style={{ ...inp, opacity: digTodosDias ? 0.5 : 1 }}
-                value={digFecha}
-                disabled={digTodosDias}
-                min={digMes ? `${digMes}-01` : undefined}
-                max={digMes ? `${digMes}-${String(new Date(Number(digMes.slice(0, 4)), Number(digMes.slice(5, 7)), 0).getDate()).padStart(2, '0')}` : undefined}
-                onChange={e => setDigFecha(e.target.value)}
+              <label style={lbl}>DÍAS</label>
+              <MultiDayDropdown
+                mes={digMes}
+                fechas={digFechas}
+                onChangeFechas={setDigFechas}
+                todosDias={digTodosDias}
+                onChangeTodosDias={setDigTodosDias}
+                availableDays={diasDig}
+                colors={colors}
               />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUT, marginTop: 6, cursor: 'pointer' }}>
-                <input type="checkbox" checked={digTodosDias} onChange={e => setDigTodosDias(e.target.checked)} />
-                Todos los días
-              </label>
             </div>
             <div>
               <label style={lbl}>HORA DESDE</label>
@@ -900,7 +1208,7 @@ export default function InformesPage() {
               {digGenerado && !digError && !digLoading && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 13.5, fontWeight: 700, color: INK }}>
-            Digitación {digMes}{digTodosDias ? ' · todos los días' : (digFecha ? ` · ${digFecha}` : '')}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
+            Digitación {digMes} · {descDiasDig()}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {digRows.length} filas</span>
           </div>
           <div style={{ overflowX: 'auto' }}>

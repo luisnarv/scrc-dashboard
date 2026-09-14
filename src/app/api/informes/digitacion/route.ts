@@ -43,15 +43,18 @@ export async function GET(request: Request) {
   try {
     // ── Metadatos para poblar los selectores ──────────────────────────────
     if (searchParams.get('meta')) {
-      const [zonas, meses] = await Promise.all([
+      const [zonas, meses, fechas] = await Promise.all([
         query(`SELECT DISTINCT zona FROM dbanalitica.historico_mo
                WHERE zona IS NOT NULL ORDER BY 1`),
         query(`SELECT DISTINCT to_char(fecha_cierre,'YYYY-MM') AS mes
+               FROM dbanalitica.historico_mo WHERE fecha_cierre IS NOT NULL ORDER BY 1 DESC`),
+        query(`SELECT DISTINCT to_char(fecha_cierre,'YYYY-MM-DD') AS fecha
                FROM dbanalitica.historico_mo WHERE fecha_cierre IS NOT NULL ORDER BY 1 DESC`),
       ]);
       return NextResponse.json({
         zonas: zonas.rows.map((r: { zona: string }) => r.zona),
         meses: meses.rows.map((r: { mes: string }) => r.mes),
+        fechas: fechas.rows.map((r: { fecha: string }) => r.fecha),
       });
     }
 
@@ -59,7 +62,7 @@ export async function GET(request: Request) {
     if (!mes) return NextResponse.json({ error: 'Falta el parámetro "mes" (YYYY-MM).' }, { status: 400 });
 
     const zona = searchParams.get('zona');            // ATLANTICO CENTRO/NORTE/SUR | null=todas
-    const fecha = searchParams.get('fecha');          // YYYY-MM-DD | null = todo el mes
+    const fechaParam = searchParams.get('fechas') || searchParams.get('fecha'); // YYYY-MM-DD o lista separada por comas | null = todo el mes
     const horaDesde = searchParams.get('horaDesde');  // HH:MM | null
     const horaHasta = searchParams.get('horaHasta');  // HH:MM | null
     const tipo = searchParams.get('tipo');            // disponibles | operativas | null=ambas
@@ -73,7 +76,16 @@ export async function GET(request: Request) {
     const params: unknown[] = [mes];
 
     if (zona) { params.push(zona); where.push(`UPPER(zona) = UPPER($${params.length})`); }
-    if (fecha) { params.push(fecha); where.push(`fecha_cierre::date = $${params.length}::date`); }
+    if (fechaParam) {
+      const dates = fechaParam.split(',').map(d => d.trim()).filter(Boolean);
+      if (dates.length === 1) {
+        params.push(dates[0]);
+        where.push(`fecha_cierre::date = $${params.length}::date`);
+      } else if (dates.length > 1) {
+        params.push(dates);
+        where.push(`to_char(fecha_cierre, 'YYYY-MM-DD') = ANY($${params.length}::text[])`);
+      }
+    }
     if (horaDesde && horaHasta) {
       params.push(horaDesde); const d = params.length;
       params.push(horaHasta); const h = params.length;

@@ -52,11 +52,11 @@ const HOMOLOGACION_BRIGADA: Record<string, string> = {
   'GESTOR INTEGRAL MULTI': 'SCR MULTIFAMILIAR',
   'GESTOR INTEGRAL': 'SCR MULTIFAMILIAR',
   'GESTOR MULTI': 'SCR MULTIFAMILIAR',
-  'PESADA MT-AT': 'SCR MEDIDA ESPECIAL',
-  'BRIGADA PESADA/ MT AT': 'SCR MEDIDA ESPECIAL',
-  'BRIGADA PESADA MT-AT': 'SCR MEDIDA ESPECIAL',
-  'PESADA MT': 'SCR MEDIDA ESPECIAL',
-  'PESADA/ MT AT': 'SCR MEDIDA ESPECIAL',
+  'PESADA MT-AT': 'PESADA MT-AT',
+  'BRIGADA PESADA/ MT AT': 'PESADA MT-AT',
+  'BRIGADA PESADA MT-AT': 'PESADA MT-AT',
+  'PESADA MT': 'PESADA MT-AT',
+  'PESADA/ MT AT': 'PESADA MT-AT',
   'BRIGADA MINICANASTA': 'SCR MINI CANASTA',
   'BRIGADA TIPO MINICANASTA': 'SCR MINI CANASTA',
   'BRIGADA CANASTA': 'CANASTA',
@@ -93,21 +93,12 @@ const isDisponibleType = (tLabel: string) => {
     s.includes('minicanasta') ||
     s.includes('mini canasta') ||
     s.includes('mt-at') ||
+    s.includes('mt at') ||
+    s.includes('medida especial') ||
     s.includes('gestor') ||
     s.includes('disponible')
   );
 };
-
-const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean; isPct?: boolean; borderLeft?: boolean }[] = [
-  { key: 'efec', label: 'EFECTIVAS', accent: OK },
-  { key: 'fall', label: 'FALLIDAS C/PAGO', accent: WARN },
-  { key: 'perd', label: 'PERDIDAS', accent: ERR },
-  { key: 'totVis', label: 'TOTAL' },
-  { key: 'ingreso', label: 'VALORIZADA (MILES)', accent: 'var(--otc)', isMoney: true, borderLeft: true },
-  { key: 'cump', label: '% CUMPL.', isPct: true },
-  { key: 'promVis', label: 'VISITAS', prom: true, borderLeft: true },
-  { key: 'promEfec', label: 'EFECTIVAS', prom: true },
-];
 
 function promValue(r: Row, key: SortKey): number {
   const d = r.dias || 1;
@@ -126,6 +117,21 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [q, setQ] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<'ALL' | 'OPERATIVA' | 'DISPONIBLE'>('ALL');
+
+  const isDiaSelected = Boolean(filters.fecha && filters.fecha !== 'ALL');
+  const metaLabel = isDiaSelected ? 'META DÍA' : 'META MES';
+
+  const COLS: { key: SortKey; label: string; prom?: boolean; accent?: string; isMoney?: boolean; isPct?: boolean; borderLeft?: boolean }[] = useMemo(() => [
+    { key: 'efec', label: 'EFECTIVAS', accent: OK },
+    { key: 'fall', label: 'FALLIDAS C/PAGO', accent: WARN },
+    { key: 'perd', label: 'PERDIDAS', accent: ERR },
+    { key: 'totVis', label: 'TOTAL' },
+    { key: 'ingreso', label: 'VALORIZADA', accent: 'var(--otc)', isMoney: true, borderLeft: true },
+    { key: 'costo', label: metaLabel, accent: INK, isMoney: true },
+    { key: 'cump', label: '% CUMPL.', isPct: true },
+    { key: 'promVis', label: 'VISITAS', prom: true, borderLeft: true },
+    { key: 'promEfec', label: 'EFECTIVAS', prom: true },
+  ], [metaLabel]);
 
   /* cerrar con Escape + bloquear scroll del fondo */
   useEffect(() => {
@@ -300,7 +306,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   const exportCSV = () => {
     if (!raw) return;
     const rows = [];
-    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', '% Cumplimiento', 'PROM vis', 'Prom efec'].join(';'));
+    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'Meta de facturación', '% Cumplimiento', 'PROM vis', 'Prom efec'].join(';'));
     
     const rowsF = filtRaw(raw.raw, filters);
     
@@ -360,6 +366,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               tech.perd,
               tech.totVis,
               Math.round(tech.ingreso),
+              Math.round(tech.costo),
               `${cumpPct.toFixed(1)}%`,
               promVis.toFixed(2),
               promEfec.toFixed(2)
@@ -416,7 +423,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     }
 
     const displayVal = c.isMoney 
-      ? `$${fmtN(Math.round(v / 1000))}` 
+      ? fmtCOP(v) 
       : c.prom 
       ? v.toFixed(2) 
       : fmtN(v);
@@ -488,8 +495,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ERR }}>{fmtN(total.perd)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA (MILES)</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--otc)' }}>${fmtN(Math.round(total.ingreso / 1000))}</div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--otc)' }}>{fmtCOP(total.ingreso)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{metaLabel}</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtCOP(total.costo)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
@@ -596,7 +607,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   VISITAS
                 </th>
                 <th
-                  colSpan={2}
+                  colSpan={3}
                   style={{
                     position: 'sticky', top: 0, zIndex: 6,
                     background: 'var(--panel)', padding: '6px 8px',
@@ -701,7 +712,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                     }
 
                     const displayVal = c.isMoney 
-                      ? `$${fmtN(Math.round(v / 1000))}` 
+                      ? fmtCOP(v) 
                       : c.prom 
                       ? v.toFixed(2) 
                       : fmtN(v);
@@ -729,7 +740,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         {/* Pie informativo */}
         <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Clic en una fila para desplegar zonas y técnicos · clic en un encabezado para ordenar</span>
-          <span>Producción en miles de pesos · % Cumplimiento = (producción ÷ costo) × 100</span>
+          <span>% Cumplimiento = (producción ÷ meta) × 100</span>
         </div>
       </div>
     </div>
