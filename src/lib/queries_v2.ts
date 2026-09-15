@@ -181,9 +181,14 @@ export async function getDashboardDataV2(mes?: string) {
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
               ) THEN 0
-              WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) 
-                THEN COALESCE(mo.valor_orden,0) * 1.1300192 
-              ELSE 0 
+              -- Zona SUR: maestro_tarifas ya guarda el valor FINAL (sin capa
+              -- base×incremento como Norte-Centro) -- no se multiplica otra vez.
+              WHEN (mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0))
+                AND UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%'
+                THEN COALESCE(mo.valor_orden,0)
+              WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0)
+                THEN COALESCE(mo.valor_orden,0) * 1.1300192
+              ELSE 0
             END
           )
         END) as "Ingresos",
@@ -343,9 +348,12 @@ export async function getDashboardDataV2(mes?: string) {
                      OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
                      OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
                    ) THEN 0
-                   WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) 
-                     THEN COALESCE(mo.valor_orden,0) * 1.1300192 
-                   ELSE 0 
+                   WHEN (mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0))
+                     AND UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%'
+                     THEN COALESCE(mo.valor_orden,0)
+                   WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0)
+                     THEN COALESCE(mo.valor_orden,0) * 1.1300192
+                   ELSE 0
                  END
                ) as "Ingresos_COP",
                COUNT(DISTINCT mo.nic) as "Cantidad_NIC", 
