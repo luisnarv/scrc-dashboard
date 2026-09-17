@@ -44,6 +44,88 @@ interface EmpRowV2 {
 // columna precalculada historico_mo.brigada_homologada (se computa en la ingesta,
 // ver prototipo_etl/ingesta_bd.py::recomputar_columnas). El dashboard solo la LEE.
 
+<<<<<<< Updated upstream
+=======
+// ═══════════════════════════════════════════════════════════════════════════
+// META DIARIA — FUENTE ÚNICA DE VERDAD (leer esto primero)
+// ═══════════════════════════════════════════════════════════════════════════
+// La "meta del día" de cada orden se calcula EXCLUSIVAMENTE con META_DIARIA_SQL.
+// Todo el dashboard (Operativo, Gerencial, Estratégico, Informes, home) consume
+// el campo Meta_Facturacion que sale de aquí — NO se recalcula en ningún otro lado.
+//
+//   • ZONA SUR (acordado) → meta FIJA para Pesada y Liviana:
+//       Pesada  : Lun-Vie $650.000 · Sábado $425.000
+//       Liviana : Lun-Vie $380.000 · Sábado $310.000   (domingo = valor Lun-Vie)
+//   • NORTE/CENTRO:
+//       - Costos mensuales actualizados a partir de Junio 2026 (Liviana $6.683.910, Pesada $16.267.057, etc.)
+//       - Antes de Septiembre 2026: jornada 46h (8h L-V, 6h Sáb, divisor 184h)
+//       - Desde Septiembre 2026: jornada 44h (8h L-J, 7h Vie, 5h Sáb, divisor 176h)
+//   • Disponibles (MT-AT/Minicanasta/Canasta/Gestor/Pesada Disponible) → Costo/24
+const META_SUR = {
+  pesada:  { semana: 650_000, sabado: 425_000 },
+  liviana: { semana: 380_000, sabado: 310_000 },
+} as const;
+
+const COSTO_MENSUAL_SQL = `(CASE 
+  WHEN mo.fecha_cierre >= '2026-06-01' THEN
+    CASE mo.brigada_homologada
+      WHEN 'Brigada Liviana'         THEN 6183910.20
+      WHEN 'Gestor Integral Multi'   THEN 8576399.37
+      WHEN 'Brigada Minicanasta'     THEN 56697622.89
+      WHEN 'Brigada Pesada'          THEN 15267057.00
+      WHEN '(D) Brigada Pesada'      THEN 15267057.00
+      WHEN 'Brigada Pesada MT-AT'    THEN 24673468.63
+      WHEN 'Pesada Disponible'       THEN 24673468.63
+      WHEN 'Brigada Canasta'         THEN 72631786.33
+      ELSE COALESCE(mm.costo, 0)
+    END
+  ELSE COALESCE(mm.costo, 0)
+END)`;
+
+const META_DIARIA_SQL = `MAX(CASE
+          -- ZONA SUR (Valores fijos Pesada y Liviana)
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Pesada'
+            THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.pesada.sabado} ELSE ${META_SUR.pesada.semana} END)
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Liviana'
+            THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.liviana.sabado} ELSE ${META_SUR.liviana.semana} END)
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN
+            ${COSTO_MENSUAL_SQL} / 24.0
+
+          -- ZONA NORTE Y CENTRO: DESDE SEPTIEMBRE 2026 (Valores exactos con nueva jornada 44h)
+          WHEN mo.fecha_cierre >= '2026-09-01' AND UPPER(COALESCE(mo.zona,'')) NOT LIKE '%SUR%' THEN
+            CASE mo.brigada_homologada
+              WHEN 'Brigada Liviana' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 175679.27
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 245950.97
+                      ELSE 281086.83 END)
+              WHEN 'Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
+                      ELSE 693957.14 END)
+              WHEN '(D) Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
+                      ELSE 693957.14 END)
+              WHEN 'Gestor Integral Multi' THEN 357349.97
+              WHEN 'Brigada Minicanasta' THEN 2362400.95
+              WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
+              WHEN 'Pesada Disponible' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=0 THEN 1387882.61 ELSE 1028061.19 END)
+              WHEN 'Brigada Canasta' THEN 3026324.43
+              ELSE ${COSTO_MENSUAL_SQL} / 24.0
+            END
+
+          -- ZONA NORTE Y CENTRO: ANTES DE SEPTIEMBRE 2026
+          WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
+            THEN (${COSTO_MENSUAL_SQL} / 184.0) * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+          ELSE ${COSTO_MENSUAL_SQL} / 24.0
+        END)`;
+
+// Limpieza y normalización de cédula/id_tecnico: quita decimales (.0), puntos de miles y cualquier carácter no numérico
+const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.0+$', ''), '\\D', '', 'g')";
+const SQL_CLEAN_MB_CED = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mb.\"Cedula\"), '\\.0+$', ''), '\\D', '', 'g')";
+
+>>>>>>> Stashed changes
 export async function getDashboardDataV2(mes?: string) {
   const params: unknown[] = [];
   const activo = !!(mes && mes !== 'ALL');
@@ -86,6 +168,7 @@ export async function getDashboardDataV2(mes?: string) {
         --  · Gestor -> meta x min(1, (Efectivas + Fallida_con_pago) / (18 día | 13 sábado))
         (CASE
           WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+<<<<<<< Updated upstream
             THEN MAX(COALESCE(mm.costo,0)/24.0)
           WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
             THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, COUNT(*)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
@@ -93,6 +176,62 @@ export async function getDashboardDataV2(mes?: string) {
             THEN MAX(COALESCE(mm.costo,0)/24.0) * LEAST(1.0, (SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) + SUM(CASE WHEN mo.estado_norm='Fallida' AND COALESCE(mo.valor_orden,0)>0 THEN 1 ELSE 0 END))::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
           ELSE SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN COALESCE(mo.valor_orden,0) * 1.30045647872 ELSE 0 END)
         END) as "Ingresos",
+=======
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0 * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END))
+          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0 * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END)) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0 * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END)) * LEAST(1.0, (
+              SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
+              + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
+            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
+          ELSE SUM(
+            CASE 
+              -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
+              WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
+                UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%CANASTA%' 
+                OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
+                OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
+              ) THEN 0
+              -- Zona SUR: maestro_tarifas ya guarda el valor FINAL (sin capa
+              -- base×incremento como Norte-Centro) -- no se multiplica otra vez.
+              WHEN (mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0))
+                AND UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%'
+                THEN COALESCE(mo.valor_orden,0)
+              WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0)
+                THEN COALESCE(mo.valor_orden,0) * 1.1300192
+              ELSE 0
+            END
+          )
+        END) as "Ingresos",
+
+        -- Igual a "Ingresos" pero SIN el ajuste de incremento (×1.1300192) en
+        -- Pesada/Liviana/(D)Pesada. Las disponibles (meta×prorrateo) no llevan incremento.
+        (CASE
+          WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0)
+          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+            THEN MAX(${COSTO_MENSUAL_SQL}/24.0) * LEAST(1.0, (
+              SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
+              + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
+            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
+          ELSE SUM(
+            CASE 
+              -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
+              WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
+                UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%CANASTA%' 
+                OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
+                OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
+              ) THEN 0
+              WHEN mo.estado_norm = 'Efectiva' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0) 
+                THEN COALESCE(mo.valor_orden,0) 
+              ELSE 0 
+            END
+          )
+        END) as "Ingresos_Base",
+>>>>>>> Stashed changes
 
         -- Meta de facturación diaria (fija por día/sábado, sin prorrateo):
         --   Grupo A (Pesada / (D) Pesada / Liviana) = Costo/184 * (sábado 6h | día 8h)
