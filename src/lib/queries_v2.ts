@@ -131,9 +131,14 @@ export async function getDashboardDataV2(mes?: string) {
   // Excluye técnicos "de prueba" del OSF/SIPREM (p.ej. 'TECNICO PRUEBA ATL NORTE',
   // cédula 2837855461): son órdenes dummy de conectividad, no brigadas reales, y
   // se cuelan de vez en cuando en el export inflando la producción del mes.
-  const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.observacion ~* 'v\\s*s\\s*:' AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'";
-  const fechaCond = activo 
-    ? `WHERE to_char(mo.fecha_cierre, 'YYYY-MM') = $1 AND ${baseMoCond}` 
+  // tiene_vs se precalcula en el ETL (recomputar_columnas) a partir del mismo regex
+  // 'v\s*s\s*:' -- evita evaluar el regex por fila en cada consulta del dashboard.
+  const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.tiene_vs AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'";
+  // Rango sargable sobre fecha_cierre (en vez de to_char(fecha_cierre,'YYYY-MM') = $1):
+  // envolver la columna en una función impide que Postgres use idx_mo_fecha_cierre y
+  // fuerza un sequential scan completo. Con el rango, el índice sí se puede usar.
+  const fechaCond = activo
+    ? `WHERE mo.fecha_cierre >= ($1 || '-01')::date AND mo.fecha_cierre < ($1 || '-01')::date + interval '1 month' AND ${baseMoCond}`
     : `WHERE ${baseMoCond}`;
   const mesymCond = activo ? 'WHERE mes_ym = $1' : '';
   // OTC del dashboard = SOLO proyectos SCR ('SCR Sur' / 'SCR Norte - Centro'), que son
@@ -431,7 +436,7 @@ export async function getDashboardDataV2(mes?: string) {
 
 export async function getMapDataV2(mes?: string, zona?: string, proy?: string, proceso?: string) {
   const values: unknown[] = [];
-  const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.observacion ~* 'v\\s*s\\s*:'"];
+  const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.tiene_vs"];
   // Proceso: 'GESTOR' restringe a la brigada 'Gestor Integral Multi'. 'ALL'/SCR = todo.
   if (proceso === 'GESTOR') {
     filterClauses.push("mo.brigada_homologada = 'Gestor Integral Multi'");
@@ -523,7 +528,7 @@ export async function getMonthsDataV2() {
              COUNT(*)::int as "count",
              MAX(fecha_carga)::text as "version"
       FROM dbanalitica.historico_mo
-      WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND observacion ~* 'v\\s*s\\s*:'
+      WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND tiene_vs
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
       ORDER BY 1
     `);
@@ -543,7 +548,7 @@ export async function getMonthsDataV2() {
         SUM(CASE WHEN UPPER(mo.accion) LIKE '%NORMALIZACION PQR%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_PQR",
         (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
-      WHERE mo.id_tecnico IS NOT NULL AND mo.observacion ~* 'v\\s*s\\s*:' AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'
+      WHERE mo.id_tecnico IS NOT NULL AND mo.tiene_vs AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'
       GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.brigada_homologada
     `);
 
@@ -565,7 +570,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
   const lista = (barriosParam || '').split('||').map(s => s.trim()).filter(Boolean);
   if (!lista.length) return { rows: [] };
 
-  const where: string[] = ["h.id_tecnico IS NOT NULL", "h.observacion ~* 'v\\s*s\\s*:'"];
+  const where: string[] = ["h.id_tecnico IS NOT NULL", "h.tiene_vs"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
@@ -609,7 +614,7 @@ export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?
 //   getObsDataV2('2026-07', '123456')            -> por NIC
 //   getObsDataV2('2026-07', undefined, 'A||B')   -> por barrios
 export async function getObsDataV2(mes?: string, nic?: string, barriosParam?: string): Promise<{ rows: unknown[] }> {
-  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''", "h.id_tecnico IS NOT NULL", "h.observacion ~* 'v\\s*s\\s*:'"];
+  const where: string[] = ["h.observacion IS NOT NULL", "h.observacion <> ''", "h.id_tecnico IS NOT NULL", "h.tiene_vs"];
   const values: unknown[] = [];
 
   if (mes && mes !== 'ALL') {
