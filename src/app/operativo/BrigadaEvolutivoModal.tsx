@@ -43,6 +43,8 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
   const { filters, setFilters, mesList, fechaList } = useDashboard();
   const [mesOpen, setMesOpen] = useState(false);
   const mesRef = useRef<HTMLDivElement>(null);
+  const [diaOpen, setDiaOpen] = useState(false);
+  const diaRef = useRef<HTMLDivElement>(null);
 
   // Cerrar con Esc
   useEffect(() => {
@@ -52,9 +54,12 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     return () => window.removeEventListener('keydown', esc);
   }, [open, onClose]);
 
-  // Cerrar el dropdown de meses al hacer click afuera
+  // Cerrar los dropdowns al hacer click afuera
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (mesRef.current && !mesRef.current.contains(e.target as Node)) setMesOpen(false); };
+    const h = (e: MouseEvent) => {
+      if (mesRef.current && !mesRef.current.contains(e.target as Node)) setMesOpen(false);
+      if (diaRef.current && !diaRef.current.contains(e.target as Node)) setDiaOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
@@ -133,6 +138,43 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     setFilters({ mes: next, fecha: 'ALL' });
   };
   const mesLabel = filters.mes.length === 0 ? 'Todos' : filters.mes.length === 1 ? fmtMes(filters.mes[0]) : `${filters.mes.length} meses`;
+
+  const uniqueDays = [...new Set(fechaList.map(f => String(f).slice(8, 10)))].filter(Boolean).sort();
+  const selectedDays = new Set(
+    filters.fecha === 'ALL'
+      ? uniqueDays
+      : (filters.fecha ? filters.fecha.split(',').filter(Boolean).map(f => f.slice(8, 10)) : [])
+  );
+  const isTodosDias = filters.fecha === 'ALL' || (uniqueDays.length > 0 && selectedDays.size === uniqueDays.length);
+  const isDiaChecked = (d: string) => isTodosDias || selectedDays.has(d);
+
+  const toggleDia = (d: string) => {
+    let nextDays: string[];
+    if (isTodosDias) {
+      nextDays = uniqueDays.filter(x => x !== d);
+    } else if (selectedDays.has(d)) {
+      nextDays = Array.from(selectedDays).filter(x => x !== d);
+    } else {
+      nextDays = [...Array.from(selectedDays), d].sort();
+    }
+    if (nextDays.length === 0) {
+      setFilters({ fecha: '' });
+    } else if (nextDays.length === uniqueDays.length) {
+      setFilters({ fecha: 'ALL' });
+    } else {
+      const matchingFechas = fechaList.filter(f => nextDays.includes(f.slice(8, 10)));
+      setFilters({ fecha: matchingFechas.join(',') });
+    }
+  };
+
+  const diaLabel = (() => {
+    if (uniqueDays.length === 0) return 'Sin días';
+    if (isTodosDias) return `Todos (${uniqueDays.length})`;
+    if (selectedDays.size === 0) return 'Seleccionar días…';
+    if (selectedDays.size === 1) return `Día ${Array.from(selectedDays)[0]}`;
+    return `${selectedDays.size} días`;
+  })();
+
   const fBtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
   const fRow = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer', background: on ? 'var(--hover-bg)' : 'transparent', color: 'var(--text-body)' });
 
@@ -212,15 +254,44 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
               </div>
             )}
           </div>
-          {/* Día */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-muted)' }}>
-            Día:
-            <select value={filters.fecha} onChange={e => setFilters({ fecha: e.target.value })}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 12.5 }}>
-              <option value="ALL">Todos</option>
-              {fechaList.map(f => <option key={f} value={f}>{String(f).slice(0, 10).split('-')[2] || f}</option>)}
-            </select>
-          </label>
+          {/* Día (multi-select con casillas) */}
+          <div ref={diaRef} style={{ position: 'relative' }}>
+            <button onClick={() => { setDiaOpen(o => !o); setMesOpen(false); }} style={fBtn}>
+              Día: {diaLabel} ▾
+            </button>
+            {diaOpen && (
+              <div style={{ position: 'absolute', top: '112%', left: 0, zIndex: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, minWidth: 190, maxHeight: 300, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+                  <button type="button" onClick={() => setFilters({ fecha: 'ALL' })} style={{ flex: 1, padding: '4px 6px', borderRadius: 5, border: '1px solid var(--border)', background: isTodosDias ? 'rgba(0, 137, 123, 0.12)' : 'transparent', color: isTodosDias ? '#00897B' : 'var(--text-body)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    ✓ Todos
+                  </button>
+                  <button type="button" onClick={() => setFilters({ fecha: '' })} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    Limpiar
+                  </button>
+                </div>
+                <label style={fRow(isTodosDias)}>
+                  <input
+                    type="checkbox"
+                    checked={isTodosDias}
+                    onChange={() => {
+                      if (isTodosDias) setFilters({ fecha: '' });
+                      else setFilters({ fecha: 'ALL' });
+                    }}
+                  />
+                  Todos los días ({uniqueDays.length})
+                </label>
+                <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+                {uniqueDays.map(d => {
+                  const on = isDiaChecked(d);
+                  return (
+                    <label key={d} style={fRow(on)}>
+                      <input type="checkbox" checked={on} onChange={() => toggleDia(d)} /> Día {d}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Cambian el mes/día del gráfico y la tabla en vivo</span>
         </div>
 

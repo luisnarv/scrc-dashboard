@@ -61,6 +61,7 @@ export const METAS_NORTE_CENTRO: Record<string, MetaBrigadaConfig> = {
     domingo: 0,
     descripcion: '11 efectivas L-V, 8 sábados',
   },
+
   PESADA_MT: {
     categoria: 'Pesada MT',
     aliases: [
@@ -260,11 +261,12 @@ export function getMinutosTrabajoHora(
 ): number {
   let dayOfWeek = 0; // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
   if (typeof fecha === 'string') {
-    const parts = fecha.split('-').map(Number);
+    const fStr = fecha.includes(',') ? fecha.split(',')[0] : fecha;
+    const parts = fStr.split('-').map(Number);
     if (parts.length === 3) {
       dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
     } else {
-      dayOfWeek = new Date(fecha).getDay();
+      dayOfWeek = new Date(fStr).getDay();
     }
   } else if (fecha instanceof Date) {
     dayOfWeek = fecha.getDay();

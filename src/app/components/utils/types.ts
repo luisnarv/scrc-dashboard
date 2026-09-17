@@ -129,6 +129,22 @@ export interface EvolutivoRecord {
   [key: string]: unknown;
 }
 
+export interface HorarioRecord {
+  Fecha?: string;
+  Hora?: string;
+  Tipo_Brigada?: string;
+  Zona?: string;
+  BrigadasActivas?: number | string;
+  Efectivas?: number | string;
+  Fallidas?: number | string;
+  Perdidas?: number | string;
+  Ordenes?: number | string;
+  _Proyecto?: string;
+  _Zona?: string;
+  _ZonaDet?: string;
+  [key: string]: unknown;
+}
+
 export interface RawData {
   raw: RawRecord[];
   costos: CostoRecord[];
@@ -137,6 +153,7 @@ export interface RawData {
   mes: MesRecord[];
   disp: DispDiariaRecord[];
   evolutivo: EvolutivoRecord[];
+  horario?: HorarioRecord[];
 }
 
 export interface Filters {

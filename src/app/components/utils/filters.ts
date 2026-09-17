@@ -1,4 +1,4 @@
-import type { RawRecord, CostoRecord, MesRecord, Filters } from './types';
+import type { RawRecord, CostoRecord, MesRecord, HorarioRecord, Filters } from './types';
 
 const mesDe = (fecha: unknown) => String(fecha || '').slice(0, 7);
 
@@ -10,13 +10,54 @@ const BRIG_GESTOR = 'Gestor Integral Multi';
 const procesoOK = (brig: unknown, F: Filters) =>
   F.proceso !== 'GESTOR' || String(brig || '') === BRIG_GESTOR;
 
+function fechaMatches(fOnly: string, fFilter: string, set: Set<string> | null): boolean {
+  if (set) {
+    return set.has(fOnly) || set.has(fOnly.slice(8, 10));
+  }
+  if (fOnly === fFilter) return true;
+  if (fFilter.length === 2 && fOnly.slice(8, 10) === fFilter) return true;
+  return false;
+}
+
 export function filtRaw(rows: RawRecord[], F: Filters): RawRecord[] {
+  const fFilter = F.fecha;
+  const isAllFecha = fFilter === 'ALL';
+  const fSet = (!isAllFecha && fFilter && fFilter.includes(','))
+    ? new Set(fFilter.split(',').filter(Boolean))
+    : null;
+
   return rows.filter(r => {
     if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
     if (F.zona !== 'ALL' && r._Zona !== F.zona && r._ZonaDet !== F.zona) return false;
     if (!mesOK(mesDe(r.Fecha), F)) return false;
-    if (F.fecha !== 'ALL' && r.Fecha !== F.fecha) return false;
+    if (!isAllFecha) {
+      if (!fFilter) return false;
+      const fOnly = String(r.Fecha || '').trim().slice(0, 10);
+      if (!fechaMatches(fOnly, fFilter, fSet)) return false;
+    }
     if (!procesoOK(r.Tipo_Brigada_Mes, F)) return false;
+    return true;
+  });
+}
+
+// Registros de digitación horaria (raw.horario)
+export function filtHorario(rows: HorarioRecord[], F: Filters): HorarioRecord[] {
+  const fFilter = F.fecha;
+  const isAllFecha = fFilter === 'ALL';
+  const fSet = (!isAllFecha && fFilter && fFilter.includes(','))
+    ? new Set(fFilter.split(',').filter(Boolean))
+    : null;
+
+  return rows.filter(r => {
+    if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
+    if (F.zona !== 'ALL' && r._Zona !== F.zona && r._ZonaDet !== F.zona) return false;
+    if (!mesOK(mesDe(r.Fecha), F)) return false;
+    if (!isAllFecha) {
+      if (!fFilter) return false;
+      const fOnly = String(r.Fecha || '').trim().slice(0, 10);
+      if (!fechaMatches(fOnly, fFilter, fSet)) return false;
+    }
+    if (!procesoOK(r.Tipo_Brigada, F)) return false;
     return true;
   });
 }

@@ -157,8 +157,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const rawType = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'Sin tipo').trim();
       const typeKey = HOMOLOGACION_BRIGADA[rawType.toUpperCase()] || rawType || 'Sin tipo';
       const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
-      const techKey = String(r.Cedula || '');
-      const techLabel = String(r.Nombre || techKey);
+      const rawTech = String(r.Cedula || '').trim();
+      const techKey = rawTech ? rawTech.replace(/\.0+$/, '').replace(/\D/g, '') : '';
+      const techLabel = String(r.Nombre || techKey || 'Sin Identificación');
 
       // Create/Get Type
       if (!rootMap[typeKey]) rootMap[typeKey] = { key: typeKey, label: typeKey, efec: 0, fall: 0, perd: 0, totVis: 0, dias: 0, ingreso: 0, costo: 0, children: [] };
@@ -321,8 +322,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       const rawType = String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || 'Sin tipo').trim();
       const typeKey = HOMOLOGACION_BRIGADA[rawType.toUpperCase()] || rawType || 'Sin tipo';
       const zoneKey = String(r._Zona || r.Zona || 'Sin Zona');
-      const techKey = String(r.Cedula || '');
-      const techLabel = String(r.Nombre || techKey);
+      const rawTech = String(r.Cedula || '').trim();
+      const techKey = rawTech ? rawTech.replace(/\.0+$/, '').replace(/\D/g, '') : '';
+      const techLabel = String(r.Nombre || techKey || 'Sin Identificación');
 
       const mNode = (monthMap[month] ??= {});
       const tNode = (mNode[typeKey] ??= {});

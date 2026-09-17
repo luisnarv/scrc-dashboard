@@ -70,9 +70,16 @@ function calcSlope(monthlyData: MonthVal[]): number {
   return denom !== 0 ? (N * sumXY - sumX * sumY) / denom : 0;
 }
 
-function getEstadoTecnico(monthlyData: MonthVal[]): 'BAJA' | 'NUEVO' | 'ACTIVO' {
+function getEstadoTecnico(monthlyData: MonthVal[], porDia: boolean = false): 'BAJA' | 'NUEVO' | 'ACTIVO' {
   const N = monthlyData.length;
   if (N === 0) return 'BAJA';
+
+  // Si estamos en desglose diario (un solo mes seleccionado):
+  // Si el técnico tiene ingresos/órdenes en este mes (>0), está ACTIVO
+  if (porDia) {
+    const totalMes = monthlyData.reduce((s, m) => s + m.val, 0);
+    return totalMes > 0 ? 'ACTIVO' : 'BAJA';
+  }
 
   // Si tiene 2 meses o más seguidos sin ejecutar órdenes al final -> BAJA
   if (N >= 2 && monthlyData[N - 1].val === 0 && monthlyData[N - 2].val === 0) {
@@ -581,7 +588,9 @@ export default function TecnicoProductivoPage() {
     const tiposSet = new Set<string>();
 
     for (const r of rows) {
-      const id = String(r.Cedula || r.Nombre || '');
+      const rawCed = String(r.Cedula || '').trim();
+      const cleanCed = rawCed ? rawCed.replace(/\.0+$/, '').replace(/\D/g, '') : '';
+      const id = cleanCed || String(r.Nombre || '').trim();
       if (!id) continue;
       const nombre = String(r.Nombre || id);
       const tipo = String(
@@ -673,7 +682,7 @@ export default function TecnicoProductivoPage() {
         }
       }
 
-      const estadoTecnico = getEstadoTecnico(monthlyData);
+      const estadoTecnico = getEstadoTecnico(monthlyData, porDia);
 
       // Evaluar Movilidad de Proyecto (Traslado)
       const sortedMonthsProy = Object.keys(tec.proyByMonth).sort();

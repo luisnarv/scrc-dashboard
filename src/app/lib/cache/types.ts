@@ -1,5 +1,5 @@
 import type {
-  RawRecord, CostoRecord, EmpleadoRecord, MesRecord, DispDiariaRecord, EvolutivoRecord,
+  RawRecord, CostoRecord, EmpleadoRecord, MesRecord, DispDiariaRecord, EvolutivoRecord, HorarioRecord,
 } from '../../components/utils/types';
 
 // Payload de UN mes tal como lo devuelve /api/data/base?mes=YYYY-MM
@@ -9,6 +9,7 @@ export interface MonthPayload {
   emps: EmpleadoRecord[];
   mesRecords: MesRecord[];
   dispDiaria: DispDiariaRecord[];
+  horario?: HorarioRecord[];
 }
 
 // Un mes disponible en el servidor (de /api/data/months)

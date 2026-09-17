@@ -74,6 +74,13 @@ function normalizeMonth(p: MonthPayload): MonthPayload {
     rec._Zona = z || proj || undefined;
     rec._ZonaDet = rec._Zona;
   });
+  (p.horario || []).forEach((rec: any) => {
+    const proj = normProy(rec.Zona);
+    const z = normZonaDet(rec.Zona);
+    if (proj) rec._Proyecto = proj;
+    rec._Zona = z || proj || undefined;
+    rec._ZonaDet = rec._Zona;
+  });
   return p;
 }
 
@@ -224,6 +231,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       mes: meses.flatMap(m => m.mesRecords),
       disp: meses.flatMap(m => m.dispDiaria),
       evolutivo,
+      horario: meses.flatMap(m => m.horario || []),
     };
   }, [monthsData, evolutivo, filters.ano]);
 

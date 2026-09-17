@@ -101,7 +101,7 @@ export async function GET(request: Request) {
       WITH base AS (
         SELECT
           to_char(fecha_cierre, 'YYYY-MM-DD') AS fecha,
-          id_tecnico, tecnico,
+          REGEXP_REPLACE(REGEXP_REPLACE(TRIM(id_tecnico), '\\.0+$', ''), '\\D', '', 'g') AS id_tecnico, tecnico,
           coalesce(zona, 'SIN ZONA') AS zona,
           coalesce(brigada_homologada, 'SIN CLASIFICAR') AS brigada,
           estado_norm, tipo_os,

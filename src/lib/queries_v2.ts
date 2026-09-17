@@ -119,6 +119,10 @@ const META_DIARIA_SQL = `MAX(CASE
           ELSE ${COSTO_MENSUAL_NC_SQL} / 24.0
         END)`;
 
+// Limpieza y normalización de cédula/id_tecnico: quita decimales (.0), puntos de miles y cualquier carácter no numérico
+const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.0+$', ''), '\\D', '', 'g')";
+const SQL_CLEAN_MB_CED = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mb.\"Cedula\"), '\\.0+$', ''), '\\D', '', 'g')";
+
 export async function getDashboardDataV2(mes?: string) {
   const params: unknown[] = [];
   const activo = !!(mes && mes !== 'ALL');
@@ -143,7 +147,7 @@ export async function getDashboardDataV2(mes?: string) {
     const rawRes = await query(`
       SELECT 
         mo.fecha_cierre::text as "Fecha", 
-        mo.id_tecnico as cedula, 
+        ${SQL_CLEAN_MO_ID} as cedula, 
         MAX(mo.tecnico) as "Nombre", 
         MAX(mo.brigada_homologada) as "Tipo_Brigada_Operaciones",
         MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes",
@@ -234,7 +238,7 @@ export async function getDashboardDataV2(mes?: string) {
         0 as "Costo_Operativo"
       FROM dbanalitica.historico_mo mo
       LEFT JOIN dbanalitica.maestro_brigadas mb
-        ON mo.id_tecnico = mb."Cedula"
+        ON ${SQL_CLEAN_MO_ID} = ${SQL_CLEAN_MB_CED}
         AND (
           mb."Fecha" IS NULL
           OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7)
@@ -259,7 +263,7 @@ export async function getDashboardDataV2(mes?: string) {
       -- brigadas distintas el mismo día, cada brigada queda con SUS órdenes (el
       -- conteo "por día y tipo de brigada" cuadra). Los totales y el conteo de
       -- técnicos distintos (Set de Cédula en el front) no cambian.
-      GROUP BY mo.fecha_cierre, mo.id_tecnico, mo.brigada_homologada
+      GROUP BY mo.fecha_cierre, ${SQL_CLEAN_MO_ID}, mo.brigada_homologada
     `, params);
 
     const cosRes = await query(`
@@ -334,12 +338,12 @@ export async function getDashboardDataV2(mes?: string) {
     }));
 
       const mesRes = await query(`
-        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", mo.id_tecnico as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
+        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
                mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
-               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas", 
                COUNT(*) as "Visitas",
                SUM(
                  CASE 
@@ -369,22 +373,45 @@ export async function getDashboardDataV2(mes?: string) {
                COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
                (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
         FROM dbanalitica.historico_mo mo
-        LEFT JOIN dbanalitica.maestro_brigadas mb ON mo.id_tecnico = mb."Cedula" AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7))
+        LEFT JOIN dbanalitica.maestro_brigadas mb ON ${SQL_CLEAN_MO_ID} = ${SQL_CLEAN_MB_CED} AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7))
           ${fechaCond}
         -- Agrupa TAMBIÉN por brigada_homologada: un técnico con 2 brigadas en el mes
         -- aparece en cada una con SUS órdenes (antes MAX escondía la brigada real).
-        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.id_tecnico, mo.brigada_homologada
+        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${SQL_CLEAN_MO_ID}, mo.brigada_homologada
       `, params);
 
     const dispRes = await query(`
         SELECT mo.fecha_cierre::text as "Fecha",
                mo.brigada_homologada as "Tipo_Brigada",
                mo.zona as "Zona",
-               COUNT(DISTINCT mo.id_tecnico) as "BrigadasActivas"
+               COUNT(DISTINCT ${SQL_CLEAN_MO_ID}) as "BrigadasActivas"
         FROM dbanalitica.historico_mo mo
         ${fechaCond}
         GROUP BY mo.fecha_cierre, mo.brigada_homologada, mo.zona
         ORDER BY mo.fecha_cierre, mo.brigada_homologada
+      `, params);
+
+    // Evolutivo horario de digitación: cuenta cantidad de brigadas distintas que ejecutaron órdenes en cada hora
+    const horarioRes = await query(`
+        SELECT mo.fecha_cierre::text as "Fecha",
+               h.hora as "Hora",
+               mo.brigada_homologada as "Tipo_Brigada",
+               mo.zona as "Zona",
+               COUNT(DISTINCT ${SQL_CLEAN_MO_ID}) as "BrigadasActivas",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
+               SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
+               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+               COUNT(*) as "Ordenes"
+        FROM dbanalitica.historico_mo mo
+        CROSS JOIN (
+          SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00']) as hora
+        ) h
+        ${fechaCond}
+          AND mo.hora_inicio IS NOT NULL AND mo.hora_fin IS NOT NULL
+          AND LEAST(mo.hora_inicio, mo.hora_fin) <= (left(h.hora, 2) || ':59:59')::time
+          AND GREATEST(mo.hora_inicio, mo.hora_fin) >= (h.hora || ':00')::time
+        GROUP BY mo.fecha_cierre, h.hora, mo.brigada_homologada, mo.zona
+        ORDER BY mo.fecha_cierre, h.hora, mo.brigada_homologada
       `, params);
 
     return {
@@ -393,7 +420,8 @@ export async function getDashboardDataV2(mes?: string) {
       costos: costosFinal,
       emps,
       mesRecords: mesRes.rows,
-      dispDiaria: dispRes.rows
+      dispDiaria: dispRes.rows,
+      horario: horarioRes.rows,
     };
   } catch (error) {
     console.error('DB Error en V2:', error);

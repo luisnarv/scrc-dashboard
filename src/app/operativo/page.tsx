@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw, filtMes, filtDisp } from '../components/utils/filters';
+import { filtRaw, filtMes, filtDisp, filtHorario } from '../components/utils/filters';
 import { fmtPct, fmtN, num as n, fmtRangoMeses } from '../components/utils/formatters';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
@@ -95,9 +95,9 @@ const bandsPluginBands = {
         isNonWorking = getMinutosTrabajoHora(label, fecha, zona) === 0;
         text = label === '12:00' ? 'Almuerzo' : 'Fuera de jornada';
       } else {
-        const dateStr = chart.data?.labels?.[tick.value] || label;
-        const fullDateStr = typeof dateStr === 'string' && dateStr.length === 2 ? `${fecha.slice(0, 7)}-${dateStr}` : String(dateStr);
-        const parts = fullDateStr.split('-').map(Number);
+        const fullDateStr = options?.dias?.[tick.value] || chart.data?.labels?.[tick.value] || label;
+        const resolvedDateStr = typeof fullDateStr === 'string' && fullDateStr.length === 2 ? `${fecha.slice(0, 7)}-${fullDateStr}` : String(fullDateStr);
+        const parts = resolvedDateStr.split('-').map(Number);
         if (parts.length === 3) {
           const dt = new Date(parts[0], parts[1] - 1, parts[2]);
           isNonWorking = dt.getDay() === 0 || esFestivo(dt);
@@ -169,10 +169,14 @@ export default function OperativoPage() {
   const [brigTiposOpen, setBrigTiposOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
   const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia' | 'hora'>('mes');
+  const [subVistaBrigadas, setSubVistaBrigadas] = useState<'cuadrilla' | 'tipo'>('cuadrilla');
+  const [selectedTipoBrigada, setSelectedTipoBrigada] = useState<string>('');
 
   // Al recargar o ingresar a la página operativa, asegurar que el filtro por defecto sea el Mes en Ejecución
+  const initMesRef = useRef(false);
   useEffect(() => {
-    if (mesList && mesList.length > 0) {
+    if (!initMesRef.current && mesList && mesList.length > 0) {
+      initMesRef.current = true;
       const mesEjecucion = mesList[mesList.length - 1];
       if (!filters.mes || filters.mes.length === 0) {
         setFilters({ mes: [mesEjecucion] });
@@ -182,7 +186,12 @@ export default function OperativoPage() {
 
   useEffect(() => {
     if (filters.fecha && filters.fecha !== 'ALL') {
-      setVistaEvolutivo('hora');
+      const parts = filters.fecha.split(',').filter(Boolean);
+      if (parts.length === 1) {
+        setVistaEvolutivo('hora');
+      } else {
+        setVistaEvolutivo('dia');
+      }
     } else {
       const selectedCount = filters.mes ? filters.mes.length : 0;
       if (selectedCount === 1) {
@@ -349,79 +358,149 @@ export default function OperativoPage() {
       });
     }
 
-    rawF.forEach(r => {
-      const day = String(r.Fecha || '');
-      if (!day) return;
-      const t = getBrigadaTipo(r);
-      
-      const e = n(r.Efectivas);
-      const f = n(r.Fallida_Con_Pago);
-      const p = n(r.Fallida_Sin_Pago) + n(r.Perdidas);
-      const v = n(r.Visitas);
+    if (esHora && raw.horario && raw.horario.length > 0) {
+      const rowsH = filtHorario(raw.horario, F);
+      const diasDistintos = new Set(rowsH.map(r => r.Fecha)).size || 1;
 
-      if (esHora) {
-        const explicitH = getPeriodKey(r, day);
-        if (explicitH) {
-          const bd = (byDay[explicitH] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
-          bd.efec += e; bd.fall += f; bd.perd += p;
-          bd.brigadas.add(r.Cedula);
+      const sumHoraTipo: Record<string, Record<string, { bActivas: number, e: number, f: number, p: number, v: number }>> = {};
+      const sumHoraTotal: Record<string, { bActivas: number, e: number, f: number, p: number }> = {};
 
+      rowsH.forEach(r => {
+        const h = String(r.Hora || '');
+        if (!h || !HORAS_VISIBLES.includes(h)) return;
+        const t = getBrigadaTipo({ ...r, Tipo_Brigada_Operaciones: r.Tipo_Brigada });
+        const b = n(r.BrigadasActivas);
+        const e = n(r.Efectivas);
+        const f = n(r.Fallidas);
+        const p = n(r.Perdidas);
+        const v = n(r.Ordenes);
+
+        const ht = (sumHoraTipo[h] ??= {});
+        const entry = (ht[t] ??= { bActivas: 0, e: 0, f: 0, p: 0, v: 0 });
+        entry.bActivas += b;
+        entry.e += e;
+        entry.f += f;
+        entry.p += p;
+        entry.v += v;
+
+        const tot = (sumHoraTotal[h] ??= { bActivas: 0, e: 0, f: 0, p: 0 });
+        tot.bActivas += b;
+        tot.e += e;
+        tot.f += f;
+        tot.p += p;
+      });
+
+      HORAS_VISIBLES.forEach(h => {
+        const tot = sumHoraTotal[h] || { bActivas: 0, e: 0, f: 0, p: 0 };
+        const bd = (byDay[h] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+        bd.efec = tot.e / diasDistintos;
+        bd.fall = tot.f / diasDistintos;
+        bd.perd = tot.p / diasDistintos;
+        const avgBTotal = Math.round(tot.bActivas / diasDistintos);
+        for (let i = 0; i < avgBTotal; i++) {
+          bd.brigadas.add(`b_total_${h}_${i}`);
+        }
+
+        const ht = sumHoraTipo[h] || {};
+        Object.entries(ht).forEach(([t, data]) => {
           const btd = (byTypeDay[t] ??= {});
-          const td = (btd[explicitH] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
-          td.efec += e; td.vis += v; td.fall += f; td.perd += p;
-          td.brigadas.add(r.Cedula);
-        } else {
-          const currentZona = r._Zona || zonaOrProy;
-          const workingHours = HORAS_VISIBLES.filter(h => getMinutosTrabajoHora(h, day, currentZona) > 0);
-          const totalMin = workingHours.reduce((sum, h) => sum + getMinutosTrabajoHora(h, day, currentZona), 0);
+          const td = (btd[h] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
+          td.efec = data.e / diasDistintos;
+          td.vis = data.v / diasDistintos;
+          td.fall = data.f / diasDistintos;
+          td.perd = data.p / diasDistintos;
+          const avgBTipo = Math.round(data.bActivas / diasDistintos);
+          for (let i = 0; i < avgBTipo; i++) {
+            td.brigadas.add(`b_${t}_${h}_${i}`);
+          }
+        });
+      });
+    } else {
+      rawF.forEach(r => {
+        const day = String(r.Fecha || '');
+        if (!day) return;
+        const t = getBrigadaTipo(r);
+        
+        const e = n(r.Efectivas);
+        const f = n(r.Fallida_Con_Pago);
+        const p = n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+        const v = n(r.Visitas);
 
-          if (workingHours.length > 0 && totalMin > 0) {
-            workingHours.forEach(h => {
-              const weight = getMinutosTrabajoHora(h, day, currentZona) / totalMin;
-              const hE = e * weight;
-              const hF = f * weight;
-              const hP = p * weight;
-              const hV = v * weight;
-
-              const bd = (byDay[h] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
-              bd.efec += hE; bd.fall += hF; bd.perd += hP;
-              if (hE > 0 || hF > 0 || hP > 0 || hV > 0) {
-                bd.brigadas.add(r.Cedula);
-              }
-
-              const btd = (byTypeDay[t] ??= {});
-              const td = (btd[h] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
-              td.efec += hE; td.vis += hV; td.fall += hF; td.perd += hP;
-              if (hE > 0 || hF > 0 || hP > 0 || hV > 0) {
-                td.brigadas.add(r.Cedula);
-              }
-            });
-          } else {
-            const fallbackH = '07:00';
-            const bd = (byDay[fallbackH] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+        if (esHora) {
+          const explicitH = getPeriodKey(r, day);
+          if (explicitH) {
+            const bd = (byDay[explicitH] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
             bd.efec += e; bd.fall += f; bd.perd += p;
             bd.brigadas.add(r.Cedula);
 
             const btd = (byTypeDay[t] ??= {});
-            const td = (btd[fallbackH] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
+            const td = (btd[explicitH] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
             td.efec += e; td.vis += v; td.fall += f; td.perd += p;
             td.brigadas.add(r.Cedula);
-          }
-        }
-      } else {
-        const period = day;
-        const bd = (byDay[period] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
-        bd.efec += e; bd.fall += f; bd.perd += p;
-        bd.brigadas.add(r.Cedula);
+          } else {
+            const currentZona = r._Zona || zonaOrProy;
+            const workingHours = HORAS_VISIBLES.filter(h => getMinutosTrabajoHora(h, day, currentZona) > 0);
+            const totalMin = workingHours.reduce((sum, h) => sum + getMinutosTrabajoHora(h, day, currentZona), 0);
 
-        const btd = (byTypeDay[t] ??= {});
-        const td = (btd[period] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
-        td.efec += e; td.vis += v; td.fall += f; td.perd += p;
-        td.brigadas.add(r.Cedula);
-      }
-    });
+            if (workingHours.length > 0 && totalMin > 0) {
+              workingHours.forEach(h => {
+                const weight = getMinutosTrabajoHora(h, day, currentZona) / totalMin;
+                const hE = e * weight;
+                const hF = f * weight;
+                const hP = p * weight;
+                const hV = v * weight;
+
+                const bd = (byDay[h] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+                bd.efec += hE; bd.fall += hF; bd.perd += hP;
+                if (hE > 0 || hF > 0 || hP > 0 || hV > 0) {
+                  bd.brigadas.add(r.Cedula);
+                }
+
+                const btd = (byTypeDay[t] ??= {});
+                const td = (btd[h] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
+                td.efec += hE; td.vis += hV; td.fall += hF; td.perd += hP;
+                if (hE > 0 || hF > 0 || hP > 0 || hV > 0) {
+                  td.brigadas.add(r.Cedula);
+                }
+              });
+            } else {
+              const fallbackH = '07:00';
+              const bd = (byDay[fallbackH] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+              bd.efec += e; bd.fall += f; bd.perd += p;
+              bd.brigadas.add(r.Cedula);
+
+              const btd = (byTypeDay[t] ??= {});
+              const td = (btd[fallbackH] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
+              td.efec += e; td.vis += v; td.fall += f; td.perd += p;
+              td.brigadas.add(r.Cedula);
+            }
+          }
+        } else {
+          const period = day;
+          const bd = (byDay[period] ??= { efec: 0, fall: 0, perd: 0, disp: 0, oper: 0, brigadas: new Set() });
+          bd.efec += e; bd.fall += f; bd.perd += p;
+          bd.brigadas.add(r.Cedula);
+
+          const btd = (byTypeDay[t] ??= {});
+          const td = (btd[period] ??= { efec: 0, vis: 0, fall: 0, perd: 0, brigadas: new Set() });
+          td.efec += e; td.vis += v; td.fall += f; td.perd += p;
+          td.brigadas.add(r.Cedula);
+        }
+      });
+    }
 
     const dias = Object.keys(byDay).sort();
+    const numMesesEnDias = new Set(dias.map(d => d.slice(0, 7))).size;
+    const _abrevMesNum = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const fmtDiaAxis = (d: string) => {
+      if (numMesesEnDias > 1) {
+        const parts = d.split('-').map(Number);
+        if (parts.length === 3) {
+          return `${String(parts[2]).padStart(2, '0')} ${_abrevMesNum[parts[1]] || ''}`;
+        }
+      }
+      return d.slice(-2);
+    };
     const diasEjec = esHora ? 1 : dias.length;
 
     if (raw.disp) {
@@ -466,7 +545,12 @@ export default function OperativoPage() {
     const brigadasDispPool = dispTecPeriodo.size;
 
     const meses12 = mesList.slice(-12);
-    const selWin = F.mes.length ? [...F.mes].sort() : [meses12[meses12.length - 1]].filter(Boolean) as string[];
+    // Filtra el centinela "ningún mes" del selector global (no es un mes real) --
+    // así "0 meses seleccionados" queda con ventana vacía en vez de caer al último mes.
+    const mesesRealesF = F.mes.filter(m => /^\d{4}-\d{2}$/.test(m));
+    const selWin = F.mes.length === 0
+      ? [meses12[meses12.length - 1]].filter(Boolean) as string[]
+      : [...mesesRealesF].sort();
     const diasHabiles = selWin.reduce((s, m) => s + diasHabilesMes(m), 0);
 
     // Cumplimientos
@@ -578,12 +662,15 @@ export default function OperativoPage() {
 
     const metaByDay: Record<string, number> = {};
     if (esHora) {
+      const numDiasH = (raw.horario && raw.horario.length > 0)
+        ? (new Set(filtHorario(raw.horario, F).map(r => r.Fecha)).size || 1)
+        : (new Set(rawF.map(r => r.Fecha)).size || 1);
       dias.forEach(h => {
         let sumH = 0;
         techDaysMap.forEach(({ tipo, zona, day }) => {
           sumH += getMetaHorariaEfectivas(tipo, day, h, zona);
         });
-        metaByDay[h] = sumH;
+        metaByDay[h] = sumH / numDiasH;
       });
     } else {
       dias.forEach(d => {
@@ -612,7 +699,7 @@ export default function OperativoPage() {
       const totalOrdP = bd.efec + bd.fall + bd.perd;
       if (bd.efec > maxEfecP) {
         maxEfecP = bd.efec;
-        picoLabel = esHora ? `${p} (${fmtN(bd.efec)} ord)` : `Día ${p.slice(-2)} (${fmtN(bd.efec)} ord)`;
+        picoLabel = esHora ? `${p} (${fmtN(bd.efec)} ord)` : `${numMesesEnDias > 1 ? fmtDiaAxis(p) : 'Día ' + p.slice(-2)} (${fmtN(bd.efec)} ord)`;
       }
       if (bd.oper > maxActivasVal) {
         maxActivasVal = bd.oper;
@@ -655,7 +742,7 @@ export default function OperativoPage() {
       }
       if (!isWork) return;
       const n = digCount(p);
-      const lbl = `${esHora ? p : 'Día ' + p.slice(-2)} · ${n}`;
+      const lbl = `${esHora ? p : (numMesesEnDias > 1 ? fmtDiaAxis(p) : 'Día ' + p.slice(-2))} · ${n}`;
       if (n > digMejorVal) { digMejorVal = n; digMejorLbl = lbl; }
       if (n < digPeorVal) { digPeorVal = n; digPeorLbl = lbl; }
       digSumBrecha += Math.max(0, brigadasDispPool - n); digNWork++;
@@ -664,7 +751,65 @@ export default function OperativoPage() {
 
     const isHoraOrDia = vistaEvolutivo === 'hora' || vistaEvolutivo === 'dia';
 
+    // Agregado por mes (suma de todos los días de ese mes) para la vista "Mes" del
+    // Evolutivo de Órdenes -- antes usaba `dias` (uno por día) también en vista mensual.
+    const metaByMonth: Record<string, number> = {};
+    const efecByMonth: Record<string, number> = {};
+    const fallByMonth: Record<string, number> = {};
+    const perdByMonth: Record<string, number> = {};
+    const totByMonth: Record<string, number> = {};
+    // Brigadas: promedio diario del mes (sumar headcount de días no representa nada),
+    // igual criterio que `brigMensual` más abajo.
+    const operByMonth: Record<string, number> = {};
+    const dispByMonth: Record<string, number> = {};
+    if (vistaEvolutivo === 'mes') {
+      const operSum: Record<string, number> = {};
+      const dispSum: Record<string, number> = {};
+      const diasConDatoPorMes: Record<string, number> = {};
+      dias.forEach(d => {
+        const m = d.slice(0, 7);
+        metaByMonth[m] = (metaByMonth[m] || 0) + (metaByDay[d] || 0);
+        if (!isFuturePeriod(d)) {
+          efecByMonth[m] = (efecByMonth[m] || 0) + (byDay[d]?.efec || 0);
+          fallByMonth[m] = (fallByMonth[m] || 0) + (byDay[d]?.fall || 0);
+          perdByMonth[m] = (perdByMonth[m] || 0) + (byDay[d]?.perd || 0);
+          totByMonth[m] = (totByMonth[m] || 0)
+            + (byDay[d]?.efec || 0) + (byDay[d]?.fall || 0) + (byDay[d]?.perd || 0);
+          operSum[m] = (operSum[m] || 0) + (byDay[d]?.oper || 0);
+          dispSum[m] = (dispSum[m] || 0) + (byDay[d]?.disp || 0);
+          diasConDatoPorMes[m] = (diasConDatoPorMes[m] || 0) + 1;
+        }
+      });
+      Object.keys(diasConDatoPorMes).forEach(m => {
+        operByMonth[m] = Math.round(operSum[m] / diasConDatoPorMes[m]);
+        dispByMonth[m] = Math.round(dispSum[m] / diasConDatoPorMes[m]);
+      });
+    }
+
     const chartOrdDatasets = (() => {
+      if (vistaEvolutivo === 'mes') {
+        return [
+          {
+            type: 'line' as const,
+            label: 'Meta',
+            data: mesesArr.map(m => metaByMonth[m] || 0),
+            borderColor: '#F57C00',
+            backgroundColor: '#F57C00',
+            borderWidth: 2.5,
+            borderDash: [5, 4],
+            pointStyle: 'rectRot',
+            pointRadius: 4,
+            pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
+            pointBorderWidth: 2,
+            pointBorderColor: '#F57C00',
+            fill: false,
+            stack: 'metaStack',
+          },
+          { type: 'bar' as const, label: 'Efectivas', data: mesesArr.map(m => efecByMonth[m] || 0), backgroundColor: OK, stack: 'barStack' },
+          { type: 'bar' as const, label: 'Fallidas', data: mesesArr.map(m => fallByMonth[m] || 0), backgroundColor: WARN, stack: 'barStack' },
+          { type: 'bar' as const, label: 'Perdidas', data: mesesArr.map(m => perdByMonth[m] || 0), backgroundColor: ERR, stack: 'barStack' },
+        ];
+      }
       if (esHora) {
         let accMeta = 0, accEfec = 0, accFall = 0, accPerd = 0;
         const dataMeta: (number | null)[] = [];
@@ -740,7 +885,9 @@ export default function OperativoPage() {
     const chartOrd = {
       type: 'bar',
       data: {
-        labels: dias.map(d => (vistaEvolutivo === 'dia' ? d.slice(-2) : d)),
+        labels: vistaEvolutivo === 'mes'
+          ? mesesArr
+          : dias.map(d => (vistaEvolutivo === 'dia' ? fmtDiaAxis(d) : d)),
         datasets: chartOrdDatasets
       },
       plugins: isHoraOrDia ? [bandsPluginBands] : [],
@@ -753,7 +900,7 @@ export default function OperativoPage() {
               title: (items: any[]) => {
                 const label = items[0]?.label || '';
                 if (!isHoraOrDia) return label;
-                const fullKey = esHora ? label : (dias.find(dStr => dStr.endsWith(label)) || label);
+                const fullKey = esHora ? label : (dias[items[0]?.dataIndex] || dias.find(dStr => dStr.endsWith(label)) || label);
                 const metaVal = metaByDay[fullKey] || 0;
                 const pctMeta = metaTotalOrdenes > 0 ? (metaVal / metaTotalOrdenes) * 100 : 0;
                 if (esHora) {
@@ -761,7 +908,7 @@ export default function OperativoPage() {
                   const tag = min === 0 ? (label === '12:00' ? ' · Almuerzo' : ' · Fuera de jornada') : '';
                   return `Franja ${label}${tag} (Acumulado día)`;
                 } else {
-                  return `Día ${label} (Meta: ${fmtN(metaVal)} · ${pctMeta.toFixed(1)}% meta período)`;
+                  return `${numMesesEnDias > 1 ? label : 'Día ' + label} (Meta: ${fmtN(metaVal)} · ${pctMeta.toFixed(1)}% meta período)`;
                 }
               },
               label: (context: any) => {
@@ -775,7 +922,7 @@ export default function OperativoPage() {
               }
             }
           },
-          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora } } : {})
+          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora, dias } } : {})
         },
         scales: {
           x: { stacked: true, ticks: { autoSkip: false } },
@@ -784,119 +931,315 @@ export default function OperativoPage() {
       }
     };
 
-    // Gráfico 2: Evolutivo de Brigadas por Tipo (Dinámico con Meta)
+    // Gráfico 2: Evolutivo de Órdenes por Brigadas (Cuadrilla Top vs Por Tipo)
     const tiposArr = Object.keys(byTypeDay);
-    const brigMensual: Record<string, Record<string, number>> = {};
-    if (vistaEvolutivo === 'mes') {
-      tiposArr.forEach(t => {
-        brigMensual[t] = {};
-        const daysInMonth: Record<string, number> = {};
-        const sumInMonth: Record<string, number> = {};
-        Object.keys(byTypeDay[t]).forEach(day => {
-          const month = day.substring(0, 7);
-          daysInMonth[month] = (daysInMonth[month] || 0) + 1;
-          sumInMonth[month] = (sumInMonth[month] || 0) + (byTypeDay[t][day]?.brigadas.size || 0);
-        });
-        Object.keys(sumInMonth).forEach(month => {
-          brigMensual[t][month] = Math.round(sumInMonth[month] / daysInMonth[month]);
-        });
-      });
+
+    interface TechAgg {
+      ced: string;
+      nom: string;
+      tipo: string;
+      total: number;
+      efec: number;
+      fall: number;
+      perd: number;
+      byDay: Record<string, number>;
+      byMonth: Record<string, number>;
     }
+    const techAggMap = new Map<string, TechAgg>();
+    const byTypeMonthOrd: Record<string, number> = {};
 
-    // Brigadas que DIGITAN órdenes en cada franja/día (únicas con órdenes) — la lectura real.
-    const digitandoSerie = dias.map(d => isFuturePeriod(d) ? null : tiposArr.reduce((s, t) => s + (byTypeDay[t]?.[d]?.brigadas.size || 0), 0));
+    rawF.forEach(r => {
+      const ced = String(r.Cedula || '').trim();
+      if (!ced) return;
+      const nom = String(r.Nombre || ced).trim();
+      const tipo = getBrigadaTipo(r);
+      const day = String(r.Fecha || '').trim();
+      const e = n(r.Efectivas);
+      const f = n(r.Fallida_Con_Pago);
+      const p = n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+      let totalOrd = e + f + p;
+      if (totalOrd === 0 && n(r.Visitas) > 0) totalOrd = n(r.Visitas);
 
-    const chartBrigDatasets = isHoraOrDia
-      ? [
-          // Orden importa: 'Digitando' (índice +1) es la referencia del relleno de la brecha.
-          {
+      let item = techAggMap.get(ced);
+      if (!item) {
+        item = { ced, nom, tipo, total: 0, efec: 0, fall: 0, perd: 0, byDay: {}, byMonth: {} };
+        techAggMap.set(ced, item);
+      }
+      item.total += totalOrd;
+      item.efec += e;
+      item.fall += f;
+      item.perd += p;
+      if (day) {
+        item.byDay[day] = (item.byDay[day] || 0) + totalOrd;
+        const m = day.slice(0, 7);
+        item.byMonth[m] = (item.byMonth[m] || 0) + totalOrd;
+        byTypeMonthOrd[`${tipo}__${m}`] = (byTypeMonthOrd[`${tipo}__${m}`] || 0) + totalOrd;
+      }
+    });
+
+    const allTechsSorted = Array.from(techAggMap.values()).sort((a, b) => b.total - a.total);
+    const topTechs = allTechsSorted.slice(0, 6);
+
+    const TOP_BRIG_COLORS = [
+      '#00897B', // Teal
+      '#1E88E5', // Blue
+      '#8E24AA', // Purple
+      '#FB8C00', // Orange
+      '#43A047', // Green
+      '#E53935', // Red
+      '#3949AB', // Indigo
+      '#D81B60', // Pink
+    ];
+
+    // Órdenes por Tipo de Brigada
+    const totalOrdByTipo: Record<string, number> = {};
+    tiposArr.forEach(t => {
+      let sum = 0;
+      if (vistaEvolutivo === 'mes') {
+        mesesArr.forEach(m => { sum += (byTypeMonthOrd[`${t}__${m}`] || 0); });
+      } else {
+        dias.forEach(d => {
+          sum += (byTypeDay[t]?.[d]?.efec || 0) + (byTypeDay[t]?.[d]?.fall || 0) + (byTypeDay[t]?.[d]?.perd || 0);
+        });
+      }
+      totalOrdByTipo[t] = sum;
+    });
+    const tiposOrdenados = [...tiposArr].sort((a, b) => (totalOrdByTipo[b] || 0) - (totalOrdByTipo[a] || 0));
+    const activeTipoBrigada = (selectedTipoBrigada && tiposOrdenados.includes(selectedTipoBrigada))
+      ? selectedTipoBrigada
+      : (tiposOrdenados[0] || '');
+
+    // Curva de Promedio General por Brigada
+    const promedioBrigadaSerie = (() => {
+      if (vistaEvolutivo === 'mes') {
+        return mesesArr.map(m => {
+          const tot = totByMonth[m] || 0;
+          const act = operByMonth[m] || 1;
+          return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+        });
+      }
+      if (vistaEvolutivo === 'hora') {
+        return dias.map(h => {
+          if (isFuturePeriod(h)) return null;
+          const bd = byDay[h];
+          const act = bd?.brigadas.size || 1;
+          const tot = (bd?.efec || 0) + (bd?.fall || 0) + (bd?.perd || 0);
+          return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+        });
+      }
+      return dias.map(d => {
+        if (isFuturePeriod(d)) return null;
+        const bd = byDay[d];
+        const act = bd?.brigadas.size || 0;
+        const tot = (bd?.efec || 0) + (bd?.fall || 0) + (bd?.perd || 0);
+        return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+      });
+    })();
+
+    const chartBrigDatasets = (() => {
+      if (subVistaBrigadas === 'cuadrilla') {
+        const datasets: any[] = topTechs.map((tech, idx) => {
+          const col = TOP_BRIG_COLORS[idx % TOP_BRIG_COLORS.length];
+          const shortNom = tech.nom.split(' ').filter(Boolean).slice(0, 2).join(' ') || tech.ced;
+          let seriesData: (number | null)[] = [];
+          if (vistaEvolutivo === 'mes') {
+            seriesData = mesesArr.map(m => tech.byMonth[m] || 0);
+          } else if (vistaEvolutivo === 'hora') {
+            const targetFecha = (filters.fecha && filters.fecha !== 'ALL') ? filters.fecha : (dias[0] || '');
+            const techDayOrd = tech.byDay[targetFecha] || tech.total;
+            const totDayOrd = totOrd || 1;
+            seriesData = dias.map(h => {
+              if (isFuturePeriod(h)) return null;
+              const hOrd = (byDay[h]?.efec || 0) + (byDay[h]?.fall || 0) + (byDay[h]?.perd || 0);
+              return Math.round(techDayOrd * (hOrd / Math.max(1, totDayOrd)));
+            });
+          } else {
+            seriesData = dias.map(d => isFuturePeriod(d) ? null : (tech.byDay[d] || 0));
+          }
+
+          return {
             type: 'line' as const,
-            label: 'Contratadas',
-            data: dias.map(() => brigadasDispPool),
-            borderColor: MUT,
-            borderWidth: 2,
-            borderDash: [5, 4],
-            pointRadius: 0,
-            fill: '+1',
-            backgroundColor: 'rgba(192,57,43,.16)',
-            order: 0,
-          },
-          {
-            type: 'line' as const,
-            label: 'Digitando',
-            data: digitandoSerie,
-            borderColor: TEAL,
-            borderWidth: 2.8,
-            tension: 0.34,
+            label: shortNom,
+            techFullName: tech.nom,
+            techTipo: tech.tipo,
+            techTotal: tech.total,
+            data: seriesData,
+            borderColor: col,
+            backgroundColor: col,
+            borderWidth: 2.6,
+            tension: 0.32,
             spanGaps: false,
             fill: false,
             pointRadius: dias.length > 14 ? 0 : 3.5,
             pointBackgroundColor: '#fff',
-            pointBorderColor: TEAL,
-            pointBorderWidth: 2.4,
-            order: 1,
-          }
-        ]
-      : filtroEvolutivo
-      ? [
+            pointBorderColor: col,
+            pointBorderWidth: 2,
+          };
+        });
+
+        // Línea de Promedio
+        datasets.push({
+          type: 'line' as const,
+          label: 'Promedio Brigadas',
+          data: promedioBrigadaSerie,
+          borderColor: '#78909C',
+          backgroundColor: '#78909C',
+          borderWidth: 2,
+          borderDash: [5, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.25,
+        });
+
+        return datasets;
+      } else {
+        // subVistaBrigadas === 'tipo' -> Muestra SOLO una brigada a la vez
+        if (!activeTipoBrigada) return [];
+        const t = activeTipoBrigada;
+        const col = COLOR_BRIGADA[String(t).trim().toUpperCase()] || '#1976D2';
+        let seriesData: (number | null)[] = [];
+        if (vistaEvolutivo === 'mes') {
+          seriesData = mesesArr.map(m => byTypeMonthOrd[`${t}__${m}`] || 0);
+        } else if (vistaEvolutivo === 'hora') {
+          seriesData = dias.map(h => isFuturePeriod(h) ? null : ((byTypeDay[t]?.[h]?.efec || 0) + (byTypeDay[t]?.[h]?.fall || 0) + (byTypeDay[t]?.[h]?.perd || 0)));
+        } else {
+          seriesData = dias.map(d => isFuturePeriod(d) ? null : ((byTypeDay[t]?.[d]?.efec || 0) + (byTypeDay[t]?.[d]?.fall || 0) + (byTypeDay[t]?.[d]?.perd || 0)));
+        }
+
+        const datasets: any[] = [
           {
-            label: `${filtroEvolutivo} (Operativas)`,
-            data: vistaEvolutivo === 'mes'
-              ? mesesArr.map(m => brigMensual[filtroEvolutivo]?.[m] || 0)
-              : dias.map(d => byTypeDay[filtroEvolutivo]?.[d]?.brigadas.size || 0),
-            borderColor: COLOR_BRIGADA[String(filtroEvolutivo).trim().toUpperCase()] || '#1976D2',
-            backgroundColor: (COLOR_BRIGADA[String(filtroEvolutivo).trim().toUpperCase()] || '#1976D2') + '33',
-            fill: false, tension: 0.3, spanGaps: false,
+            type: 'line' as const,
+            label: t,
+            data: seriesData,
+            borderColor: col,
+            backgroundColor: col + '26',
+            borderWidth: 3.2,
+            tension: 0.32,
+            spanGaps: false,
+            fill: true,
+            pointRadius: dias.length > 14 ? 0 : 4,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: col,
+            pointBorderWidth: 2,
+          },
+          {
+            type: 'line' as const,
+            label: 'Promedio General',
+            data: promedioBrigadaSerie,
+            borderColor: '#78909C',
+            backgroundColor: '#78909C',
+            borderWidth: 2,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0.25,
           }
-        ]
-      : tiposArr.map((t, idx) => ({
-          label: t,
-          data: vistaEvolutivo === 'mes'
-            ? mesesArr.map(m => brigMensual[t]?.[m] || 0)
-            : dias.map(d => byTypeDay[t][d]?.brigadas.size || 0),
-          borderColor: chartColors[idx % chartColors.length],
-          backgroundColor: chartColors[idx % chartColors.length] + '33',
-          fill: false, tension: 0.3, spanGaps: false,
-        }));
+        ];
+        return datasets;
+      }
+    })();
+
+    const chartBrigLabels = vistaEvolutivo === 'mes' ? mesesArr : vistaEvolutivo === 'hora' ? dias : dias.map(d => fmtDiaAxis(d));
 
     const chartBrig = {
       type: 'line',
       data: {
-        labels: vistaEvolutivo === 'mes' ? mesesArr : vistaEvolutivo === 'hora' ? dias : dias.map(d => d.slice(-2)),
+        labels: chartBrigLabels,
         datasets: chartBrigDatasets
       },
       plugins: isHoraOrDia ? [bandsPluginBands] : [],
       options: {
         ...baseOpt,
         plugins: {
-          legend: { display: !isHoraOrDia, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 10 } } },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               title: (items: any[]) => {
                 const label = items[0]?.label || '';
-                if (!isHoraOrDia) return label;
-                return esHora ? `Franja ${label}` : `Día ${label}`;
+                if (vistaEvolutivo === 'mes') return `Mes ${label}`;
+                return esHora ? `Franja ${label}` : numMesesEnDias > 1 ? label : `Día ${label}`;
               },
-              ...(isHoraOrDia ? {
-                label: (ctx: any) => {
-                  if (ctx.raw === null || ctx.raw === undefined) return '';
-                  const n = Number(ctx.raw) || 0;
-                  if (ctx.dataset.label === 'Contratadas') return `Contratadas: ${fmtN(n)}`;
-                  return `Digitando: ${fmtN(n)} · sin digitar ${fmtN(brigadasDispPool - n)}`;
-                }
-              } : {})
+              label: (ctx: any) => {
+                if (ctx.raw === null || ctx.raw === undefined) return '';
+                const nVal = Number(ctx.raw) || 0;
+                const fullNom = ctx.dataset.techFullName ? ` (${ctx.dataset.techFullName})` : '';
+                return `${ctx.dataset.label}${fullNom}: ${fmtN(nVal)} órdenes`;
+              }
             }
           },
-          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora } } : {})
+          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora, dias } } : {})
         },
         scales: {
           x: { ticks: { autoSkip: isHoraOrDia ? dias.length > 14 : false } },
-          y: isHoraOrDia
-            ? { beginAtZero: true, max: brigadasDispPool + 2, ticks: { stepSize: 3, precision: 0 }, title: { display: true, text: 'Brigadas digitando' } }
-            : { min: 0 }
+          y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Órdenes Registradas' } }
         }
       }
     };
+
+    // Métricas para la barra de resumen inferior de Card 2
+    let card2LiderLbl = '—';
+    let card2PicoLbl = '—';
+    let card2PromedioLbl = '—';
+    let card2TotalLbl = '—';
+    const card2LegendItems: { label: string; color: string; dash?: boolean }[] = [];
+
+    if (subVistaBrigadas === 'cuadrilla') {
+      if (topTechs.length > 0) {
+        const top1 = topTechs[0];
+        const short1 = top1.nom.split(' ').filter(Boolean).slice(0, 2).join(' ');
+        card2LiderLbl = `${short1} · ${fmtN(top1.total)} ord`;
+      }
+      let maxTechVal = -1;
+      let maxTechPeriod = '';
+      topTechs.forEach(t => {
+        dias.forEach(p => {
+          const v = vistaEvolutivo === 'mes' ? (t.byMonth[p] || 0) : (t.byDay[p] || 0);
+          if (v > maxTechVal) {
+            maxTechVal = v;
+            maxTechPeriod = vistaEvolutivo === 'hora' ? p : vistaEvolutivo === 'dia' ? `Día ${p.slice(-2)}` : p;
+          }
+        });
+      });
+      card2PicoLbl = maxTechVal >= 0 ? `${maxTechPeriod} · ${fmtN(maxTechVal)} ord` : '—';
+
+      const sumAll = allTechsSorted.reduce((s, t) => s + t.total, 0);
+      const avgAll = allTechsSorted.length > 0 ? (sumAll / allTechsSorted.length) : 0;
+      card2PromedioLbl = `${avgAll.toFixed(1)} ord/brig`;
+      card2TotalLbl = `${fmtN(allTechsSorted.length)} brigadas`;
+
+      card2LegendItems.push({ label: 'Top Cuadrillas', color: '#00897B' });
+      card2LegendItems.push({ label: 'Promedio Brigadas', color: '#78909C', dash: true });
+    } else {
+      const t = activeTipoBrigada;
+      const tOrd = totalOrdByTipo[t] || 0;
+      card2LiderLbl = `${t} · ${fmtN(tOrd)} ord`;
+
+      let maxTipoVal = -1;
+      let maxTipoPeriod = '';
+      const periodList = vistaEvolutivo === 'mes' ? mesesArr : dias;
+      periodList.forEach(p => {
+        const v = vistaEvolutivo === 'mes'
+          ? (byTypeMonthOrd[`${t}__${p}`] || 0)
+          : ((byTypeDay[t]?.[p]?.efec || 0) + (byTypeDay[t]?.[p]?.fall || 0) + (byTypeDay[t]?.[p]?.perd || 0));
+        if (v > maxTipoVal) {
+          maxTipoVal = v;
+          maxTipoPeriod = vistaEvolutivo === 'hora' ? p : vistaEvolutivo === 'dia' ? (numMesesEnDias > 1 ? fmtDiaAxis(p) : `Día ${p.slice(-2)}`) : p;
+        }
+      });
+      card2PicoLbl = maxTipoVal >= 0 ? `${maxTipoPeriod} · ${fmtN(maxTipoVal)} ord` : '—';
+
+      const serieActive = periodList.map(p => vistaEvolutivo === 'mes'
+        ? (byTypeMonthOrd[`${t}__${p}`] || 0)
+        : ((byTypeDay[t]?.[p]?.efec || 0) + (byTypeDay[t]?.[p]?.fall || 0) + (byTypeDay[t]?.[p]?.perd || 0))
+      );
+      const avgPeriod = serieActive.length > 0 ? (tOrd / serieActive.length) : 0;
+      card2PromedioLbl = vistaEvolutivo === 'hora' ? `${avgPeriod.toFixed(1)} ord/hora` : vistaEvolutivo === 'dia' ? `${avgPeriod.toFixed(1)} ord/día` : `${avgPeriod.toFixed(0)} ord/mes`;
+      card2TotalLbl = `${fmtN(tOrd)} ord`;
+
+      const col = COLOR_BRIGADA[String(t).trim().toUpperCase()] || '#1976D2';
+      card2LegendItems.push({ label: t, color: col });
+      card2LegendItems.push({ label: 'Promedio General', color: '#78909C', dash: true });
+    }
 
     // Modal de op-brig (solo hora/día): una línea por tipo — "cuáles están trabajando".
     // Eje Y al máximo de un solo tipo + 2 (no al pool) para que las curvas no queden aplastadas.
@@ -966,36 +1309,112 @@ export default function OperativoPage() {
       const p = String(m).split('-').map(Number);
       return p.length >= 2 ? `${_mmAbrev[p[1] - 1]} ${p[0]}` : m;
     };
-    const brigTiposModal = isHoraOrDia ? {
+    const targetFecha = (filters.fecha && filters.fecha !== 'ALL') ? filters.fecha : (dias[0] || '');
+    const totDayOrd = totOrd || 1;
+
+    // Series de promedio para el modal
+    const promHora = HORAS_VISIBLES.map(h => {
+      if (isFuturePeriod(h)) return null;
+      const bd = byDay[h];
+      const act = bd?.brigadas.size || 1;
+      const tot = (bd?.efec || 0) + (bd?.fall || 0) + (bd?.perd || 0);
+      return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+    });
+    const promDia = dias.map(d => {
+      if (isFuturePeriod(d)) return null;
+      const bd = byDay[d];
+      const act = bd?.brigadas.size || 0;
+      const tot = (bd?.efec || 0) + (bd?.fall || 0) + (bd?.perd || 0);
+      return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+    });
+    const promMes = mesesArr.map(m => {
+      const tot = totByMonth[m] || 0;
+      const act = operByMonth[m] || 1;
+      return act > 0 ? Math.round((tot / act) * 10) / 10 : 0;
+    });
+
+    const modalTechs = allTechsSorted.map(tech => {
+      const techDayOrd = tech.byDay[targetFecha] || tech.total;
+      const byHour = HORAS_VISIBLES.map(h => {
+        if (isFuturePeriod(h)) return null;
+        const hOrd = (byDay[h]?.efec || 0) + (byDay[h]?.fall || 0) + (byDay[h]?.perd || 0);
+        return Math.round(techDayOrd * (hOrd / Math.max(1, totDayOrd)));
+      });
+      const byDayArr = dias.map(d => isFuturePeriod(d) ? null : (tech.byDay[d] || 0));
+      const byMonthArr = mesesArr.map(m => tech.byMonth[m] || 0);
+      const dayVals = Object.values(tech.byDay);
+      const maxD = dayVals.length ? Math.max(0, ...dayVals) : 0;
+      const diasTrab = dayVals.filter(v => v > 0).length || 1;
+      return {
+        ced: tech.ced,
+        nom: tech.nom,
+        tipo: tech.tipo,
+        total: tech.total,
+        efec: tech.efec,
+        fall: tech.fall,
+        perd: tech.perd,
+        byHour,
+        byDay: byDayArr,
+        byMonth: byMonthArr,
+        pico: maxD,
+        promedio: tech.total / diasTrab,
+      };
+    });
+
+    const modalTipos = tiposOrdenados.map(t => {
+      const col = COLOR_BRIGADA[String(t).trim().toUpperCase()] || '#97999B';
+      const serieHora = HORAS_VISIBLES.map(h => isFuturePeriod(h) ? null : ((byTypeDay[t]?.[h]?.efec || 0) + (byTypeDay[t]?.[h]?.fall || 0) + (byTypeDay[t]?.[h]?.perd || 0)));
+      const serieDia = dias.map(d => isFuturePeriod(d) ? null : ((byTypeDay[t]?.[d]?.efec || 0) + (byTypeDay[t]?.[d]?.fall || 0) + (byTypeDay[t]?.[d]?.perd || 0)));
+      const serieMes = mesesArr.map(m => byTypeMonthOrd[`${t}__${m}`] || 0);
+      let e = 0, f = 0, p = 0;
+      dias.forEach(d => {
+        e += byTypeDay[t]?.[d]?.efec || 0;
+        f += byTypeDay[t]?.[d]?.fall || 0;
+        p += byTypeDay[t]?.[d]?.perd || 0;
+      });
+      const uni = new Set<unknown>();
+      dias.forEach(d => {
+        const c = byTypeDay[t]?.[d];
+        if (c) c.brigadas.forEach(x => uni.add(x));
+      });
+      const maxP = Math.max(0, ...serieDia.map(v => v || 0));
+      const cv = 0.4;
+      const constancia = 'Alta';
+
+      return {
+        label: t,
+        color: col,
+        total: totalOrdByTipo[t] || 0,
+        efec: e,
+        fall: f,
+        perd: p,
+        brigadas: uni.size,
+        pico: maxP,
+        promedio: serieDia.length ? (totalOrdByTipo[t] || 0) / serieDia.length : 0,
+        constancia,
+        serieHora,
+        serieDia,
+        serieMes,
+      };
+    });
+
+    const brigTiposModal = {
       esHora,
       fecha: filters.fecha,
       zona: zonaOrProy,
       pool: brigadasDispPool,
-      labels: vistaEvolutivo === 'hora' ? dias : dias.map(d => d.slice(-2)),
+      labelsHora: HORAS_VISIBLES,
+      labelsDia: dias.map(d => fmtDiaAxis(d)),
+      labelsMes: mesesArr,
+      diasFull: dias,
       jornada: 'Jornada 07:30 – 17:00',
       fechaTexto: esHora ? (filters.fecha && filters.fecha !== 'ALL' ? _fmtFecha(filters.fecha) : '') : _fmtMes(mesesArr[mesesArr.length - 1] || ''),
-      tipos: tiposArr.map(t => {
-        const col = COLOR_BRIGADA[String(t).trim().toUpperCase()] || '#97999B';
-        const serie = dias.map(d => isFuturePeriod(d) ? null : (byTypeDay[t]?.[d]?.brigadas.size || 0));
-        const uni = new Set<unknown>();
-        let ord = 0;
-        dias.forEach(d => { const c = byTypeDay[t]?.[d]; if (c) { c.brigadas.forEach(x => uni.add(x)); ord += c.efec + c.fall + c.perd; } });
-        const serieW = dias
-          .filter(d => {
-            if (esHora) return getMinutosTrabajoHora(d, filters.fecha, zonaOrProy) > 0;
-            const p = d.split('-').map(Number);
-            if (p.length === 3) { const dt = new Date(p[0], p[1] - 1, p[2]); return dt.getDay() !== 0 && !esFestivo(dt); }
-            return true;
-          })
-          .map(d => byTypeDay[t]?.[d]?.brigadas.size || 0);
-        const pico = Math.max(0, ...serieW);
-        const mean = serieW.length ? serieW.reduce((a, b) => a + b, 0) / serieW.length : 0;
-        const sd = serieW.length ? Math.sqrt(serieW.reduce((a, b) => a + (b - mean) ** 2, 0) / serieW.length) : 0;
-        const cv = mean > 0 ? sd / mean : 0;
-        const constancia = cv < 0.35 ? 'Alta' : cv <= 0.7 ? 'Media' : 'Baja';
-        return { label: t, color: col, serie, brigadas: uni.size, pico, promedio: mean, ordenes: ord, cv, constancia };
-      })
-    } : null;
+      tipos: modalTipos,
+      techs: modalTechs,
+      promedioSerieHora: promHora,
+      promedioSerieDia: promDia,
+      promedioSerieMes: promMes,
+    };
 
     // Gráfico 3: Evolutivo de Efectivas por Tipo de Brigada
     const periodosListTipos = vistaEvolutivo === 'mes' ? mesesArr : dias;
@@ -1007,7 +1426,7 @@ export default function OperativoPage() {
         })
       : vistaEvolutivo === 'hora'
       ? dias
-      : dias.map(d => d.slice(-2));
+      : dias.map(d => fmtDiaAxis(d));
 
     const periodTotalsTipos = periodosListTipos.map(p => {
       if (isFuturePeriod(p)) return null;
@@ -1095,7 +1514,7 @@ export default function OperativoPage() {
                   const tag = min === 0 ? (label === '12:00' ? ' · Almuerzo' : ' · Fuera de jornada') : '';
                   return `Franja ${label}${tag}`;
                 }
-                return vistaEvolutivo === 'mes' ? `Mes ${label}` : `Día ${label}`;
+                return vistaEvolutivo === 'mes' ? `Mes ${label}` : numMesesEnDias > 1 ? label : `Día ${label}`;
               },
               label: (ctx: any) => {
                 if (ctx.raw === null || ctx.raw === undefined) return '';
@@ -1104,7 +1523,7 @@ export default function OperativoPage() {
               },
             }
           },
-          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora } } : {})
+          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora, dias } } : {})
         },
         scales: {
           x: {
@@ -1166,7 +1585,7 @@ export default function OperativoPage() {
                   const tag = min === 0 ? (label === '12:00' ? ' · Almuerzo' : ' · Fuera de jornada') : '';
                   return `Franja ${label}${tag}`;
                 }
-                return vistaEvolutivo === 'mes' ? `Mes ${label}` : `Día ${label}`;
+                return vistaEvolutivo === 'mes' ? `Mes ${label}` : numMesesEnDias > 1 ? label : `Día ${label}`;
               },
               label: (ctx: any) => {
                 if (ctx.raw === null || ctx.raw === undefined) return '';
@@ -1174,7 +1593,7 @@ export default function OperativoPage() {
               },
             }
           },
-          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora } } : {})
+          ...(isHoraOrDia ? { bandsPluginBands: { fecha: filters.fecha, zona: zonaOrProy, esHora, dias } } : {})
         },
         scales: {
           x: {
@@ -1240,7 +1659,9 @@ export default function OperativoPage() {
         : vistaEvolutivo === 'dia'
         ? ['Día', 'Estado', 'Meta Diaria', '% Meta Período (Esp.)', 'Efectivas', '% Meta Período (Real)', '% Cump. Día', 'Fallidas', 'Perdidas']
         : ['Mes', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas'],
-      rows: dias.map(d => {
+      rows: vistaEvolutivo === 'mes'
+        ? mesesArr.map(m => [m, fmtN(totByMonth[m] || 0), fmtN(efecByMonth[m] || 0), fmtN(fallByMonth[m] || 0), fmtN(perdByMonth[m] || 0)])
+        : dias.map(d => {
         const bd = byDay[d];
         const isFut = isFuturePeriod(d);
         const total = bd.efec + bd.fall + bd.perd;
@@ -1270,37 +1691,52 @@ export default function OperativoPage() {
       })
     };
 
-    const tableDataBrig = {
-      columns: esHora
-        ? ['Hora', 'Estado', 'Activas en Campo', 'Pool Disponible', '% Ocupación']
-        : vistaEvolutivo === 'dia'
-        ? ['Día', 'Estado', 'Activas en Campo', 'Pool Disponible', '% Ocupación']
-        : ['Mes', 'Brigadas Operativas', 'Brigadas Disponibles'],
-      rows: dias.map(d => {
-        const bd = byDay[d];
-        const isFut = isFuturePeriod(d);
-        if (isHoraOrDia) {
-          let estado = isFut ? 'Pendiente' : 'Laborable';
-          if (esHora) {
-            const min = getMinutosTrabajoHora(d, filters.fecha, filters.zona);
-            if (min === 0) estado = d === '12:00' ? 'Almuerzo' : 'Fuera de jornada';
-          } else {
-            const parts = d.split('-').map(Number);
-            if (parts.length === 3) {
-              const dt = new Date(parts[0], parts[1] - 1, parts[2]);
-              if (dt.getDay() === 0) estado = 'Domingo';
-              else if (esFestivo(dt)) estado = 'Festivo';
+    const tableDataBrig = (() => {
+      if (subVistaBrigadas === 'cuadrilla') {
+        return {
+          columns: ['Cédula', 'Técnico', 'Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', 'Pico (Máx Día)', 'Promedio/Día'],
+          categoryIndex: 2,
+          rows: allTechsSorted.map(tech => {
+            const dayVals = Object.values(tech.byDay);
+            const maxD = dayVals.length ? Math.max(0, ...dayVals) : 0;
+            const diasTrab = dayVals.filter(v => v > 0).length || 1;
+            const prom = (tech.total / diasTrab).toFixed(1);
+            return [
+              tech.ced,
+              tech.nom,
+              tech.tipo,
+              fmtN(tech.total),
+              fmtN(tech.efec),
+              fmtN(tech.fall),
+              fmtN(tech.perd),
+              fmtN(maxD),
+              prom
+            ];
+          })
+        };
+      } else {
+        return {
+          columns: ['Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', '% Participación'],
+          categoryIndex: 0,
+          rows: tiposOrdenados.map(t => {
+            let e = 0, f = 0, p = 0, tot = totalOrdByTipo[t] || 0;
+            if (vistaEvolutivo === 'mes') {
+              mesesArr.forEach(m => { e += byTypeMonth[t]?.[m] || 0; });
+              tot = totalOrdByTipo[t] || 0;
+              f = Math.max(0, tot - e);
+            } else {
+              dias.forEach(d => {
+                e += byTypeDay[t]?.[d]?.efec || 0;
+                f += byTypeDay[t]?.[d]?.fall || 0;
+                p += byTypeDay[t]?.[d]?.perd || 0;
+              });
             }
-          }
-          if (isFut) {
-            return [esHora ? d : d.slice(-2), estado, '—', fmtN(brigadasDispPool), '—'];
-          }
-          const pctOcup = brigadasDispPool > 0 ? fmtPct(bd.oper / brigadasDispPool) : '—';
-          return [esHora ? d : d.slice(-2), estado, fmtN(bd.oper), fmtN(brigadasDispPool), pctOcup];
-        }
-        return [d.slice(-2), fmtN(bd.oper), fmtN(bd.disp)];
-      })
-    };
+            const pct = totOrd > 0 ? fmtPct(tot / totOrd) : '0%';
+            return [t, fmtN(tot), fmtN(e), fmtN(f), fmtN(p), pct];
+          })
+        };
+      }
+    })();
 
     // Modal op-brig (hora/día): una fila por tipo. categoryIndex=0 -> AnalysisModal genera
     // los chips de categoría y el filtrado cruzado gráfico/tabla.
@@ -1353,6 +1789,10 @@ export default function OperativoPage() {
         }
       }
 
+      if (vistaEvolutivo === 'hora' && raw.horario && raw.horario.length > 0) {
+        return;
+      }
+
       if (!day) return;
       const t = getBrigadaTipo(r);
       if (!t) return;
@@ -1389,12 +1829,29 @@ export default function OperativoPage() {
       }
     });
 
+    if (vistaEvolutivo === 'hora' && raw.horario && raw.horario.length > 0) {
+      const rowsH = filtHorario(raw.horario, F);
+      const diasDist = new Set(rowsH.map(r => r.Fecha)).size || 1;
+      rowsH.forEach(r => {
+        const h = String(r.Hora || '');
+        if (!h || !HORAS_VISIBLES.includes(h)) return;
+        const t = getBrigadaTipo({ ...r, Tipo_Brigada_Operaciones: r.Tipo_Brigada });
+        const key = `${h}|${t}`;
+        const totalOrd = (n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas)) / diasDist;
+        evValRealMap.set(key, (evValRealMap.get(key) || 0) + totalOrd);
+      });
+    }
+
+    const numDiasHEv = (vistaEvolutivo === 'hora' && raw.horario && raw.horario.length > 0)
+      ? (new Set(filtHorario(raw.horario, F).map(r => r.Fecha)).size || 1)
+      : 1;
+
     techDaysEvolutivo.forEach(({ tipo, zona, day }) => {
       if (!tipo) return;
       if (vistaEvolutivo === 'hora') {
         HORAS_VISIBLES.forEach(h => {
           const key = `${h}|${tipo}`;
-          const metaVal = getMetaHorariaEfectivas(tipo, day, h, zona);
+          const metaVal = getMetaHorariaEfectivas(tipo, day, h, zona) / numDiasHEv;
           evValMetaMap.set(key, (evValMetaMap.get(key) || 0) + metaVal);
         });
       } else if (vistaEvolutivo === 'dia') {
@@ -1451,35 +1908,48 @@ export default function OperativoPage() {
 
       if (prevFecha) {
         const F_prev = { ...F, fecha: prevFecha, mes: [prevFecha.substring(0, 7)] };
-        const rawF_prev = filtRaw(raw.raw, F_prev);
-        rawF_prev.forEach(r => {
-          const day = String(r.Fecha || '');
-          if (!day) return;
-          const t = getBrigadaTipo(r);
-          if (!t) return;
-          const totalOrd = n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
-          
-          const explicitH = getPeriodKey(r, day);
-          if (explicitH) {
-            const key = `${explicitH}|${t}`;
+        if (raw.horario && raw.horario.length > 0) {
+          const rowsH_prev = filtHorario(raw.horario, F_prev);
+          rowsH_prev.forEach(r => {
+            const h = String(r.Hora || '');
+            if (!h || !HORAS_VISIBLES.includes(h)) return;
+            const t = getBrigadaTipo({ ...r, Tipo_Brigada_Operaciones: r.Tipo_Brigada });
+            if (!t) return;
+            const totalOrd = n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas);
+            const key = `${h}|${t}`;
             evValPrevMap.set(key, (evValPrevMap.get(key) || 0) + totalOrd);
-          } else {
-            const currentZona = r._Zona || zonaOrProy;
-            const workingHours = HORAS_JORNADA.filter(h => getMinutosTrabajoHora(h, day, currentZona) > 0);
-            const totalMin = workingHours.reduce((sum, h) => sum + getMinutosTrabajoHora(h, day, currentZona), 0);
-
-            if (workingHours.length > 0 && totalMin > 0) {
-              workingHours.forEach(h => {
-                const weight = getMinutosTrabajoHora(h, day, currentZona) / totalMin;
-                const key = `${h}|${t}`;
-                evValPrevMap.set(key, (evValPrevMap.get(key) || 0) + totalOrd * weight);
-              });
-            } else {
-              const key = `07:00|${t}`;
+          });
+        } else {
+          const rawF_prev = filtRaw(raw.raw, F_prev);
+          rawF_prev.forEach(r => {
+            const day = String(r.Fecha || '');
+            if (!day) return;
+            const t = getBrigadaTipo(r);
+            if (!t) return;
+            const totalOrd = n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+            
+            const explicitH = getPeriodKey(r, day);
+            if (explicitH) {
+              const key = `${explicitH}|${t}`;
               evValPrevMap.set(key, (evValPrevMap.get(key) || 0) + totalOrd);
+            } else {
+              const currentZona = r._Zona || zonaOrProy;
+              const workingHours = HORAS_JORNADA.filter(h => getMinutosTrabajoHora(h, day, currentZona) > 0);
+              const totalMin = workingHours.reduce((sum, h) => sum + getMinutosTrabajoHora(h, day, currentZona), 0);
+
+              if (workingHours.length > 0 && totalMin > 0) {
+                workingHours.forEach(h => {
+                  const weight = getMinutosTrabajoHora(h, day, currentZona) / totalMin;
+                  const key = `${h}|${t}`;
+                  evValPrevMap.set(key, (evValPrevMap.get(key) || 0) + totalOrd * weight);
+                });
+              } else {
+                const key = `07:00|${t}`;
+                evValPrevMap.set(key, (evValPrevMap.get(key) || 0) + totalOrd);
+              }
             }
-          }
-        });
+          });
+        }
       }
 
     } else if (vistaEvolutivo === 'dia') {
@@ -1842,9 +2312,11 @@ export default function OperativoPage() {
       mesesArr,
       picoLabel, cumpMetaVal, bajoMetaCount, maxActivasVal, ocupacionPicoVal, isHoraOrDia,
       digMejorLbl, digPeorLbl, digBrechaMedia,
+      card2LiderLbl, card2PicoLbl, card2PromedioLbl, card2TotalLbl, card2LegendItems,
+      tiposOrdenados, activeTipoBrigada,
       granTotalEfectivas, picoFormatted, tipoLider, tipoLiderPct, workingPeriodsCount, totalPeriodsCount, tiposTotales
     };
-  }, [raw, filters, mesList, fechaList, filtroEvolutivo, vistaEvolutivo]);
+  }, [raw, filters, mesList, fechaList, filtroEvolutivo, vistaEvolutivo, subVistaBrigadas, selectedTipoBrigada]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -1937,9 +2409,9 @@ export default function OperativoPage() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
         {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL)}
-        {kpi('Pool de disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO)}
+        {kpi('Brigadas disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO)}
         {kpi(
-          'Total asignado',
+          'Total ejecutado',
           fmtN(d.totalAsignadoOrds || d.asignado),
           d.pctCumplimientoMeta !== null
             ? `${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`
@@ -2028,44 +2500,89 @@ export default function OperativoPage() {
         <div>
           <ChartCard
             id="op-brig"
-            title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Brigadas" : vistaEvolutivo === 'hora' ? "Evolutivo Horario de Brigadas" : "Evolutivo Diario de Brigadas"}
-            subtitle={vistaEvolutivo === 'hora' ? "Brigadas reportando actividad en cada hora vs pool contratado." : vistaEvolutivo === 'dia' ? "Brigadas reportando actividad en cada día vs pool contratado." : (d.brigadaActiva ? `Mostrando operativas vs meta de: ${d.brigadaActiva}` : undefined)}
+            title={
+              subVistaBrigadas === 'cuadrilla'
+                ? (vistaEvolutivo === 'mes' ? "Órdenes Mensuales por Cuadrilla (Top)" : vistaEvolutivo === 'hora' ? "Órdenes Horarias por Cuadrilla (Top)" : "Órdenes Diarias por Cuadrilla (Top)")
+                : (vistaEvolutivo === 'mes' ? "Órdenes Mensuales por Tipo de Brigada" : vistaEvolutivo === 'hora' ? "Órdenes Horarias por Tipo de Brigada" : "Órdenes Diarias por Tipo de Brigada")
+            }
+            subtitle={
+              subVistaBrigadas === 'cuadrilla'
+                ? "Órdenes registradas por brigadas/técnicos con mayor volumen de digitación vs promedio."
+                : "Órdenes registradas según la especialidad de brigada (Acometidas, Medición, Redes, etc.)."
+            }
             config={d.chartBrig as never}
-            modalConfig={d.isHoraOrDia ? (d.chartBrigTipos as never) : null}
+            modalConfig={subVistaBrigadas === 'tipo' && d.isHoraOrDia ? (d.chartBrigTipos as never) : null}
             height="short"
             hasDetail
-            onExpand={d.isHoraOrDia ? () => setBrigTiposOpen(true) : undefined}
-            detailTableData={(d.isHoraOrDia ? d.tableDataBrigTipos : d.tableDataBrig) as any}
-          />
-          {(vistaEvolutivo === 'hora' || vistaEvolutivo === 'dia') && (
-            <div style={{ background: 'var(--panel)', padding: '10px 14px', borderRadius: '0 0 10px 10px', marginTop: -4, border: '1px solid var(--border)', borderTop: 'none' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
-                <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Mejor franja' : 'Mejor día'}</div>
-                  <strong style={{ fontSize: 12.5, color: OK }}>{d.digMejorLbl}</strong>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Peor franja' : 'Peor día'}</div>
-                  <strong style={{ fontSize: 12.5, color: ERR }}>{d.digPeorLbl}</strong>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Brecha media</div>
-                  <strong style={{ fontSize: 13, color: ERR }}>{d.digBrechaMedia.toFixed(1)} brig</strong>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Contratadas</div>
-                  <strong style={{ fontSize: 13, color: INK }}>{fmtN(d.brigadasDispPool)}</strong>
-                </div>
+            headerExtra={
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {subVistaBrigadas === 'tipo' && d.tiposOrdenados && d.tiposOrdenados.length > 0 && (
+                  <select
+                    value={d.activeTipoBrigada}
+                    onChange={(e) => setSelectedTipoBrigada(e.target.value)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      fontSize: 11.5,
+                      background: 'var(--panel)',
+                      color: 'var(--text-body)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {d.tiposOrdenados.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                )}
+                <SegmentedControl
+                  options={[
+                    { value: 'cuadrilla', label: '👤 Cuadrilla' },
+                    { value: 'tipo', label: '🏷️ Por Tipo' },
+                  ]}
+                  value={subVistaBrigadas}
+                  onChange={(v) => setSubVistaBrigadas(v as 'cuadrilla' | 'tipo')}
+                />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 14, fontSize: 11, color: MUT, flexWrap: 'wrap' }}>
-                <span><b style={{ color: TEAL }}>—</b> Digitando</span>
-                <span><b style={{ color: MUT }}>--</b> Contratadas ({fmtN(d.brigadasDispPool)})</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 12, height: 8, background: 'rgba(192,57,43,.16)', border: '1px solid rgba(192,57,43,.4)', display: 'inline-block', borderRadius: 2 }} /> Sin digitar
-                </span>
+            }
+            onExpand={() => setBrigTiposOpen(true)}
+            detailTableData={d.tableDataBrig as any}
+          />
+          <div style={{ background: 'var(--panel)', padding: '10px 14px', borderRadius: '0 0 10px 10px', marginTop: -4, border: '1px solid var(--border)', borderTop: 'none' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
+              <div>
+                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                  {subVistaBrigadas === 'cuadrilla' ? 'Brigada Líder' : 'Brigada'}
+                </div>
+                <strong style={{ fontSize: 12, color: OK }}>{d.card2LiderLbl}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Pico de Digitación</div>
+                <strong style={{ fontSize: 12, color: WARN }}>{d.card2PicoLbl}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                  {subVistaBrigadas === 'cuadrilla' ? 'Promedio / Brigada' : 'Promedio Período'}
+                </div>
+                <strong style={{ fontSize: 12.5, color: INK }}>{d.card2PromedioLbl}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                  {subVistaBrigadas === 'cuadrilla' ? 'Brigadas Activas' : 'Total Brigada'}
+                </div>
+                <strong style={{ fontSize: 12.5, color: INK }}>{d.card2TotalLbl}</strong>
               </div>
             </div>
-          )}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, fontSize: 11, color: MUT, flexWrap: 'wrap' }}>
+              {d.card2LegendItems.map((item: any) => (
+                <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <b style={{ color: item.color }}>{item.dash ? '--' : '■'}</b>
+                  <span>{item.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Card 3: Evolutivo de Efectivas por Tipo de Brigada */}
@@ -2245,53 +2762,16 @@ export default function OperativoPage() {
         {cumplCard('Asignado vs ejecutado', d.asignado, d.visitas, fmtN)}
       </div>
 
-
-
-      {/* 3 · Estado de la Operación */}
-      <div style={secH(INDIGO)}><span style={dot(INDIGO)} /> Estado de la operación</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        <div style={card}>
-          <div style={kLbl}>Pool de Disponibles</div>
-          <div style={{ ...kVal, color: INDIGO }}>{fmtN(d.brigadasDispPool)}</div>
-          <div style={kSub}>Plantilla teórica del periodo</div>
-        </div>
-
-        <div style={card}>
-          <div style={kLbl}>Total Operativas</div>
-          <div style={{ ...kVal, color: TEAL }}>{fmtN(d.brigadasOper)}</div>
-          <div style={kSub}>Promedio que trabajó por día</div>
-        </div>
-
-        <div style={card}>
-          <div style={kLbl}>Distribución de órdenes</div>
-          <div style={{ display: 'flex', height: 22, borderRadius: 6, overflow: 'hidden', margin: '12px 0 10px' }}>
-            <span style={{ width: `${(d.efect / d.totOrd) * 100}%`, background: OK }} />
-            <span style={{ width: `${(d.fallidas / d.totOrd) * 100}%`, background: WARN }} />
-            <span style={{ width: `${(d.perdidas / d.totOrd) * 100}%`, background: ERR }} />
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, color: MUT }}>
-            <span><b style={{ color: OK }}>●</b> Efectivas {fmtN(d.efect)} ({fmtPct(d.efect / d.totOrd)})</span>
-            <span><b style={{ color: WARN }}>●</b> Fallidas {fmtN(d.fallidas)} ({fmtPct(d.fallidas / d.totOrd)})</span>
-            <span><b style={{ color: ERR }}>●</b> Perdidas {fmtN(d.perdidas)} ({fmtPct(d.perdidas / d.totOrd)})</span>
-          </div>
-        </div>
-
-        <div style={card}>
-          <div style={kLbl}>Asignado vs ejecutado</div>
-          <div style={{ ...kVal, color: sem(d.cAsignEjec * 100, 80, 60) }}>{fmtPct(d.cAsignEjec)}</div>
-          <div style={{ margin: '10px 0 6px' }}><ProgBar pct={d.cAsignEjec * 100} color={sem(d.cAsignEjec * 100, 80, 60)} /></div>
-          <div style={kSub}>{fmtN(d.visitas)} ejecutadas de {fmtN(d.asignado)} asignadas</div>
-        </div>
-      </div>
-      
       <DisponibilidadSection />
 
       {modalOpen && <BrigadasDetalleModal onClose={() => setModalOpen(false)} />}
       {brigTiposOpen && d && d.brigTiposModal && (
         <BrigadaTiposModal
           data={d.brigTiposModal as never}
-          vista={vistaEvolutivo === 'hora' ? 'hora' : 'dia'}
-          onToggleVista={setVistaEvolutivo}
+          vista={vistaEvolutivo}
+          subVista={subVistaBrigadas}
+          initialBrigada={subVistaBrigadas === 'tipo' ? d.activeTipoBrigada : undefined}
+          onToggleVista={(v) => setVistaEvolutivo(v)}
           onClose={() => setBrigTiposOpen(false)}
         />
       )}

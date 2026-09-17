@@ -146,8 +146,9 @@ export default function ResumenPage() {
       rr.forEach(r => {
         const t = String(r.Tipo_Cuadrilla || r.Tipo_Brigada_Operaciones || r['Tipo de cuadrilla '] || 'Sin tipo').trim();
         if (!tmap[t]) tmap[t] = { ef:0, vi:0, ing:0, co:0, me:0, b: new Set(), tecs: {} };
-        const ced = String(r.Cedula || '');
-        if (!tmap[t].tecs[ced]) tmap[t].tecs[ced] = { nombre: String(r.Nombre || r.Cedula || ''), ef:0, vi:0, ing:0, co:0, me:0 };
+        const rawCed = String(r.Cedula || '').trim();
+        const ced = rawCed ? rawCed.replace(/\.0+$/, '').replace(/\D/g, '') : '';
+        if (!tmap[t].tecs[ced]) tmap[t].tecs[ced] = { nombre: String(r.Nombre || ced || ''), ef:0, vi:0, ing:0, co:0, me:0 };
         
         const e = num(r.Efectivas), v = num(r.Visitas), i = num(r.Ingresos), c = num(r.Costo_Operativo), a = num(r.Asignacion);
         tmap[t].ef += e; tmap[t].vi += v; tmap[t].ing += i; tmap[t].co += c; tmap[t].me += a;
