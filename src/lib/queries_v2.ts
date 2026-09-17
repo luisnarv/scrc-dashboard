@@ -124,6 +124,18 @@ const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.
 const SQL_CLEAN_MB_CED = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mb.\"Cedula\"), '\\.0+$', ''), '\\D', '', 'g')";
 
 export async function getDashboardDataV2(mes?: string) {
+  if (mes === '__NINGUNO__' || (mes && mes !== 'ALL' && !/^\d{4}-\d{2}$/.test(mes))) {
+    return {
+      mes: mes || 'ALL',
+      rawRecords: [],
+      costos: [],
+      emps: [],
+      mesRecords: [],
+      dispDiaria: [],
+      horario: [],
+    };
+  }
+
   const params: unknown[] = [];
   const activo = !!(mes && mes !== 'ALL');
   if (activo) params.push(mes);
@@ -435,6 +447,10 @@ export async function getDashboardDataV2(mes?: string) {
 }
 
 export async function getMapDataV2(mes?: string, zona?: string, proy?: string, proceso?: string) {
+  if (mes === '__NINGUNO__') {
+    return { geojson: { type: 'FeatureCollection', features: [] }, count: 0, isAggregated: false };
+  }
+
   const values: unknown[] = [];
   const filterClauses: string[] = ["mo.id_tecnico IS NOT NULL", "mo.tiene_vs"];
   // Proceso: 'GESTOR' restringe a la brigada 'Gestor Integral Multi'. 'ALL'/SCR = todo.
@@ -442,7 +458,10 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string, p
     filterClauses.push("mo.brigada_homologada = 'Gestor Integral Multi'");
   }
   if (mes && mes !== 'ALL') {
-    const meses = mes.split(',');
+    const meses = mes.split(',').filter(m => /^\d{4}-\d{2}$/.test(m));
+    if (meses.length === 0) {
+      return { geojson: { type: 'FeatureCollection', features: [] }, count: 0, isAggregated: false };
+    }
     const monthClauses = meses.map(m => {
       values.push(`${m}-01`);
       const i1 = values.length;

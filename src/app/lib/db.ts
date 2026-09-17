@@ -1,8 +1,16 @@
 import { Pool } from 'pg';
 
+let connStr = process.env.POSTGRES_URL || '';
+if (connStr.includes('1q?YLKduq3r5')) {
+  connStr = connStr.replace('1q?YLKduq3r5', '1q%3FYLKduq3r5');
+}
+if (connStr.endsWith('?')) {
+  connStr = connStr.slice(0, -1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  ssl: { rejectUnauthorized: false }, // Supabase requiere SSL incluso en desarrollo
+  connectionString: connStr,
+  ssl: { rejectUnauthorized: false }, // Supabase / RDS requiere SSL incluso en desarrollo
 });
 
 // Helper for queries

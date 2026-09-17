@@ -8,8 +8,20 @@ export const dynamic = 'force-dynamic';
 //   /api/data/base              -> todo el historico (compatibilidad)
 // Lo transversal (evolutivo, lista de meses) vive en /api/data/months.
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const mes = searchParams.get('mes');
+  const url = new URL(request.url, 'http://localhost:3000');
+  const mes = url.searchParams.get('mes');
+
+  if (mes === '__NINGUNO__') {
+    return NextResponse.json({
+      mes: '__NINGUNO__',
+      rawRecords: [],
+      costos: [],
+      emps: [],
+      mesRecords: [],
+      dispDiaria: [],
+      horario: [],
+    });
+  }
 
   try {
     const data = await getDashboardDataV2(mes || undefined);

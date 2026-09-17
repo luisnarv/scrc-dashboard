@@ -7,10 +7,18 @@ import { getMapDataV2 } from '../../../../lib/queries_v2';
 
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const mes = searchParams.get('mes');
-  const zona = searchParams.get('zona');
-  const proceso = searchParams.get('proceso');
+  const url = new URL(request.url, 'http://localhost:3000');
+  const mes = url.searchParams.get('mes');
+  const zona = url.searchParams.get('zona');
+  const proceso = url.searchParams.get('proceso');
+
+  if (mes === '__NINGUNO__') {
+    return NextResponse.json({
+      geojson: { type: 'FeatureCollection', features: [] },
+      count: 0,
+      isAggregated: false,
+    });
+  }
 
   try {
     const data = await getMapDataV2(mes || undefined, zona || undefined, undefined, proceso || undefined);

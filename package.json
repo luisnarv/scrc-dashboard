@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:filtros": "node scripts/bot-validador-filtros.mjs"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",

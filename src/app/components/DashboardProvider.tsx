@@ -114,6 +114,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Carga bajo demanda de un mes (cache-first). Evita duplicados concurrentes.
   const loadMonth = useCallback(async (mes: string, force = false) => {
+    if (!mes || mes === '__NINGUNO__' || !/^\d{4}-\d{2}$/.test(mes)) return;
     if (loadingMonths.current.has(mes)) return;
     loadingMonths.current.add(mes);
     try {
@@ -203,7 +204,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const delAno = mesList.filter(m => m.startsWith(filters.ano));
       delAno.forEach(m => { if (!(m in monthsData)) loadMonth(m); });
     }
-    filters.mes.forEach(m => { if (!(m in monthsData)) loadMonth(m); });
+    filters.mes.forEach(m => {
+      if (m && m !== '__NINGUNO__' && /^\d{4}-\d{2}$/.test(m) && !(m in monthsData)) {
+        loadMonth(m);
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.ano, filters.mes, loading]);
 
