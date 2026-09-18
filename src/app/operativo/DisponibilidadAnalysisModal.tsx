@@ -10,6 +10,9 @@ const INK = 'var(--text-title)';
 const MUT = 'var(--text-muted)';
 const LINE = 'var(--border)';
 
+const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${MESES_C[Number(mm) - 1] || mm} ${y}`; };
+
 const overlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
   background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
@@ -62,27 +65,37 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
     setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
   };
 
-  const { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada } = useMemo(() => {
-    if (!raw || !raw.disp) return { chartData: [], matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {} };
+  const { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada, esVistaMensual } = useMemo(() => {
+    if (!raw || !raw.disp) return { chartData: [], matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {}, esVistaMensual: false };
 
     let data = filtDisp(raw.disp, filters);   // Proceso: solo Gestor si aplica
     if (filters.mes && filters.mes.length > 0) {
       data = data.filter(r => r.Fecha && filters.mes.some(m => r.Fecha!.startsWith(m)));
     }
 
+    // Con 2+ meses seleccionados se agrupa por mes en vez de por día-del-mes (ver
+    // misma nota en DisponibilidadSection.tsx).
+    const esVistaMensual = (filters.mes?.length || 0) >= 2;
+    const periodOf = (fecha: string): string | null => {
+      if (esVistaMensual) return fecha.slice(0, 7);
+      const dayMatch = fecha.match(/-(\d{2})$/);
+      return dayMatch ? String(Number(dayMatch[1])) : null;
+    };
+
     const daySet = new Set<string>();
     const brigadaSet = new Set<string>();
-    
+
     data.forEach(r => {
       if (r.Fecha) {
-        const dayMatch = r.Fecha.match(/-(\d{2})$/);
-        if (dayMatch) daySet.add(String(Number(dayMatch[1])));
+        const p = periodOf(r.Fecha);
+        if (p) daySet.add(p);
       }
       if (r.Tipo_Brigada) brigadaSet.add(r.Tipo_Brigada);
     });
 
-    const maxDay = Math.max(...Array.from(daySet).map(d => Number(d) || 0), 0);
-    const days = Array.from({ length: maxDay }, (_, i) => String(i + 1));
+    const days = esVistaMensual
+      ? Array.from(daySet).sort()
+      : Array.from({ length: Math.max(...Array.from(daySet).map(d => Number(d) || 0), 0) }, (_, i) => String(i + 1));
     const brigadas = Array.from(brigadaSet).sort();
 
     const matrix: Record<string, Record<string, number>> = {};
@@ -98,9 +111,8 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
 
     data.forEach(r => {
       if (r.Fecha && r.Tipo_Brigada) {
-        const dayMatch = r.Fecha.match(/-(\d{2})$/);
-        if (dayMatch) {
-          const d = String(Number(dayMatch[1]));
+        const d = periodOf(r.Fecha);
+        if (d) {
           const val = Number(r.BrigadasActivas) || 0;
           matrix[r.Tipo_Brigada][d] = (matrix[r.Tipo_Brigada][d] || 0) + val;
           totalsByDay[d] = (totalsByDay[d] || 0) + val;
@@ -110,12 +122,12 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
     });
 
     const chartData = days.map(d => {
-      const point: any = { day: d };
+      const point: any = { day: esVistaMensual ? fmtMes(d) : d };
       brigadas.forEach(b => { point[b] = matrix[b][d] || 0; });
       return point;
     });
 
-    return { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada };
+    return { chartData, matrix, days, brigadas, totalsByDay, totalsByBrigada, esVistaMensual };
   }, [raw, filters.mes, filters.proceso]);
 
   const visibleBrigadas = selectedCategories.length > 0 ? brigadas.filter(b => selectedCategories.includes(b)) : brigadas;
@@ -249,7 +261,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
                   <tr>
                     <th style={{ position: 'sticky', top: 0, left: 0, zIndex: 3, textAlign: 'left', padding: '12px 16px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, borderRight: `1px solid var(--border)`, color: MUT, fontWeight: 600 }}>Tipo Brigada</th>
                     {days.map(d => (
-                      <th key={d} style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 4px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, color: MUT, fontWeight: 600, width: 24 }}>{d}</th>
+                      <th key={d} style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 4px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, color: MUT, fontWeight: 600, width: esVistaMensual ? 64 : 24 }}>{esVistaMensual ? fmtMes(d) : d}</th>
                     ))}
                     <th style={{ position: 'sticky', top: 0, zIndex: 2, padding: '12px 16px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, color: INK, fontWeight: 700 }}>Total</th>
                   </tr>
@@ -274,7 +286,7 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--hover-bg)', textAlign: 'left', padding: '12px 16px', borderTop: `2px solid var(--ok)`, borderRight: `1px solid var(--border)`, fontWeight: 700, color: 'var(--text-title)' }}>Total por día</td>
+                    <td style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--hover-bg)', textAlign: 'left', padding: '12px 16px', borderTop: `2px solid var(--ok)`, borderRight: `1px solid var(--border)`, fontWeight: 700, color: 'var(--text-title)' }}>{esVistaMensual ? 'Total por mes' : 'Total por día'}</td>
                     {days.map(d => (
                       <td key={d} style={{ padding: '12px 4px', borderTop: `2px solid var(--ok)`, background: 'var(--hover-bg)', fontWeight: 700, color: 'var(--text-title)' }}>{visibleTotalsByDay[d]}</td>
                     ))}

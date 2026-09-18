@@ -423,7 +423,7 @@ export async function getDashboardDataV2(mes?: string) {
                COUNT(*) as "Ordenes"
         FROM dbanalitica.historico_mo mo
         CROSS JOIN (
-          SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00']) as hora
+          SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00']) as hora
         ) h
         ${fechaCond}
           AND mo.hora_inicio IS NOT NULL AND mo.hora_fin IS NOT NULL

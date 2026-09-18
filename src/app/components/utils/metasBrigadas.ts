@@ -325,7 +325,7 @@ export function getMinutosTrabajoHora(
 }
 
 export function getMinutosTrabajoDia(fecha: Date | string, zona?: string): number {
-  const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+  const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
   return HORAS_JORNADA.reduce((sum, h) => sum + getMinutosTrabajoHora(h, fecha, zona), 0);
 }
 
@@ -344,7 +344,7 @@ export function getMetaHorariaEfectivas(
   const minHora = getMinutosTrabajoHora(horaString, fecha, zona);
   if (minHora <= 0) return 0;
 
-  const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+  const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
   const horasActivas = HORAS_JORNADA.filter(h => getMinutosTrabajoHora(h, fecha, zona) > 0).length || 8;
 
   return metaDiaria / horasActivas;

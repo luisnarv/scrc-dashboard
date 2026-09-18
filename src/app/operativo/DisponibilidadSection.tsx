@@ -9,6 +9,9 @@ const INK = 'var(--text-title)';
 const MUT = 'var(--text-muted)';
 const LINE = 'var(--border)';
 
+const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${MESES_C[Number(mm) - 1] || mm} ${y}`; };
+
 const sectionH: React.CSSProperties = { 
   fontSize: 15, fontWeight: 700, color: INK, display: 'flex', 
   alignItems: 'center', gap: 8, margin: '22px 0 10px', 
@@ -33,8 +36,8 @@ export default function DisponibilidadSection() {
   const [locFilterTipo, setLocFilterTipo] = useState('ALL');
   const [locFilterZona, setLocFilterZona] = useState('ALL');
 
-  const { matrix, days, brigadas, totalsByDay, totalsByBrigada, availableTipos, availableZonas } = useMemo(() => {
-    if (!raw || !raw.disp) return { matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {}, availableTipos: [], availableZonas: [] };
+  const { matrix, days, brigadas, totalsByDay, totalsByBrigada, esVistaMensual, availableTipos, availableZonas } = useMemo(() => {
+    if (!raw || !raw.disp) return { matrix: {}, days: [], brigadas: [], totalsByDay: {}, totalsByBrigada: {}, esVistaMensual: false, availableTipos: [], availableZonas: [] };
 
     let data = filtDisp(raw.disp, filters);   // Proceso: solo Gestor si aplica
     // Aplicar filtros globales obligatorios
@@ -66,19 +69,30 @@ export default function DisponibilidadSection() {
       data = data.filter(r => r._Zona === locFilterZona);
     }
 
+    // Con 2+ meses seleccionados se agrupa por mes (igual que los demás evolutivos
+    // de la página) en vez de por día-del-mes: agrupar por día-del-mes con varios
+    // meses mezclaba silenciosamente Jul+Ago+Sep en la misma columna "día 1".
+    const esVistaMensual = (filters.mes?.length || 0) >= 2;
+    const periodOf = (fecha: string): string | null => {
+      if (esVistaMensual) return fecha.slice(0, 7);
+      const dayMatch = fecha.match(/-(\d{2})$/);
+      return dayMatch ? String(Number(dayMatch[1])) : null;
+    };
+
     const daySet = new Set<string>();
     const brigadaSet = new Set<string>();
-    
+
     data.forEach(r => {
       if (r.Fecha) {
-        const dayMatch = r.Fecha.match(/-(\d{2})$/);
-        if (dayMatch) daySet.add(String(Number(dayMatch[1])));
+        const p = periodOf(r.Fecha);
+        if (p) daySet.add(p);
       }
       if (r.Tipo_Brigada) brigadaSet.add(r.Tipo_Brigada);
     });
 
-    const maxDay = Math.max(...Array.from(daySet).map(d => Number(d) || 0), 0);
-    const days = Array.from({ length: maxDay }, (_, i) => String(i + 1));
+    const days = esVistaMensual
+      ? Array.from(daySet).sort()
+      : Array.from({ length: Math.max(...Array.from(daySet).map(d => Number(d) || 0), 0) }, (_, i) => String(i + 1));
     const brigadas = Array.from(brigadaSet).sort();
 
     const matrix: Record<string, Record<string, number>> = {};
@@ -94,9 +108,8 @@ export default function DisponibilidadSection() {
 
     data.forEach(r => {
       if (r.Fecha && r.Tipo_Brigada) {
-        const dayMatch = r.Fecha.match(/-(\d{2})$/);
-        if (dayMatch) {
-          const d = String(Number(dayMatch[1]));
+        const d = periodOf(r.Fecha);
+        if (d) {
           const val = Number(r.BrigadasActivas) || 0;
           matrix[r.Tipo_Brigada][d] = (matrix[r.Tipo_Brigada][d] || 0) + val;
           totalsByDay[d] = (totalsByDay[d] || 0) + val;
@@ -105,10 +118,10 @@ export default function DisponibilidadSection() {
       }
     });
 
-    return { 
-      matrix, days, brigadas, totalsByDay, totalsByBrigada, 
-      availableTipos: Array.from(tiposSet).sort(), 
-      availableZonas: Array.from(zonasSet).sort() 
+    return {
+      matrix, days, brigadas, totalsByDay, totalsByBrigada, esVistaMensual,
+      availableTipos: Array.from(tiposSet).sort(),
+      availableZonas: Array.from(zonasSet).sort()
     };
   }, [raw, filters.mes, filters.proy, filters.zona, filters.proceso, locFilterTipo, locFilterZona]);
 
@@ -166,7 +179,7 @@ export default function DisponibilidadSection() {
             <tr>
               <th style={{ textAlign: 'left', padding: '8px', borderBottom: `1px solid ${LINE}`, color: MUT, fontWeight: 600 }}>Tipo Brigada</th>
               {days.map(d => (
-                <th key={d} style={{ padding: '8px 4px', borderBottom: `1px solid ${LINE}`, color: MUT, fontWeight: 600, width: 24 }}>{d}</th>
+                <th key={d} style={{ padding: '8px 4px', borderBottom: `1px solid ${LINE}`, color: MUT, fontWeight: 600, width: esVistaMensual ? 64 : 24 }}>{esVistaMensual ? fmtMes(d) : d}</th>
               ))}
               <th style={{ padding: '8px', borderBottom: `1px solid ${LINE}`, color: INK, fontWeight: 700 }}>Total</th>
             </tr>
@@ -191,7 +204,7 @@ export default function DisponibilidadSection() {
           </tbody>
           <tfoot>
             <tr>
-              <td style={{ textAlign: 'left', padding: '10px 8px', fontWeight: 700, color: INK }}>Total por día</td>
+              <td style={{ textAlign: 'left', padding: '10px 8px', fontWeight: 700, color: INK }}>{esVistaMensual ? 'Total por mes' : 'Total por día'}</td>
               {days.map(d => (
                 <td key={d} style={{ padding: '10px 4px', fontWeight: 700, color: INK }}>{totalsByDay[d]}</td>
               ))}
