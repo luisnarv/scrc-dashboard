@@ -563,6 +563,9 @@ export default function InformesPage() {
           const prodRound = Math.round(acc.produccion);
           const metaRound = Math.round(acc.meta);
           const faltRound = Math.max(0, metaRound - prodRound);
+          const rawCumpl = metaRound > 0 ? (prodRound / metaRound) * 100 : 0;
+          const isDisp = isDisponibleType(acc.brigada);
+          const cumpl = isDisp && rawCumpl > 100 ? 100 : rawCumpl;
           return {
             cedula: acc.cedula,
             tecnico: acc.tecnico,
@@ -572,7 +575,7 @@ export default function InformesPage() {
             produccion: prodRound,
             meta: metaRound,
             faltante: faltRound,
-            cumplimiento: metaRound > 0 ? (prodRound / metaRound) * 100 : 0,
+            cumplimiento: cumpl,
           };
         })
         .sort((a, b) => b.produccion - a.produccion);
@@ -872,7 +875,8 @@ export default function InformesPage() {
     return <div className="status err">{dashError}</div>;
   }
 
-  const totProdCumpl = prodTotales.meta > 0 ? (prodTotales.produccion / prodTotales.meta) * 100 : 0;
+  const rawTotProdCumpl = prodTotales.meta > 0 ? (prodTotales.produccion / prodTotales.meta) * 100 : 0;
+  const totProdCumpl = (prodTipo === 'disponibles' && rawTotProdCumpl > 100) ? 100 : rawTotProdCumpl;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

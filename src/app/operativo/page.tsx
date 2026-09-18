@@ -273,12 +273,6 @@ export default function OperativoPage() {
       }
     });
 
-    const totalAsignadoOrds = efect + fallidas + perdidas;
-    const pctCumplimientoMeta = metaTotalOrdenes > 0 ? (totalAsignadoOrds / metaTotalOrdenes) * 100 : null;
-    const pctEfectivasTotal = totalAsignadoOrds > 0 ? (efect / totalAsignadoOrds) * 100 : null;
-    const pctFallidasTotal = totalAsignadoOrds > 0 ? (fallidas / totalAsignadoOrds) * 100 : null;
-    const pctPerdidasTotal = totalAsignadoOrds > 0 ? (perdidas / totalAsignadoOrds) * 100 : null;
-
     // Brigadas que cuentan como "disponibles" (Pool). Definido UNA vez y reutilizado
     // tanto en el mes actual como en el cálculo del mes anterior (deltas mes vs mes).
     const DISPONIBLES_TYPES = [
@@ -298,11 +292,21 @@ export default function OperativoPage() {
       return DISPONIBLES_TYPES.includes(String(tb).trim().toLowerCase());
     };
 
+    const totalAsignadoOrds = efect + fallidas + perdidas;
+    const rawPctCumplimientoMeta = metaTotalOrdenes > 0 ? (totalAsignadoOrds / metaTotalOrdenes) * 100 : null;
+    const isOnlyDisponibles = rawF.length > 0 && rawF.every(r => isDisponible(String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || ''), String(r.Fecha || '')));
+    const pctCumplimientoMeta = (isOnlyDisponibles && rawPctCumplimientoMeta !== null && rawPctCumplimientoMeta > 100)
+      ? 100
+      : rawPctCumplimientoMeta;
+    const pctEfectivasTotal = totalAsignadoOrds > 0 ? (efect / totalAsignadoOrds) * 100 : null;
+    const pctFallidasTotal = totalAsignadoOrds > 0 ? (fallidas / totalAsignadoOrds) * 100 : null;
+    const pctPerdidasTotal = totalAsignadoOrds > 0 ? (perdidas / totalAsignadoOrds) * 100 : null;
+
     // Agrupación (Hora / Día) para Evolutivos y Tendencias
-    const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+    const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
     const esHora = vistaEvolutivo === 'hora';
 
-    // Jornada horaria completa (07:00 a 22:00): muestra todas las franjas del día
+    // Jornada horaria completa (07:00 a 18:00): muestra todas las franjas del día
     // en el eje X, pero sin datos ficticios en horas/días futuros.
     const HORAS_VISIBLES = HORAS_JORNADA;
 
@@ -340,7 +344,7 @@ export default function OperativoPage() {
           const match = str.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/);
           if (match) {
             const hNum = parseInt(match[1], 10);
-            const clampedH = Math.max(7, Math.min(22, hNum));
+            const clampedH = Math.max(7, Math.min(18, hNum));
             return `${String(clampedH).padStart(2, '0')}:00`;
           }
         }
@@ -2212,13 +2216,8 @@ export default function OperativoPage() {
       // Detallado por tecnico: respeta el filtro GLOBAL de meses (F.mes). Con varios
       // meses seleccionados, agrega por técnico (suma) a través de TODOS esos meses;
       // con "Todos" (F.mes vacío) toma todos los meses. Alerta = Eficacia < 65%.
-      // raw.mes (MesRecord) no trae zona/proyecto propios, así que filtMes() -- que solo
-      // filtra por Proceso -- no puede filtrar por Zona/Proyecto directamente. Se cruza
-      // por cédula contra rawEvolutivo (que sí respeta Zona/Proyecto/Proceso) para excluir
-      // técnicos que no pertenecen a la zona/proyecto seleccionados.
       const colorPorBrigada = new Map<string, string>(evTotales.map((x, idx) => [x.t, evColor(x.t, idx)]));
       const mesesSelTec = F.mes;   // [] = todos los meses
-      const cedulasZonaProy = new Set(rawEvolutivo.map(r => String(r.Cedula || '')));
       const tecAgg = new Map<string, {
         tipoBrigada: string; tecnico: string; cuentas: number; ejecutadas: number;
         suspension: number; mantiene: number; reconexion: number; pagos: number;
@@ -2226,7 +2225,6 @@ export default function OperativoPage() {
         efectivas: number; ordenes: number;
       }>();
       filtMes(raw.mes || [], F)
-        .filter(e => cedulasZonaProy.has(String(e.Cedula || '')))
         .filter(e => !mesesSelTec.length || mesesSelTec.includes(String(e.Mes_YM)))
         .forEach(t => {
           const key = `${t.Cedula || ''}|${t.Tipo_Brigada_Mes || ''}`;
@@ -2272,8 +2270,7 @@ export default function OperativoPage() {
 
       const tableDataEvolutivo = (() => {
         // Respeta el filtro global de meses: todos los meses seleccionados (o todos si F.mes vacío).
-        // Y de Zona/Proyecto vía cedulasZonaProy (ver nota en tecnicoDetalle más arriba).
-        const tecBase = filtMes(raw.mes || [], F).filter(e => cedulasZonaProy.has(String(e.Cedula || '')));
+        const tecBase = filtMes(raw.mes || [], F);
         const tecCurrent = F.mes.length ? tecBase.filter(e => F.mes.includes(String(e.Mes_YM))) : tecBase;
         const filteredCurrent = filtroEvolutivo ? tecCurrent.filter(e => e.Tipo_Brigada_Mes === filtroEvolutivo) : tecCurrent;
 

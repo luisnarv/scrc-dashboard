@@ -103,10 +103,24 @@ const isDisponibleType = (tLabel: string) => {
   );
 };
 
-function promValue(r: Row, key: SortKey): number {
+const isRowDisponible = (r: Row, filtroCat?: 'ALL' | 'OPERATIVA' | 'DISPONIBLE'): boolean => {
+  if (r.key === '__total') {
+    return filtroCat === 'DISPONIBLE';
+  }
+  const rootType = r.key.split('::')[0];
+  return isDisponibleType(rootType) || isDisponibleType(r.label);
+};
+
+function promValue(r: Row, key: SortKey, filtroCat?: 'ALL' | 'OPERATIVA' | 'DISPONIBLE'): number {
   const d = r.dias || 1;
   switch (key) {
-    case 'cump': return r.costo > 0 ? (r.ingreso / r.costo) * 100 : 0;
+    case 'cump': {
+      const raw = r.costo > 0 ? (r.ingreso / r.costo) * 100 : 0;
+      if (isRowDisponible(r, filtroCat)) {
+        return raw > 100 ? 100 : raw;
+      }
+      return raw;
+    }
     case 'promVis': return r.totVis / d;
     case 'promEfec': return r.efec / d;
     default: return num((r as unknown as Record<string, number>)[key]);
@@ -254,7 +268,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     const mult = dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
       if (sort === 'label') return a.label.localeCompare(b.label) * mult;
-      return (promValue(a, sort) - promValue(b, sort)) * mult;
+      return (promValue(a, sort, categoriaFiltro) - promValue(b, sort, categoriaFiltro)) * mult;
     });
     return arr;
   }, [brigadas, sort, dir, q, categoriaFiltro]);
@@ -359,7 +373,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             const tech = techs[techKey];
             const promVis = tech.dias ? tech.totVis / tech.dias : 0;
             const promEfec = tech.dias ? tech.efec / tech.dias : 0;
-            const cumpPct = tech.costo > 0 ? (tech.ingreso / tech.costo) * 100 : 0;
+            const rawCumpPct = tech.costo > 0 ? (tech.ingreso / tech.costo) * 100 : 0;
+            const isDisp = categoria === 'Disponible' || isDisponibleType(typeKey);
+            const cumpPct = isDisp && rawCumpPct > 100 ? 100 : rawCumpPct;
             rows.push([
               month,
               zoneKey,
@@ -407,10 +423,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
   };
 
   const dataCells = (r: Row) => COLS.map(c => {
-    const v = (c.prom || c.isPct) ? promValue(r, c.key) : num((r as unknown as Record<string, number>)[c.key]);
+    const v = (c.prom || c.isPct) ? promValue(r, c.key, categoriaFiltro) : num((r as unknown as Record<string, number>)[c.key]);
     
     if (c.isPct) {
-      const pctVal = promValue(r, 'cump');
+      const pctVal = promValue(r, 'cump', categoriaFiltro);
       const pctColor = getPctColor(pctVal);
       const fillW = Math.min(100, Math.max(0, pctVal));
       return (
@@ -509,7 +525,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                 </div>
                 <div>
                   <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: getPctColor(promValue(total, 'cump')) }}>{promValue(total, 'cump').toFixed(1)}%</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: getPctColor(promValue(total, 'cump', categoriaFiltro)) }}>{promValue(total, 'cump', categoriaFiltro).toFixed(1)}%</div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -689,10 +705,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                     Total
                   </td>
                   {COLS.map(c => {
-                    const v = (c.prom || c.isPct) ? promValue(totalMostrado, c.key) : num((totalMostrado as unknown as Record<string, number>)[c.key]);
+                    const v = (c.prom || c.isPct) ? promValue(totalMostrado, c.key, categoriaFiltro) : num((totalMostrado as unknown as Record<string, number>)[c.key]);
                     
                     if (c.isPct) {
-                      const pctVal = promValue(totalMostrado, 'cump');
+                      const pctVal = promValue(totalMostrado, 'cump', categoriaFiltro);
                       const pctColor = getPctColor(pctVal);
                       const fillW = Math.min(100, Math.max(0, pctVal));
                       return (
