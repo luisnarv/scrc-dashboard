@@ -184,18 +184,22 @@ export async function getDashboardDataV2(mes?: string) {
         --  · Resto (Pesada, Liviana, (D) Pesada) -> suma real de Efectivas + Fallidas con pago
         --    (valor_orden x 1.1300192, incremento del Excel de productividad)
         --  · Pesada Disponible -> meta fija (sin prorrateo)
-        --  · MT-AT / Minicanasta / Canasta -> meta x min(1, Total_Visita / (11 día | 8 sábado))
+        --  · MT-AT / Minicanasta / Canasta -> meta x min(1, Total_Visita / Meta_Visitas_Dia)
         --  · Gestor -> meta x min(1, (Efectivas + Fallida_con_pago) / (18 día | 13 sábado))
         (CASE
           WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
-            THEN MAX((${COSTO_MENSUAL_SQL} / 24.0) * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END))
-          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
-            THEN MAX((${COSTO_MENSUAL_SQL} / 24.0) * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END)) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0)
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Pesada MT-AT'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 11.0 ELSE 15.0 END))
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Minicanasta'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 11.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Canasta'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 8.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
           WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
-            THEN MAX((${COSTO_MENSUAL_SQL} / 24.0) * (CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 1.0 ELSE 1.1300192 END)) * LEAST(1.0, (
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, (
               SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
               + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
-            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
+            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13.0 ELSE 18.0 END))
           ELSE SUM(
             CASE 
               -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
@@ -221,13 +225,17 @@ export async function getDashboardDataV2(mes?: string) {
         (CASE
           WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0)
-          WHEN MAX(mo.brigada_homologada) IN ('Brigada Pesada MT-AT','Brigada Minicanasta','Brigada Canasta')
-            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8 ELSE 11 END))
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Pesada MT-AT'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 11.0 ELSE 15.0 END))
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Minicanasta'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 11.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
+          WHEN MAX(mo.brigada_homologada) = 'Brigada Canasta'
+            THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 8.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
           WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, (
               SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
               + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
-            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13 ELSE 18 END))
+            )::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 13.0 ELSE 18.0 END))
           ELSE SUM(
             CASE 
               -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
