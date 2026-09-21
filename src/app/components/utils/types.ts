@@ -22,6 +22,8 @@ export interface RawRecord {
   ORD_REVISION_SUSP?: number | string;
   ORD_RECONEXION?: number | string;
   Tipo_Brigada_Mes?: string;
+  Observacion?: string;
+  Asignacion?: number | string;
   // normalized
   _Proyecto?: string;
   _Zona?: string;

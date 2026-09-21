@@ -15,6 +15,7 @@ interface MonthVal {
   monthLabel: string; // e.g. '2026-05'
   monthNum: string;   // e.g. '05'
   val: number;
+  orders?: number;
 }
 
 interface TecnicoCardData {
@@ -30,6 +31,7 @@ interface TecnicoCardData {
   cumplimientoPct: number;
   diffMedia: number;
   estadoTecnico: 'BAJA' | 'NUEVO' | 'ACTIVO';
+  esRetirado?: boolean;
   cambioProyecto: 'SIN_CAMBIO' | 'SUR_A_NORTE' | 'NORTE_A_SUR' | 'OTRO_CAMBIO';
   proyectoInicial?: string;
   proyectoActual?: string;
@@ -69,25 +71,39 @@ function calcSlope(monthlyData: MonthVal[]): number {
   return denom !== 0 ? (N * sumXY - sumX * sumY) / denom : 0;
 }
 
-function getEstadoTecnico(monthlyData: MonthVal[], porDia: boolean = false): 'BAJA' | 'NUEVO' | 'ACTIVO' {
-  const N = monthlyData.length;
-  if (N === 0) return 'BAJA';
-
-  // Si estamos en desglose diario (un solo mes seleccionado):
-  // Si el técnico tiene órdenes ejecutadas en este mes (>0), está ACTIVO
-  if (porDia) {
-    const totalMes = monthlyData.reduce((s, m) => s + m.val, 0);
-    return totalMes > 0 ? 'ACTIVO' : 'BAJA';
-  }
-
-  // Si tiene 2 meses o más seguidos sin ejecutar órdenes en la parte final -> BAJA
-  if (N >= 2 && monthlyData[N - 1].val === 0 && monthlyData[N - 2].val === 0) {
+function getEstadoTecnico(
+  monthlyData: MonthVal[],
+  porDia: boolean = false,
+  esRetirado: boolean = false
+): 'BAJA' | 'NUEVO' | 'ACTIVO' {
+  // 1. Registro oficial en la tabla de novedades como RETIRO -> BAJA inmediata
+  if (esRetirado) {
     return 'BAJA';
   }
 
-  // Si tiene un solo mes activo y es el último mes de la serie -> NUEVO
-  const activeMonths = monthlyData.filter(m => m.val > 0);
-  if (activeMonths.length === 1 && monthlyData[N - 1].val > 0) {
+  const N = monthlyData.length;
+  if (N === 0) return 'BAJA';
+
+  // Helper para validar si un período tuvo actividad de órdenes asignadas/ejecutadas
+  const tieneActividad = (m: MonthVal) => ((m.orders ?? 0) > 0 || m.val > 0);
+
+  // Si estamos en desglose diario (un solo mes seleccionado):
+  if (porDia) {
+    const totalOrders = monthlyData.reduce((s, m) => s + (m.orders || 0), 0);
+    const totalVal = monthlyData.reduce((s, m) => s + m.val, 0);
+    return (totalOrders > 0 || totalVal > 0) ? 'ACTIVO' : 'BAJA';
+  }
+
+  // 2. Validación de los 2 meses:
+  // Solo se clasifica como BAJA si en los últimos 2 meses consecutivos NO tiene órdenes asignadas/ejecutadas.
+  // Si el técnico sí tuvo órdenes en alguno de esos 2 meses, NO es baja.
+  if (N >= 2 && !tieneActividad(monthlyData[N - 1]) && !tieneActividad(monthlyData[N - 2])) {
+    return 'BAJA';
+  }
+
+  // 3. Si tiene un solo mes con órdenes/actividad y es el último mes de la serie -> NUEVO
+  const activeMonths = monthlyData.filter(m => tieneActividad(m));
+  if (activeMonths.length === 1 && tieneActividad(monthlyData[N - 1])) {
     return 'NUEVO';
   }
 
@@ -338,7 +354,11 @@ function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean })
   // Badge de Estado (BAJA / NUEVO / ACTIVO)
   const estBg = tec.estadoTecnico === 'BAJA' ? 'rgba(198,40,40,0.12)' : tec.estadoTecnico === 'NUEVO' ? 'rgba(25,118,210,0.12)' : 'rgba(46,125,50,0.12)';
   const estColor = tec.estadoTecnico === 'BAJA' ? '#C62828' : tec.estadoTecnico === 'NUEVO' ? '#1976D2' : '#2E7D32';
-  const estLabel = tec.estadoTecnico === 'BAJA' ? '🔴 Baja' : tec.estadoTecnico === 'NUEVO' ? '🆕 Nuevo' : '⚡ Activo';
+  const estLabel = tec.estadoTecnico === 'BAJA'
+    ? (tec.esRetirado ? '🔴 Retirado' : '🔴 Baja')
+    : tec.estadoTecnico === 'NUEVO'
+      ? '🆕 Nuevo'
+      : '⚡ Activo';
 
   return (
     <div style={{
@@ -570,17 +590,18 @@ export default function TecnicosPage() {
     });
     const mesesList = Array.from(mesesSet).sort();
 
-    // Agrupar por Técnico
+    // 2. Agrupar por Técnico para órdenes y trazabilidad de proyectos
     const tecMap: Record<string, {
       id: string;
       nombre: string;
       zona: string;
       tipoCounts: Record<string, number>;
       byMonth: Record<string, number>;
+      ordersByMonth: Record<string, number>;
       proyByMonth: Record<string, string>;
+      esRetirado: boolean;
     }> = {};
 
-    // Conteo de brigadas/cuadrillas activas por tipo y mes
     const cantBrigadasMensual: Record<string, Record<string, Set<string>>> = {};
     const tiposSet = new Set<string>();
 
@@ -601,6 +622,9 @@ export default function TecnicosPage() {
       const proy = String(r._Proyecto || normProy(r.Zona) || r.Zona || 'Sin Proyecto');
       const month = bucketKey(String(r.Fecha || ''));
       const efec = n(r.Efectivas) + n(r.Fallida_Con_Pago);
+      const ords = n(r.Asignacion) || n(r.Visitas) || (n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas)) || (efec > 0 ? 1 : 0);
+      const obs = String(r.Observacion || (r as Record<string, unknown>).observacion || '').toUpperCase();
+      const esRetiro = obs.includes('RETIRO');
 
       if (tipo && tipo !== 'Sin Tipo') tiposSet.add(tipo);
 
@@ -611,10 +635,21 @@ export default function TecnicosPage() {
       }
 
       // Agrupación Técnico
-      const entry = (tecMap[id] ??= { id, nombre, zona, tipoCounts: {}, byMonth: {}, proyByMonth: {} });
+      const entry = (tecMap[id] ??= {
+        id,
+        nombre,
+        zona,
+        tipoCounts: {},
+        byMonth: {},
+        ordersByMonth: {},
+        proyByMonth: {},
+        esRetirado: false,
+      });
       entry.byMonth[month] = (entry.byMonth[month] || 0) + efec;
+      entry.ordersByMonth[month] = (entry.ordersByMonth[month] || 0) + ords;
       entry.tipoCounts[tipo] = (entry.tipoCounts[tipo] || 0) + (efec || 1);
       if (month && proy) entry.proyByMonth[month] = proy;
+      if (esRetiro) entry.esRetirado = true;
     }
 
     // Tarjetas de Cantidad de Brigadas por Tipo (BD)
@@ -660,6 +695,7 @@ export default function TecnicosPage() {
         monthLabel: m,
         monthNum: bucketNum(m),
         val: tec.byMonth[m] || 0,
+        orders: tec.ordersByMonth[m] || 0,
       }));
 
       const totalEfectivas = monthlyData.reduce((s, m) => s + m.val, 0);
@@ -678,7 +714,7 @@ export default function TecnicosPage() {
         }
       }
 
-      const estadoTecnico = getEstadoTecnico(monthlyData, porDia);
+      const estadoTecnico = getEstadoTecnico(monthlyData, porDia, tec.esRetirado);
 
       // Evaluar Movilidad de Proyecto (Traslado)
       const sortedMonthsProy = Object.keys(tec.proyByMonth).sort();
@@ -712,6 +748,7 @@ export default function TecnicosPage() {
         trendPct,
         slope,
         estadoTecnico,
+        esRetirado: tec.esRetirado,
         cambioProyecto,
         proyectoInicial,
         proyectoActual,
@@ -940,7 +977,7 @@ export default function TecnicosPage() {
             <option value="ALL">Estado Técnico: Todos ({cardsData.length})</option>
             <option value="ACTIVO">⚡ Activos ({countActivos})</option>
             <option value="NUEVO">🆕 Nuevos (1er mes activo) ({countNuevos})</option>
-            <option value="BAJA">🔴 Bajas (2+ meses inactivo) ({countBajas})</option>
+            <option value="BAJA">🔴 Bajas / Retirados ({countBajas})</option>
           </select>
 
           <select

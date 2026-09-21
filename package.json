@@ -6,8 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test:filtros": "node scripts/bot-validador-filtros.mjs"
+    "test:filtros": "node scripts/bot-validador-filtros.mjs",
+    "test:productivo": "node scripts/run-bots-productivo.mjs",
+    "test:productivo:local": "node scripts/bot-productivo-1-local-filters.mjs",
+    "test:productivo:cascade": "node scripts/bot-productivo-2-cascade-filters.mjs",
+    "test:productivo:cross": "node scripts/bot-productivo-3-cross-filters.mjs",
+    "test:productivo:math": "node scripts/bot-productivo-4-math-pagination.mjs"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",

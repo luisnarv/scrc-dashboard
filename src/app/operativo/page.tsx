@@ -303,10 +303,13 @@ export default function OperativoPage() {
     const pctPerdidasTotal = totalAsignadoOrds > 0 ? (perdidas / totalAsignadoOrds) * 100 : null;
 
     // Agrupación (Hora / Día) para Evolutivos y Tendencias
-    const HORAS_JORNADA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+    const HORAS_JORNADA = [
+      '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
+      '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'
+    ];
     const esHora = vistaEvolutivo === 'hora';
 
-    // Jornada horaria completa (07:00 a 18:00): muestra todas las franjas del día
+    // Jornada horaria completa (07:00 a 23:00 / 11:00 PM): muestra todas las franjas del día
     // en el eje X, pero sin datos ficticios en horas/días futuros.
     const HORAS_VISIBLES = HORAS_JORNADA;
 
@@ -344,7 +347,7 @@ export default function OperativoPage() {
           const match = str.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/);
           if (match) {
             const hNum = parseInt(match[1], 10);
-            const clampedH = Math.max(7, Math.min(18, hNum));
+            const clampedH = Math.max(7, Math.min(23, hNum));
             return `${String(clampedH).padStart(2, '0')}:00`;
           }
         }

@@ -10,6 +10,8 @@ interface RawRowV2 {
   Tipo_Brigada_Operaciones: string | null;
   Tipo_Brigada_Mes: string | null;
   zona: string | null;
+  supervisor: string | null;
+  observacion: string | null;
   Visitas: string;
   Efectivas: string;
   Fallidas: string;
@@ -173,6 +175,7 @@ export async function getDashboardDataV2(mes?: string) {
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym",
         MAX(mo.zona) as "zona",
         MAX(mb."Supervisor") as "supervisor",
+        MAX(mb."observacion") as "observacion",
         SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
         SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
         SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
@@ -319,6 +322,8 @@ export async function getDashboardDataV2(mes?: string) {
       Tipo_Brigada_Operaciones: r.Tipo_Brigada_Operaciones,
       Tipo_Brigada_Mes: r.Tipo_Brigada_Mes,
       Zona: r.zona,
+      Supervisor: r.supervisor || undefined,
+      Observacion: r.observacion || undefined,
       Visitas: Number(r.Visitas),
       Efectivas: Number(r.Efectivas),
       Fallidas: Number(r.Fallidas),
@@ -366,6 +371,7 @@ export async function getDashboardDataV2(mes?: string) {
 
       const mesRes = await query(`
         SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
+               MAX(mb."observacion") as "Observacion",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
                mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
@@ -431,7 +437,7 @@ export async function getDashboardDataV2(mes?: string) {
                COUNT(*) as "Ordenes"
         FROM dbanalitica.historico_mo mo
         CROSS JOIN (
-          SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00']) as hora
+          SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00']) as hora
         ) h
         ${fechaCond}
           AND mo.hora_inicio IS NOT NULL AND mo.hora_fin IS NOT NULL
