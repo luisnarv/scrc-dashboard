@@ -5,34 +5,17 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
 import SyncStatus from './SyncStatus';
 
+export const ALL_NAV_ROUTES = [
+  { path: '/operativo', label: '⚙️ Operativo' },
+  { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
+  { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+  
+  { path: '/informes', label: '📑 Informes' },
+];
+
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
-
-  // Los botones de Técnicos, Producción Técnico e Informes se muestran solo en el ecosistema Operativo
-  const isOperativoEcosystem =
-    pathname === '/operativo' ||
-    pathname === '/tecnicos' ||
-    pathname.startsWith('/tecnico') ||
-    pathname === '/informes' ||
-    pathname.startsWith('/informe');
-
-  const mainNavItems = [
-    { path: '/', label: '📊 Resumen' },
-    { path: '/gerencial', label: '📈 Gerencial' },
-    { path: '/estrategico', label: '🎯 Estratégico' },
-    { path: '/operativo', label: '⚙️ Operativo' },
-  ];
-
-  const operativoSubItems = [
-    { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
-    { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
-    { path: '/informes', label: '📑 Informes' },
-  ];
-
-  const visibleNavItems = isOperativoEcosystem
-    ? [...mainNavItems, ...operativoSubItems]
-    : mainNavItems;
 
   return (
     <>
@@ -71,8 +54,8 @@ export default function Header() {
         </div>
       </header>
 
-      {/* <nav className="dash-nav">
-        {visibleNavItems.map(item => {
+      <nav id="main-dash-nav" className="dash-nav" aria-label="Navegación principal del Dashboard">
+        {ALL_NAV_ROUTES.map(item => {
           const isActive = pathname === item.path;
           return (
             <Link
@@ -84,7 +67,7 @@ export default function Header() {
             </Link>
           );
         })}
-      </nav> */}
+      </nav>
     </>
   );
 }

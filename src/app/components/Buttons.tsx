@@ -1,6 +1,6 @@
+'use client';
+
 import React, { ButtonHTMLAttributes, ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
 
 const CTRL_H = 32;
 
@@ -126,31 +126,12 @@ export function ExportButton({ format, onClick, style }: { format: 'excel' | 'cs
   );
 }
 
+/**
+ * ButtonMenuOperativo:
+ * La navegación principal unificada con todas las rutas ejecutivas y operativas
+ * se renderiza de forma centralizada en Header.tsx directamente bajo el encabezado,
+ * garantizando coherencia visual y disponibilidad permanente en todas las pantallas.
+ */
 export function ButtonMenuOperativo() {
-  const pathname = usePathname();
-
-  // Los botones de Técnicos y Producción Técnico se muestran solo en el ecosistema Operativo
-    const mainNavItems = [
-      { path: '/operativo', label: '⚙️ Operativo' },
-      { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
-      { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
-      { path: '/informes', label: '📑 Informes' },
-    ];
-
-  return (
-      <nav className="dash-nav">
-                  {mainNavItems.map(item => {
-                    const isActive = pathname === item.path;
-                    return (
-                      <Link
-                        key={item.path}
-                        href={item.path}
-                        className={`nav-link ${isActive ? 'active' : ''}`}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </nav>
-  );
+  return null;
 }

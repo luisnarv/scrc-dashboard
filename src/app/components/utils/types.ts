@@ -156,6 +156,9 @@ export interface RawData {
   disp: DispDiariaRecord[];
   evolutivo: EvolutivoRecord[];
   horario?: HorarioRecord[];
+  // Digitación horaria POR TÉCNICO (hora tomada de hora_fin) -- misma forma que
+  // HorarioRecord más Cedula/Tecnico. Ver nota en queries_v2.ts::horarioTecRes.
+  horarioTec?: HorarioRecord[];
 }
 
 export interface Filters {

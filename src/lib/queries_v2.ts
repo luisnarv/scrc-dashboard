@@ -447,6 +447,28 @@ export async function getDashboardDataV2(mes?: string) {
         ORDER BY mo.fecha_cierre, h.hora, mo.brigada_homologada
       `, params);
 
+    // Digitación horaria POR TÉCNICO (para el ranking "Cuadrilla Top" -- BRIGADA LÍDER /
+    // PICO DE DIGITACIÓN en vista horaria). horarioRes de arriba no sirve para esto: agrega
+    // por Tipo_Brigada/Zona, sin identidad de técnico. La hora se toma de hora_fin (momento
+    // de cierre/digitación de la orden), recortada al rango visible 07:00-22:00.
+    const horarioTecRes = await query(`
+        SELECT mo.fecha_cierre::text as "Fecha",
+               (LPAD(LEAST(22, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00') as "Hora",
+               ${SQL_CLEAN_MO_ID} as "Cedula",
+               MAX(mo.tecnico) as "Tecnico",
+               mo.brigada_homologada as "Tipo_Brigada",
+               mo.zona as "Zona",
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
+               SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
+               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
+               COUNT(*) as "Ordenes"
+        FROM dbanalitica.historico_mo mo
+        ${fechaCond}
+          AND mo.hora_fin IS NOT NULL
+        GROUP BY mo.fecha_cierre, "Hora", ${SQL_CLEAN_MO_ID}, mo.brigada_homologada, mo.zona
+        ORDER BY mo.fecha_cierre, "Hora"
+      `, params);
+
     return {
       mes: mes || 'ALL',
       rawRecords,
@@ -455,6 +477,7 @@ export async function getDashboardDataV2(mes?: string) {
       mesRecords: mesRes.rows,
       dispDiaria: dispRes.rows,
       horario: horarioRes.rows,
+      horarioTec: horarioTecRes.rows,
     };
   } catch (error) {
     console.error('DB Error en V2:', error);

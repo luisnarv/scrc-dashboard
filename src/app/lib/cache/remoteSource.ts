@@ -22,6 +22,7 @@ export const RemoteSource = {
       mesRecords: data.mesRecords || [],
       dispDiaria: data.dispDiaria || [],
       horario: data.horario || [],
+      horarioTec: data.horarioTec || [],
     };
   },
 };

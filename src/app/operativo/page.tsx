@@ -987,6 +987,22 @@ export default function OperativoPage() {
     const allTechsSorted = Array.from(techAggMap.values()).sort((a, b) => b.total - a.total);
     const topTechs = allTechsSorted.slice(0, 6);
 
+    // Pico de Digitación por técnico (solo vista horaria): techAggMap.byDay solo tiene
+    // el día (viene de rawF, agregado diario), no sirve para encontrar la hora pico. La
+    // hora real (de hora_fin) vive en raw.horarioTec, que sí trae técnico + hora juntos.
+    const techHourMap = new Map<string, Record<string, number>>();
+    if (esHora && raw.horarioTec && raw.horarioTec.length > 0) {
+      filtHorario(raw.horarioTec, F).forEach(r => {
+        const ced = String(r.Cedula || '').trim();
+        const h = String(r.Hora || '');
+        if (!ced || !h) return;
+        const totalOrd = n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas);
+        let byH = techHourMap.get(ced);
+        if (!byH) { byH = {}; techHourMap.set(ced, byH); }
+        byH[h] = (byH[h] || 0) + totalOrd;
+      });
+    }
+
     const TOP_BRIG_COLORS = [
       '#00897B', // Teal
       '#1E88E5', // Blue
@@ -1052,13 +1068,11 @@ export default function OperativoPage() {
           if (vistaEvolutivo === 'mes') {
             seriesData = mesesArr.map(m => tech.byMonth[m] || 0);
           } else if (vistaEvolutivo === 'hora') {
-            const targetFecha = (filters.fecha && filters.fecha !== 'ALL') ? filters.fecha : (dias[0] || '');
-            const techDayOrd = tech.byDay[targetFecha] || tech.total;
-            const totDayOrd = totOrd || 1;
+            // Horas reales por técnico (de hora_fin, vía raw.horarioTec/techHourMap) --
+            // antes era una estimación proporcional, ver nota igual en modalTechs.byHour.
             seriesData = dias.map(h => {
               if (isFuturePeriod(h)) return null;
-              const hOrd = (byDay[h]?.efec || 0) + (byDay[h]?.fall || 0) + (byDay[h]?.perd || 0);
-              return Math.round(techDayOrd * (hOrd / Math.max(1, totDayOrd)));
+              return techHourMap.get(tech.ced)?.[h] || 0;
             });
           } else {
             seriesData = dias.map(d => isFuturePeriod(d) ? null : (tech.byDay[d] || 0));
@@ -1200,7 +1214,9 @@ export default function OperativoPage() {
       let maxTechPeriod = '';
       topTechs.forEach(t => {
         dias.forEach(p => {
-          const v = vistaEvolutivo === 'mes' ? (t.byMonth[p] || 0) : (t.byDay[p] || 0);
+          const v = vistaEvolutivo === 'mes' ? (t.byMonth[p] || 0)
+            : vistaEvolutivo === 'hora' ? (techHourMap.get(t.ced)?.[p] || 0)
+            : (t.byDay[p] || 0);
           if (v > maxTechVal) {
             maxTechVal = v;
             maxTechPeriod = vistaEvolutivo === 'hora' ? p : vistaEvolutivo === 'dia' ? `Día ${p.slice(-2)}` : p;
@@ -1341,11 +1357,12 @@ export default function OperativoPage() {
     });
 
     const modalTechs = allTechsSorted.map(tech => {
-      const techDayOrd = tech.byDay[targetFecha] || tech.total;
+      // byHour: horas REALES por técnico (de hora_fin, vía raw.horarioTec/techHourMap) --
+      // antes era una estimación proporcional (total del día del técnico repartido según
+      // la curva horaria general), no el dato real de cuándo digitó cada quien.
       const byHour = HORAS_VISIBLES.map(h => {
         if (isFuturePeriod(h)) return null;
-        const hOrd = (byDay[h]?.efec || 0) + (byDay[h]?.fall || 0) + (byDay[h]?.perd || 0);
-        return Math.round(techDayOrd * (hOrd / Math.max(1, totDayOrd)));
+        return techHourMap.get(tech.ced)?.[h] || 0;
       });
       const byDayArr = dias.map(d => isFuturePeriod(d) ? null : (tech.byDay[d] || 0));
       const byMonthArr = mesesArr.map(m => tech.byMonth[m] || 0);

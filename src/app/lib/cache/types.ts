@@ -10,6 +10,7 @@ export interface MonthPayload {
   mesRecords: MesRecord[];
   dispDiaria: DispDiariaRecord[];
   horario?: HorarioRecord[];
+  horarioTec?: HorarioRecord[];
 }
 
 // Un mes disponible en el servidor (de /api/data/months)

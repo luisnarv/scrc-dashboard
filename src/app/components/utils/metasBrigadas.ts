@@ -166,10 +166,21 @@ export function obtenerConfigMeta(tipoBrigada: string, zona?: string): MetaBriga
   const esSur = zona ? String(zona).trim().toLowerCase().includes('sur') : false;
   const dicMetas = esSur ? METAS_SUR : METAS_NORTE_CENTRO;
 
+  // Ordenar aliases de mayor a menor longitud para que alias más específicos
+  // (ej: 'BRIGADA PESADA/ MT AT', 'SCR PESADA DISPONIBILIDAD', 'SCR MINI CANASTA')
+  // coincidan antes que términos genéricos como 'PESADA' o 'CANASTA'
+  const allEntries: { alias: string; config: MetaBrigadaConfig }[] = [];
   for (const key of Object.keys(dicMetas)) {
     const config = dicMetas[key];
-    if (config.aliases.some(alias => norm.includes(alias.toUpperCase()))) {
-      return config;
+    for (const alias of config.aliases) {
+      allEntries.push({ alias: alias.toUpperCase(), config });
+    }
+  }
+  allEntries.sort((a, b) => b.alias.length - a.alias.length);
+
+  for (const entry of allEntries) {
+    if (norm.includes(entry.alias)) {
+      return entry.config;
     }
   }
 

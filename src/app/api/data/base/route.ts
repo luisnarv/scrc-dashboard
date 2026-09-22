@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       mesRecords: [],
       dispDiaria: [],
       horario: [],
+      horarioTec: [],
     });
   }
 
