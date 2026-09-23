@@ -919,7 +919,7 @@ export default function InformesPage() {
             <div className="modal-body" style={{ padding: 18, overflowY: 'auto' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 14 }}>
             <div>
               <label style={lbl}>ZONA</label>
               <select style={inp} value={prodZona} onChange={e => setProdZona(e.target.value)}>
@@ -1128,7 +1128,7 @@ export default function InformesPage() {
             <div className="modal-body" style={{ padding: 18, overflowY: 'auto' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 14 }}>
             <div>
               <label style={lbl}>ZONA</label>
               <select style={inp} value={digZona} onChange={e => setDigZona(e.target.value)}>

@@ -237,13 +237,17 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 /* Badges */
 .badge-sip { background: var(--sip-bg); color: var(--sip); padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
 .badge-otc { background: var(--otc-bg); color: var(--otc); padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
-.tag-sip { background: var(--sip-bg); color: var(--sip); padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 700; }
-.tag-otc { background: var(--otc-bg); color: var(--otc); padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 700; }
+.tag-sip { background: var(--sip-bg); color: var(--sip); padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+.tag-otc { background: var(--otc-bg); color: var(--otc); padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
 
 /* KPI Grid */
-.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+/* minmax(0,1fr): sin esto las columnas no bajan del ancho mínimo de su contenido y la grilla desborda en móvil */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.kpi-grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .kpi-grid:not(.c2) { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 340px) { .kpi-grid.c2 { grid-template-columns: minmax(0, 1fr); } }
+.kpi { min-width: 0; overflow-wrap: anywhere; }
 
 /* KPI Card */
 .kpi {
@@ -273,13 +277,19 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .info:hover { color: var(--text-title); }
 
 /* Grids */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-@media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); } }
 
 /* Chart card */
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
-.card .ch-title { font-size: 12px; font-weight: 600; color: var(--text-title); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; min-width: 0; max-width: 100%; }
+canvas { max-width: 100%; }
+
+/* Tarjetas por técnico/brigada: 3 columnas en escritorio, 2 en tablet, 1 en móvil */
+.cards-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .cards-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .cards-grid-3 { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.card .ch-title { font-size: 12px; font-weight: 600; color: var(--text-title); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .card .ch-sub { font-size: 10px; color: var(--text-muted); margin-bottom: 6px; }
 .chart-box { position: relative; height: 220px; }
 .chart-box.tall { height: 280px; }
@@ -334,7 +344,7 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .driver b { color: var(--text-title); font-weight: 600; }
 .driver .tipo {
   display: inline-block;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 8px;
@@ -402,7 +412,7 @@ table.det tr:hover { background: var(--hover-bg); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   margin-right: 6px;
   flex-shrink: 0;
@@ -507,7 +517,7 @@ table.det tr:hover { background: var(--hover-bg); }
 /* Sortable */
 table.det.sortable th[data-sort] { cursor: pointer; user-select: none; transition: background .12s; }
 table.det.sortable th[data-sort]:hover { background: var(--hover-bg); }
-table.det.sortable th[data-sort]::after { content: '\21C5'; font-size: 9px; margin-left: 4px; opacity: .35; }
+table.det.sortable th[data-sort]::after { content: '\21C5'; font-size: 10px; margin-left: 4px; opacity: .35; }
 table.det.sortable th[data-sort].asc::after { content: '\25B2'; opacity: 1; color: var(--text-title); }
 table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; color: var(--text-title); }
 
@@ -674,6 +684,12 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
   table.det { font-size: 10px; }
   table.det td, table.det th { padding: 4px 6px; }
   .section h2 { font-size: 14px; }
+}
+
+/* Áreas táctiles mínimas en móvil/tablet (WCAG 2.5.8: 24px) */
+@media (max-width: 768px) {
+  button, select, input:not([type=checkbox]):not([type=radio]):not([type=range]) { min-height: 32px; }
+  input[type=checkbox], input[type=radio] { width: 24px; height: 24px; flex-shrink: 0; }
 }
 
 @media (max-width: 420px) {

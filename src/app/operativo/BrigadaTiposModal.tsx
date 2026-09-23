@@ -5,6 +5,7 @@ import { esFestivo } from '../components/utils/holidays';
 import { getMinutosTrabajoHora } from '../components/utils/metasBrigadas';
 import { fmtN, fmtPct } from '../components/utils/formatters';
 import { SegmentedControl } from '../components/Buttons';
+import { useTheme } from '../components/ThemeProvider';
 
 /* Bandas de franja no laborable (almuerzo / fuera de jornada / domingo / festivo). */
 const bandsPlugin = {
@@ -138,10 +139,6 @@ const LINE = 'var(--border)';
 const TEAL = 'var(--sip)';
 const constColor = (c: string) => (c === 'Alta' ? OK : c === 'Media' ? WARN : ERR);
 
-const TOP_TECH_COLORS = [
-  '#00897B', '#1E88E5', '#8E24AA', '#FB8C00', '#43A047', '#E53935', '#3949AB', '#D81B60'
-];
-
 export default function BrigadaTiposModal({
   data,
   vista,
@@ -157,6 +154,7 @@ export default function BrigadaTiposModal({
   onToggleVista: (v: 'hora' | 'dia' | 'mes') => void;
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
   const [nivel, setNivel] = useState<'brigadas' | 'tecnicos'>(subVista === 'cuadrilla' ? 'tecnicos' : 'brigadas');
   const [brigadaFiltro, setBrigadaFiltro] = useState<string>(
     initialBrigada || (subVista === 'tipo' && data.tipos.length > 0 ? data.tipos[0].label : 'ALL')
@@ -261,7 +259,7 @@ export default function BrigadaTiposModal({
       // Graficar los Top 7 técnicos de la selección
       const topTechs = tecnicosFiltrados.slice(0, 7);
       topTechs.forEach((tech, idx) => {
-        const col = TOP_TECH_COLORS[idx % TOP_TECH_COLORS.length];
+        const col = colors.series[idx % colors.series.length];
         const shortNom = tech.nom.split(' ').filter(Boolean).slice(0, 2).join(' ') || tech.ced;
         const serie = vista === 'mes' ? tech.byMonth : vista === 'hora' ? tech.byHour : tech.byDay;
         datasets.push({
@@ -335,7 +333,7 @@ export default function BrigadaTiposModal({
         },
       },
     } as ChartConfiguration;
-  }, [nivel, tiposFiltrados, tecnicosFiltrados, vista, labels, brigadaFiltro, data]);
+  }, [nivel, tiposFiltrados, tecnicosFiltrados, vista, labels, brigadaFiltro, data, colors]);
 
   // Montar Chart.js en el canvas
   useEffect(() => {

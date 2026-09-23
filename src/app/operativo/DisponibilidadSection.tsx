@@ -14,7 +14,7 @@ const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${
 
 const sectionH: React.CSSProperties = { 
   fontSize: 15, fontWeight: 700, color: INK, display: 'flex', 
-  alignItems: 'center', gap: 8, margin: '22px 0 10px', 
+  alignItems: 'center', flexWrap: 'wrap', gap: 8, margin: '22px 0 10px', 
   borderLeft: `3px solid ${TEAL}`, paddingLeft: 10 
 };
 const card: React.CSSProperties = {
@@ -24,6 +24,7 @@ const card: React.CSSProperties = {
 // Sin background/color explicitos el select cae al estilo nativo del
 // navegador (blanco) y es lo unico que no sigue el tema.
 const selectStyle: React.CSSProperties = {
+  maxWidth: '100%',
   padding: '6px 10px', borderRadius: 6, border: `1px solid ${LINE}`,
   fontSize: 12, outline: 'none',
   background: 'var(--panel)', color: 'var(--text-body)', fontFamily: 'inherit'
@@ -145,7 +146,7 @@ export default function DisponibilidadSection() {
       <div style={sectionH}>
         Disponibilidad de Brigadas por Día
         
-        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', marginRight: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginLeft: 'auto', marginRight: 16, maxWidth: '100%' }}>
           <select 
             value={locFilterTipo}
             onChange={e => setLocFilterTipo(e.target.value)}

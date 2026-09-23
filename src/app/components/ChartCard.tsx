@@ -74,8 +74,8 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
   return (
     <>
       <div id={`card-${id}`} className="card">
-        <div className="ch-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+        <div className="ch-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, flexWrap: 'wrap', minWidth: 0 }}>
             {title}
             {headerExtra}
           </div>

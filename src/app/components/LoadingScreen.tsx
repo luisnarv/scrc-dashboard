@@ -9,7 +9,7 @@ export default function LoadingScreen({ message = 'Cargando información…' }: 
       </div>
       <div className="load-msg">{message}</div>
       <div className="load-bar"><span /></div>
-      <div className="load-hint">Consultando la base de datos PostgreSQL</div>
+      <div className="load-hint">Consultando información</div>
     </div>
   );
 }

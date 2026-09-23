@@ -1003,16 +1003,9 @@ export default function OperativoPage() {
       });
     }
 
-    const TOP_BRIG_COLORS = [
-      '#00897B', // Teal
-      '#1E88E5', // Blue
-      '#8E24AA', // Purple
-      '#FB8C00', // Orange
-      '#43A047', // Green
-      '#E53935', // Red
-      '#3949AB', // Indigo
-      '#D81B60', // Pink
-    ];
+    // Paleta de series por tema (igual que BrigadaEvolutivoModal/DisponibilidadAnalysisModal),
+    // en vez de colores fijos que no se adaptan a modo claro/oscuro.
+    const TOP_BRIG_COLORS = colors.series;
 
     // Órdenes por Tipo de Brigada
     const totalOrdByTipo: Record<string, number> = {};
@@ -2340,7 +2333,7 @@ export default function OperativoPage() {
       tiposOrdenados, activeTipoBrigada,
       granTotalEfectivas, picoFormatted, tipoLider, tipoLiderPct, workingPeriodsCount, totalPeriodsCount, tiposTotales
     };
-  }, [raw, filters, mesList, fechaList, filtroEvolutivo, vistaEvolutivo, subVistaBrigadas, selectedTipoBrigada]);
+  }, [raw, filters, mesList, fechaList, filtroEvolutivo, vistaEvolutivo, subVistaBrigadas, selectedTipoBrigada, colors]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -2389,13 +2382,13 @@ export default function OperativoPage() {
   return (
     <>
      <ButtonMenuOperativo/>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', margin: '4px 2px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10, margin: '4px 2px 12px' }}>
           
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 3, color: INK }}>OPERATIVO</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>¿Cómo está la operación hoy y qué requiere atención?</div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={() => setModalOpen(true)}
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: theme === 'dark' ? 'var(--brand-primary)' : 'var(--brand-primary)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: `0 1px 3px rgba(25,118,210,${theme === 'dark' ? 0.1 : 0.3})` }}>
             Detalle de Brigadas
@@ -2431,7 +2424,7 @@ export default function OperativoPage() {
       <div style={secH(TEAL)}>
         <span style={dot(TEAL)} /> Resumen operativo
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(148px, 100%), 1fr))', gap: 12 }}>
         {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL)}
         {kpi('Brigadas disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO)}
         {kpi(
@@ -2478,7 +2471,7 @@ export default function OperativoPage() {
           <span>· {filters.fecha !== 'ALL' ? filters.fecha : 'Fecha'} · Franjas sombreadas: no laborable / almuerzo</span>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16, marginBottom: 12 }}>
         {/* Card 1 */}
         <div>
           <ChartCard
@@ -2492,21 +2485,21 @@ export default function OperativoPage() {
           />
           {(vistaEvolutivo === 'hora' || vistaEvolutivo === 'dia') && (
             <div style={{ background: 'var(--panel)', padding: '10px 14px', borderRadius: '0 0 10px 10px', marginTop: -4, border: '1px solid var(--border)', borderTop: 'none' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Meta Total Día' : 'Meta Total Mes'}</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Meta Total Día' : 'Meta Total Mes'}</div>
                   <strong style={{ fontSize: 13, color: INK }}>{fmtN(d.metaTotalOrdenes)}</strong>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Hora pico' : 'Día pico'}</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Hora pico' : 'Día pico'}</div>
                   <strong style={{ fontSize: 12.5, color: INK }}>{d.picoLabel}</strong>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Cump. meta</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Cump. meta</div>
                   <strong style={{ fontSize: 13, color: d.cumpMetaVal >= 90 ? OK : WARN }}>{d.cumpMetaVal.toFixed(0)}%</strong>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Horas bajo meta' : 'Días bajo meta'}</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>{vistaEvolutivo === 'hora' ? 'Horas bajo meta' : 'Días bajo meta'}</div>
                   <strong style={{ fontSize: 13, color: d.bajoMetaCount > 0 ? WARN : OK }}>{d.bajoMetaCount} {vistaEvolutivo === 'hora' ? 'hrs' : 'días'}</strong>
                 </div>
               </div>
@@ -2574,25 +2567,25 @@ export default function OperativoPage() {
             detailTableData={d.tableDataBrig as any}
           />
           <div style={{ background: 'var(--panel)', padding: '10px 14px', borderRadius: '0 0 10px 10px', marginTop: -4, border: '1px solid var(--border)', borderTop: 'none' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, textAlign: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed var(--border)' }}>
               <div>
-                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
                   {subVistaBrigadas === 'cuadrilla' ? 'Brigada Líder' : 'Brigada'}
                 </div>
                 <strong style={{ fontSize: 12, color: OK }}>{d.card2LiderLbl}</strong>
               </div>
               <div>
-                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Pico de Digitación</div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>Pico de Digitación</div>
                 <strong style={{ fontSize: 12, color: WARN }}>{d.card2PicoLbl}</strong>
               </div>
               <div>
-                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
                   {subVistaBrigadas === 'cuadrilla' ? 'Promedio / Brigada' : 'Promedio Período'}
                 </div>
                 <strong style={{ fontSize: 12.5, color: INK }}>{d.card2PromedioLbl}</strong>
               </div>
               <div>
-                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: MUT, fontWeight: 700 }}>
                   {subVistaBrigadas === 'cuadrilla' ? 'Brigadas Activas' : 'Total Brigada'}
                 </div>
                 <strong style={{ fontSize: 12.5, color: INK }}>{d.card2TotalLbl}</strong>
@@ -2625,21 +2618,21 @@ export default function OperativoPage() {
             customLayout={(canvas) => (
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                 {/* Cifras de resumen */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, paddingBottom: 10, marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, paddingBottom: 10, marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
                   <div>
-                    <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL EFECTIVAS</div>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL EFECTIVAS</div>
                     <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: OK, marginTop: 2 }}>{fmtN(d.granTotalEfectivas)}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{vistaEvolutivo === 'hora' ? 'FRANJA PICO' : vistaEvolutivo === 'dia' ? 'DÍA PICO' : 'MES PICO'}</div>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{vistaEvolutivo === 'hora' ? 'FRANJA PICO' : vistaEvolutivo === 'dia' ? 'DÍA PICO' : 'MES PICO'}</div>
                     <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK, marginTop: 2 }}>{d.picoFormatted}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TIPO LÍDER</div>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TIPO LÍDER</div>
                     <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK, marginTop: 2 }}>{d.tipoLider.t} · {d.tipoLiderPct.toFixed(0)}%</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{vistaEvolutivo === 'hora' ? 'FRANJAS LABORABLES' : 'DÍAS LABORABLES'}</div>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{vistaEvolutivo === 'hora' ? 'FRANJAS LABORABLES' : 'DÍAS LABORABLES'}</div>
                     <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK, marginTop: 2 }}>{d.workingPeriodsCount} de {d.totalPeriodsCount}</div>
                   </div>
                 </div>
@@ -2665,7 +2658,7 @@ export default function OperativoPage() {
           hasDetail={false}
           detailTableData={d.tableDataEvolutivo as any}
           headerExtra={
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
               <SegmentedControl
                 options={[
                   { value: 'mes', label: 'Por mes' },
@@ -2692,8 +2685,8 @@ export default function OperativoPage() {
             </div>
           }
           customLayout={(canvas) => (
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', minHeight: '340px' }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '20px', minHeight: '340px' }}>
+              <div style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.1, color: MUT }}>
                     {vistaEvolutivo === 'mes' ? 'Órdenes por mes' : vistaEvolutivo === 'hora' ? 'Órdenes por hora' : 'Órdenes por día'} {d.brigadaActiva ? `· ${d.brigadaActiva}` : '· por tipo de brigada'}
@@ -2716,7 +2709,7 @@ export default function OperativoPage() {
                 </div>
               </div>
               {/* Panel Lateral Ranking */}
-              <div style={{ width: '280px', borderLeft: '1px solid var(--border)', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ width: '280px', maxWidth: '100%', flex: '1 1 240px', borderLeft: '1px solid var(--border)', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-title)', marginBottom: 12 }}>Detalle por brigada</div>
                 {(() => {
                   const bActive = d.brigadaDetalle.find((x: any) => x.brigada === d.brigadaActiva);
@@ -2733,15 +2726,15 @@ export default function OperativoPage() {
                       <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-title)' }}>{bActive.brigada}</div>
                       <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
                         <div>
-                          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>Total</span>
+                          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>Total</span>
                           <strong style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--text-title)' }}>{fmtN(bActive.total)}</strong>
                         </div>
                         <div>
-                          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>Participación</span>
+                          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>Participación</span>
                           <strong style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--text-title)' }}>{bActive.partPct}%</strong>
                         </div>
                         <div>
-                          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>{d.varHeader}</span>
+                          <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700, color: MUT, display: 'block' }}>{d.varHeader}</span>
                           <strong style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: varColor }}>{varVal}</strong>
                         </div>
                       </div>
@@ -2780,7 +2773,7 @@ export default function OperativoPage() {
 
       {/* 2 · Cumplimiento */}
       <div style={secH(TEAL)}><span style={dot(TEAL)} /> Cumplimiento · Meta vs Real</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: 12 }}>
         {cumplCard('Órdenes efectivas', d.asignado, d.efect, fmtN)}
         {cumplCard('Días ejecutados', d.diasHabiles, d.diasEjec, fmtN)}
         {cumplCard('Asignado vs ejecutado', d.asignado, d.visitas, fmtN)}

@@ -133,8 +133,8 @@ function CantidadBrigadaCard({ brig, porDia }: { brig: CantidadBrigadaCardData; 
   const barCount = brig.monthlyData.length || 1;
   const esDisponible = isDisponibleType(brig.tipoCuadrilla);
 
-  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
-  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const valFontSize = barCount >= 8 ? 10 : 10.5;
+  const monthFontSize = 10;
   const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
   const barWidth = barCount >= 8 ? '55%' : '68%';
 
@@ -195,7 +195,7 @@ function CantidadBrigadaCard({ brig, porDia }: { brig: CantidadBrigadaCardData; 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
             <span style={{
-              padding: '1px 6px', borderRadius: 4, fontSize: 9.5, fontWeight: 700,
+              padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
               background: esDisponible ? 'rgba(57,73,171,.12)' : 'rgba(46,125,50,.12)',
               color: esDisponible ? 'var(--otc)' : 'var(--ok)',
             }}>
@@ -311,8 +311,8 @@ function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean })
   const barCount = tec.monthlyData.length || 1;
   const esDisponible = isDisponibleType(tec.tipoBrigada);
 
-  const valFontSize = barCount >= 8 ? 7.5 : barCount >= 6 ? 8.5 : 9.5;
-  const monthFontSize = barCount >= 8 ? 8.5 : 9.5;
+  const valFontSize = barCount >= 8 ? 10 : 10.5;
+  const monthFontSize = 10;
   const barMaxWidth = barCount >= 8 ? 14 : barCount >= 6 ? 18 : 22;
   const barWidth = barCount >= 8 ? '55%' : '68%';
 
@@ -395,21 +395,21 @@ function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean })
               {tec.tipoBrigada} · <span style={{ opacity: 0.8 }}>{tec.zona}</span>
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700,
               background: esDisponible ? 'rgba(57,73,171,.12)' : 'rgba(46,125,50,.12)',
               color: esDisponible ? 'var(--otc)' : 'var(--ok)',
             }}>
               {esDisponible ? 'Disponible' : 'Productiva'}
             </span>
             <span style={{
-              padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+              padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700,
               background: estBg, color: estColor,
             }}>
               {estLabel}
             </span>
             {tec.cambioProyecto !== 'SIN_CAMBIO' && (
               <span style={{
-                padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700,
                 background: 'rgba(103,58,183,.12)', color: '#673AB7',
               }}>
                 🔄 {tec.proyectoInicial} ➔ {tec.proyectoActual}
@@ -422,7 +422,7 @@ function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean })
             <span style={{
               padding: '2px 6px',
               borderRadius: 5,
-              fontSize: 9.5,
+              fontSize: 10,
               fontWeight: 800,
               background: cumpBg,
               color: cumpColor,
@@ -442,7 +442,7 @@ function TecnicoCard({ tec, porDia }: { tec: TecnicoCardData; porDia: boolean })
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
             Prom: {fmtN(tec.promedioMensual)}{perLabel}
           </div>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: trendColor, marginTop: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: trendColor, marginTop: 1 }}>
             {slope >= 0 ? '▲ +' : '▼ '}{tec.trendPct.toFixed(1)}%{perLabel}
           </div>
         </div>
@@ -1045,11 +1045,7 @@ export default function TecnicosPage() {
             <span style={dot(INDIGO)} /> Evolutivo de Cantidad de Brigadas por Tipo ({filteredCantBrigadasCards.length} tipos)
           </div>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 16,
-          }}>
+          <div className="cards-grid-3">
             {filteredCantBrigadasCards.map(brig => (
               <CantidadBrigadaCard key={brig.tipoCuadrilla} brig={brig} porDia={porDia} />
             ))}
@@ -1061,11 +1057,7 @@ export default function TecnicosPage() {
       <section style={{ marginTop: 8 }}>
         <div style={secH(TEAL)}><span style={dot(TEAL)} /> Evolutivo Mensual por Técnico ({filteredCards.length} técnicos)</div>
         {paginatedCards.length > 0 ? (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 16,
-          }}>
+          <div className="cards-grid-3">
             {paginatedCards.map(tec => (
               <TecnicoCard key={tec.id} tec={tec} porDia={porDia} />
             ))}

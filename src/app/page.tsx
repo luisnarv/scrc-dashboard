@@ -218,7 +218,7 @@ export default function ResumenPage() {
       <div className="section" style={{ marginTop: 24 }}>
         <h2>💰 Resultado Financiero Real (Fuente: OTC)</h2>
         <div className="sec-sub">Ventana seleccionada: {fmtRangoMeses(selWin)}</div>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="kpi-grid">
           <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso real contable." />
           <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(pOTC.costos || 0)} help="Costo real contable." />
           <KpiCard cls={pOTC.utilidad && pOTC.utilidad < 0 ? 'err' : 'ok'} lbl="Margen Real" val={fmtCOP(pOTC.utilidad || 0)} help="Ingreso Real - Costo Real." />
@@ -232,7 +232,7 @@ export default function ResumenPage() {
           <div className="section">
             <h2>🎯 Desempeño Operativo</h2>
             <div className="sec-sub">Basado en registros de terreno (Estimación)</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="kpi-grid c2">
               <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." />
               <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '-'} help="Efectivas / Visitas." />
               <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." />
@@ -246,7 +246,7 @@ export default function ResumenPage() {
           <div className="section">
             <h2>⚖️ Comparativo (Producción vs Ingreso)</h2>
             <div className="sec-sub">Diferencia entre lo ejecutado valorizado y lo facturado real</div>
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="kpi-grid c2">
               <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(ingresoReal)} help="Valor teórico del trabajo realizado en terreno (Tarifario)." />
               <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso contable facturado." />
               <KpiCard cls="neu" lbl="Brecha de Ingresos" val={fmtCOP((pOTC.ingresos || 0) - ingresoReal)} help="Diferencia absoluta entre OTC y Operación." />

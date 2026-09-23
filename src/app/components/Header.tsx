@@ -6,11 +6,11 @@ import { useTheme } from './ThemeProvider';
 import SyncStatus from './SyncStatus';
 
 export const ALL_NAV_ROUTES = [
-  { path: '/operativo', label: '⚙️ Operativo' },
-  { path: '/tecnicos', label: '👤 Cantidades Técnicos' },
-  { path: '/tecnico/productivo', label: '💰 Producción Técnico' },
+  { path: '/operativo', label: 'Operativo' },
+  { path: '/tecnicos', label: 'Cantidades Técnicos' },
+  { path: '/tecnico/productivo', label: 'Producción Técnico' },
   
-  { path: '/informes', label: '📑 Informes' },
+  { path: '/informes', label: 'Informes' },
 ];
 
 export default function Header() {
@@ -49,7 +49,7 @@ export default function Header() {
               transition: 'all 0.2s',
             }}
           >
-            {theme === 'light' ? '🌙 Modo Oscuro' : '☀️ Modo Claro'}
+            {theme === 'light' ? 'Modo Oscuro' : 'Modo Claro'}
           </button>
         </div>
       </header>

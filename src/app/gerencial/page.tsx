@@ -103,7 +103,7 @@ export default function GerencialPage() {
       <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid var(--border)' }}>
         <h2>🛠️ 1. Producción Operativa (Estimación)</h2>
         <div className="sec-sub">Basado en tarifarios y órdenes ejecutadas en campo</div>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="kpi-grid">
           <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(d.prodValorizada)} help="Valor monetario teórico del trabajo ejecutado." />
           <KpiCard cls="sip" lbl="Productividad (Cumplimiento)" val={d.cumplEfic !== null ? fmtPct(d.cumplEfic) : '—'} help="Efectivas / Asignacion." />
           <KpiCard cls="sip" lbl="Promedio Prod. por Técnico" val={fmtCOP(d.prodXtecnico)} help="Producción valorizada / Total de técnicos." />
@@ -114,7 +114,7 @@ export default function GerencialPage() {
       <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid var(--border)' }}>
         <h2>💰 2. Resultado Financiero (Real OTC)</h2>
         <div className="sec-sub">Información financiera extraída de la contabilidad</div>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="kpi-grid">
           <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(d.ingresoReal)} help="Ingreso contable real facturado." />
           <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(d.costoReal)} help="Costo contable real." />
           <KpiCard cls={d.margenReal < 0 ? 'err' : 'ok'} lbl="Margen Real (OTC)" val={fmtCOP(d.margenReal)} help="Ingreso Real - Costo Real." />
@@ -125,7 +125,7 @@ export default function GerencialPage() {
       <div className="section" style={{ marginTop: 24 }}>
         <h2>⚖️ 3. Variaciones (Real vs Estimado)</h2>
         <div className="sec-sub">Brecha entre la Producción Operativa y el Ingreso Contable</div>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <div className="kpi-grid c2">
           <KpiCard cls="neu" lbl="Diferencia Absoluta (Brecha)" val={fmtCOP(d.brechaAbsoluta)} help="Ingreso Real OTC - Producción Valorizada Operativa." />
           <KpiCard cls="neu" lbl="Diferencia Porcentual" val={fmtPct(d.brechaPct)} help="% de desviación sobre la Producción Valorizada." />
         </div>

@@ -34,7 +34,7 @@ const bots = [
   {
     name: 'BOT 4: Integración en Vivo de Base de Datos y API',
     script: 'scripts/bot-metas-4-integracion-api-db.mjs',
-    desc: 'dbanalitica.maestro_brigadas, analitica.v_ordenes_dia y endpoint /api/data/asignacion_operativa',
+    desc: 'dbanalitica.maestro_brigadas, analitica.v_ordenes_dia y endpoint /api/data/cierre_diario',
   },
 ];
 

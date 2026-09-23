@@ -7,7 +7,7 @@
  * Conecta en vivo a PostgreSQL y prueba:
  *  - Consulta de maestro_brigadas y vinculación con analitica.v_ordenes_dia
  *  - Retorno de metas de órdenes por brigadas activas
- *  - Estructura JSON del campo metasBrigadas en /api/data/asignacion_operativa
+ *  - Estructura JSON del campo metasBrigadas en /api/data/cierre_diario
  *  - Presencia obligatoria de dia_operativo, proyecto, zona, tipo_brigada,
  *    brigadas_activas, asignadas, ejecutadas y pendientes
  * ==============================================================================
@@ -108,9 +108,9 @@ async function run() {
     assert.ok(typeof first.ejecutadas === 'number', 'ejecutadas debe ser number');
   });
 
-  await test('Endpoint local /api/data/asignacion_operativa retorna metasBrigadas', async () => {
+  await test('Endpoint local /api/data/cierre_diario retorna metasBrigadas', async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/data/asignacion_operativa');
+      const res = await fetch('http://localhost:3000/api/data/cierre_diario');
       if (res.ok) {
         const json = await res.json();
         assert.ok(Array.isArray(json.metasBrigadas), 'metasBrigadas debe ser un array');
