@@ -460,7 +460,7 @@ export default function BrigadaTiposModal({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: 20
+        padding: 'clamp(6px, 2vw, 20px)'
       }}
     >
       <div
@@ -471,17 +471,17 @@ export default function BrigadaTiposModal({
         style={{
           background: 'var(--bg)',
           borderRadius: 16,
-          width: 'min(1520px, 97vw)',
-          maxHeight: '94vh',
+          width: 'min(1520px, 98vw)',
+          maxHeight: '94dvh',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          overflow: 'auto',
           boxShadow: '0 24px 60px rgba(20,30,60,.28)'
         }}
       >
         {/* Encabezado */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', borderBottom: `1px solid ${LINE}`, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 280 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 240px', minWidth: 0 }}>
             <span style={{ background: TEAL, color: '#fff', fontWeight: 800, fontSize: 12, borderRadius: 8, padding: '4px 8px' }}>2ª</span>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>
@@ -573,7 +573,7 @@ export default function BrigadaTiposModal({
 
           {/* Buscador de Técnicos (visible si está en nivel técnicos) */}
           {nivel === 'tecnicos' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: MUT, textTransform: 'uppercase', letterSpacing: 0.5 }}>Buscar técnico:</span>
               <input
                 type="text"
@@ -588,7 +588,7 @@ export default function BrigadaTiposModal({
                   color: INK,
                   fontSize: 12.5,
                   outline: 'none',
-                  minWidth: 200
+                  minWidth: 0, flex: '1 1 160px'
                 }}
               />
               {searchTerm && (
@@ -603,7 +603,7 @@ export default function BrigadaTiposModal({
           )}
 
           {/* Stats resumidos */}
-          <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginLeft: 'auto', fontSize: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', alignItems: 'center', marginLeft: 'auto', fontSize: 12 }}>
             <span><b style={{ color: MUT, marginRight: 4 }}>TOTAL:</b><strong style={{ color: INK }}>{fmtN(stats.totalOrd)} ord</strong></span>
             <span><b style={{ color: MUT, marginRight: 4 }}>LÍDER:</b><strong style={{ color: OK }}>{stats.liderLbl}</strong></span>
             <span><b style={{ color: MUT, marginRight: 4 }}>REGISTROS:</b><strong style={{ color: INK }}>{stats.conteo}</strong></span>
@@ -620,9 +620,10 @@ export default function BrigadaTiposModal({
           )}
 
           {(view === 'table' || view === 'split') && (
-            <div style={{ flex: view === 'table' ? '1 1 auto' : '1 1 46%', minHeight: 0, overflow: 'auto' }}>
+            <div className="table-responsive-container" style={{ flex: view === 'table' ? '1 1 auto' : '1 1 46%', minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div className="mobile-scroll-tip" style={{ padding: '4px 12px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
               {nivel === 'brigadas' ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
                       <th style={{ ...th, textAlign: 'left' }}>Tipo de Brigada</th>
@@ -674,7 +675,7 @@ export default function BrigadaTiposModal({
                   )}
                 </table>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', minWidth: 880, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
                       <th style={{ ...th, textAlign: 'left' }}>#</th>

@@ -208,15 +208,15 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
 
   return (
     <div className="modal-back open" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 9999 }}>
-      <div className="modal-box" style={{ width: '95vw', maxWidth: '1600px', height: '95vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal-box analysis-modal" style={{ width: '95vw', maxWidth: '1600px', height: '94dvh', maxHeight: '94dvh', display: 'flex', flexDirection: 'column' }}>
         {/* Encabezado */}
         <div className="modal-head" style={{ flexShrink: 0, paddingBottom: 12, display: 'flex', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <div style={{ fontSize: 11, letterSpacing: 1.4, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Evolutivo Mensual</div>
             <h3 style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 4px', color: 'var(--text-title)' }}>{title}</h3>
             {subtitle && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{subtitle}</div>}
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <SegmentedControl
               options={[
                 { value: 'chart', label: '📈 Gráfico' },
@@ -296,16 +296,16 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
         </div>
 
         {/* Cuerpo */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="analysis-content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
           
           {/* Fila Superior (Gráfico + Resumen) para Chart o Split */}
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'chart' ? 1 : '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'row', gap: 16 }}>
+            <div className="analysis-chart" style={{ flex: viewMode === 'chart' ? 1 : '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
               <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                 <canvas ref={canvasRef} />
               </div>
               {viewMode === 'split' && (
-                <div style={{ width: 380, flexShrink: 0, borderLeft: '1px solid var(--border)', paddingLeft: 16, minHeight: 0 }}>
+                <div style={{ width: 380, maxWidth: '100%', flex: '1 1 280px', borderLeft: '1px solid var(--border)', paddingLeft: 16, minHeight: 0 }}>
                   {brigadaTable}
                 </div>
               )}
@@ -326,8 +326,9 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
                 </button>
               </div>
               {/* Tabla */}
-              <div style={{ flex: 1, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las métricas &rarr;</div>
+              <div className="analysis-table table-responsive-container" style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border)', borderRadius: 10 }}>
+                <table style={{ width: '100%', minWidth: 1120, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
                       <th style={{ ...grp, textAlign: 'left', left: 0, zIndex: 3 }} rowSpan={2}>Tipo de Brigada</th>

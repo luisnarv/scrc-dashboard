@@ -212,11 +212,11 @@ export default function AnalysisModal({ open, onClose, title, description, confi
 
   return (
     <div className={`modal-back${open ? ' open' : ''}`} onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 9999 }}>
-      <div className="modal-box" style={{ width: '95vw', maxWidth: '1600px', height: '95vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal-box analysis-modal" style={{ width: '95vw', maxWidth: '1600px', height: '95vh', display: 'flex', flexDirection: 'column' }}>
         
         {/* Encabezado */}
         <div className="modal-head" style={{ flexShrink: 0, paddingBottom: 12 }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <h3 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 4px', color: 'var(--text-title)' }}>{title}</h3>
             {description && <div className="sub" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{description}</div>}
             
@@ -230,7 +230,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             
             {/* Selector de Modos de Vista */}
             <SegmentedControl
@@ -245,7 +245,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
 
             <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {selectedCategories.length > 0 && (
                 <button onClick={() => setSelectedCategories([])} style={{ background: 'var(--warn-bg, var(--hover-bg))', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--warn)', fontSize: 12, fontWeight: 700 }}>
                   Restablecer Vista
@@ -301,10 +301,10 @@ export default function AnalysisModal({ open, onClose, title, description, confi
         )}
 
         {/* Contenido (Split View) */}
-        <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div ref={containerRef} className="analysis-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'chart' ? 1 : `0 0 ${splitRatio}%`, position: 'relative', minHeight: 0 }}>
+            <div className="analysis-chart" style={{ flex: viewMode === 'chart' ? 1 : `0 0 ${splitRatio}%`, position: 'relative', minHeight: 0 }}>
               <canvas ref={canvasRef} />
             </div>
           )}
@@ -323,12 +323,14 @@ export default function AnalysisModal({ open, onClose, title, description, confi
           )}
 
           {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <div className="analysis-table table-responsive-container" style={{ flex: 1, minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
               {!filteredTableData ? (
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No hay tabla de respaldo configurada para esta vista.</div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, textAlign: 'center' }}>
-                  <thead>
+                <>
+                  <div className="mobile-scroll-tip" style={{ padding: '4px 12px' }}>Desliza horizontalmente para ver todas las columnas &rarr;</div>
+                  <table style={{ width: '100%', minWidth: Math.max(520, (filteredTableData.columns?.length || 0) * 85), borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, textAlign: 'center' }}>
+                    <thead>
                     <tr>
                       {filteredTableData.columns.map((c, i) => (
                         <th key={i} style={{ 
@@ -393,6 +395,7 @@ export default function AnalysisModal({ open, onClose, title, description, confi
                     ) : null}
                   </tbody>
                 </table>
+              </>
               )}
             </div>
           )}

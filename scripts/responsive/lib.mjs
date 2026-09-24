@@ -208,8 +208,9 @@ async function loadPage(cdp, url, vp) {
   }
   await new Promise((r) => setTimeout(r, 800));
 
-  const evaluate = async (fnSource) => {
-    const expression = `(() => { ${PAGE_HELPERS}\n return (${fnSource})(); })()`;
+  const evaluate = async (fnSource, arg) => {
+    const call = arg === undefined ? '' : JSON.stringify(arg);
+    const expression = `(() => { ${PAGE_HELPERS}\n return (${fnSource})(${call}); })()`;
     const r = await s('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
     return r.result.value;
@@ -258,8 +259,10 @@ export async function runBots(bots) {
             if (!(bot.viewports || BASE_VIEWPORTS).includes(task.vpKey)) continue;
             const entry = { bot: bot.id, view: task.view.name, vp: task.vp.name, fails: [], warns: [], info: [] };
             try {
-              const res = await page.evaluate(bot.check.toString());
-              const out = bot.analyze(res, { view: task.view, vp: task.vp, state: page.state, timedOut: page.timedOut });
+              const ctx = { view: task.view, vp: task.vp, state: page.state, timedOut: page.timedOut };
+              const out = bot.run
+                ? await bot.run(page, ctx)
+                : bot.analyze(await page.evaluate(bot.check.toString()), ctx);
               entry.fails = out.fails || [];
               entry.warns = out.warns || [];
               entry.info = out.info || [];

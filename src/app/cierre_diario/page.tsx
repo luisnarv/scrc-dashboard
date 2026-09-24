@@ -3197,8 +3197,9 @@ export default function AsignacionOperativaPage() {
         </div>
 
         {/* Tabla de Metas por Zona y Brigada */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+        <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las métricas &rarr;</div>
+        <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${borderCol}`, textAlign: 'left', color: textMut, fontWeight: 700 }}>
                 <th style={{ padding: '10px 8px' }}>#</th>
@@ -3367,8 +3368,9 @@ export default function AsignacionOperativaPage() {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+        <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las columnas y métricas &rarr;</div>
+        <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', minWidth: 1220, borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${borderCol}`, textAlign: 'left', color: textMut, fontWeight: 700 }}>
                 <th style={{ padding: '10px 10px' }}>#</th>
@@ -3548,28 +3550,28 @@ export default function AsignacionOperativaPage() {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
-          padding: 20,
+          padding: 'clamp(6px, 2vw, 16px)',
         }}>
           <div style={{
             background: bgCard,
             borderRadius: 14,
             border: `1px solid ${borderCol}`,
-            width: '95%',
-            maxWidth: 680,
-            maxHeight: '80vh',
+            width: 'min(100%, 680px)',
+            maxHeight: '94dvh',
             display: 'flex',
             flexDirection: 'column',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
           }}>
             <div style={{
-              padding: '16px 20px',
+              padding: '14px 18px',
               borderBottom: `1px solid ${borderCol}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              gap: 10,
             }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: textInk }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: textInk, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Técnicos Asignados en {modalTecnicosBarrio.barrio}
                 </div>
                 <div style={{ fontSize: 12, color: textMut, marginTop: 2 }}>
@@ -3578,14 +3580,29 @@ export default function AsignacionOperativaPage() {
               </div>
               <button
                 onClick={() => setModalTecnicosBarrio(null)}
-                style={{ background: 'transparent', border: 'none', fontSize: 16, fontWeight: 700, color: textMut, cursor: 'pointer' }}
+                aria-label="Cerrar modal"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: textMut,
+                  cursor: 'pointer',
+                  minWidth: 36,
+                  minHeight: 36,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <div className="table-responsive-container" style={{ padding: '14px 18px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', flex: 1 }}>
+              <div className="mobile-scroll-tip">Desliza horizontalmente &rarr;</div>
+              <table style={{ width: '100%', minWidth: 480, borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${borderCol}`, textAlign: 'left', color: textMut }}>
                     <th style={{ padding: '8px 10px' }}>Técnico</th>
@@ -3609,12 +3626,13 @@ export default function AsignacionOperativaPage() {
                             setModalTecnicosBarrio(null);
                           }}
                           style={{
-                            padding: '3px 8px',
-                            borderRadius: 4,
+                            padding: '6px 10px',
+                            minHeight: 32,
+                            borderRadius: 6,
                             border: `1px solid ${borderCol}`,
                             background: 'transparent',
                             color: primaryCol,
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: 700,
                             cursor: 'pointer',
                           }}
@@ -3628,10 +3646,10 @@ export default function AsignacionOperativaPage() {
               </table>
             </div>
 
-            <div style={{ padding: '12px 20px', borderTop: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '12px 18px', borderTop: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setModalTecnicosBarrio(null)}
-                style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${borderCol}`, background: 'transparent', color: textInk, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 16px', minHeight: 34, borderRadius: 6, border: `1px solid ${borderCol}`, background: 'transparent', color: textInk, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 Cerrar
               </button>
@@ -3651,31 +3669,31 @@ export default function AsignacionOperativaPage() {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
-          padding: 20,
+          padding: 'clamp(6px, 2vw, 16px)',
         }}>
           <div style={{
             background: bgCard,
             borderRadius: 14,
             border: `1px solid ${borderCol}`,
-            width: '95%',
-            maxWidth: 1150,
-            maxHeight: '85vh',
+            width: 'min(100%, 1150px)',
+            maxHeight: '94dvh',
             display: 'flex',
             flexDirection: 'column',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
           }}>
             <div style={{
-              padding: '16px 22px',
+              padding: '14px 18px',
               borderBottom: `1px solid ${borderCol}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              gap: 12,
             }}>
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 800, color: textInk }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 16.5, fontWeight: 800, color: textInk }}>
                   Detalle Individual de Órdenes (analitica.v_ordenes_dia)
                 </div>
-                <div style={{ fontSize: 12.5, color: textMut, marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: textMut, marginTop: 2 }}>
                   {barrioModal ? `Filtrado por Barrio: ${barrioModal}` : 'Listado general de órdenes del día operativo'}
                   {filtroTipoOS !== 'ALL' && ` • Filtro OS: ${filtroTipoOS}`}
                   {filtroTecnico !== 'ALL' && ` • Técnico: ${filtroTecnico}`}
@@ -3683,13 +3701,27 @@ export default function AsignacionOperativaPage() {
               </div>
               <button
                 onClick={() => setModalDetalleOpen(false)}
-                style={{ background: 'transparent', border: 'none', fontSize: 16, fontWeight: 700, color: textMut, cursor: 'pointer' }}
+                aria-label="Cerrar modal"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: textMut,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  minWidth: 36,
+                  minHeight: 36,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ padding: '18px 22px', overflowY: 'auto', flex: 1 }}>
+            <div style={{ padding: '14px 18px', overflowY: 'auto', flex: 1 }}>
               {loadingDetalle ? (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: textMut, fontSize: 14 }}>
                   Cargando órdenes desde analitica.v_ordenes_dia...
@@ -3699,8 +3731,9 @@ export default function AsignacionOperativaPage() {
                   No se encontraron órdenes para este filtro.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <div className="mobile-scroll-tip">Desliza horizontalmente para ver todos los campos &rarr;</div>
+                  <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${borderCol}`, textAlign: 'left', color: textMut }}>
                         <th style={{ padding: '8px 10px' }}>Orden</th>
@@ -3767,19 +3800,22 @@ export default function AsignacionOperativaPage() {
             </div>
 
             <div style={{
-              padding: '12px 22px',
+              padding: '12px 18px',
               borderTop: `1px solid ${borderCol}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10,
             }}>
-              <span style={{ fontSize: 12, color: textMut }}>
+              <span style={{ fontSize: 11.5, color: textMut }}>
                 Mostrando hasta 600 registros ({ordenesDetalle.length} órdenes recuperadas)
               </span>
               <button
                 onClick={() => setModalDetalleOpen(false)}
                 style={{
-                  padding: '6px 14px',
+                  padding: '8px 16px',
+                  minHeight: 34,
                   borderRadius: 6,
                   border: `1px solid ${borderCol}`,
                   background: 'transparent',

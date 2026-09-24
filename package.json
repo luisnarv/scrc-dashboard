@@ -22,7 +22,8 @@
     "test:responsive:solapamientos": "node scripts/bot-responsive-2-contenido-solapamientos.mjs",
     "test:responsive:touch": "node scripts/bot-responsive-3-touch-legibilidad.mjs",
     "test:responsive:graficos": "node scripts/bot-responsive-4-graficos-tablas-mapas.mjs",
-    "test:responsive:layout": "node scripts/bot-responsive-5-shell-layout.mjs"
+    "test:responsive:layout": "node scripts/bot-responsive-5-shell-layout.mjs",
+    "test:responsive:modales": "node scripts/bot-responsive-6-modales.mjs"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",

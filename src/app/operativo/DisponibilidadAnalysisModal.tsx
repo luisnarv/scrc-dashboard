@@ -16,16 +16,21 @@ const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${
 const overlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
   background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 'clamp(6px, 2vw, 20px)'
 };
 
 const modalStyle: React.CSSProperties = {
-  background: 'var(--card)', borderRadius: 16, width: '95vw', maxWidth: '1600px',
-  height: '95vh', display: 'flex', flexDirection: 'column',
+  background: 'var(--card)', borderRadius: 16, width: 'min(1600px, 98vw)',
+  height: '94dvh', maxHeight: '94dvh', display: 'flex', flexDirection: 'column',
   boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
 };
 
 export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const { raw, filters } = useDashboard();
   const { colors } = useTheme();
   const COLORS = colors.series;
@@ -152,14 +157,14 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+      <div className="analysis-modal" style={modalStyle} onClick={e => e.stopPropagation()}>
         
-        <div style={{ flexShrink: 0, padding: '24px 28px 12px 28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
+        <div style={{ flexShrink: 0, padding: 'clamp(12px, 3vw, 24px) clamp(12px, 3vw, 28px) 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
               <h2 style={{ margin: '0 0 4px', fontSize: 24, color: INK, fontWeight: 800 }}>Evolución de Disponibilidad de Brigadas</h2>
             </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <SegmentedControl
                 options={[
                   { value: 'chart', label: '📈 Gráfico' },
@@ -217,10 +222,10 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
           </div>
         </div>
 
-        <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '0 28px 24px 28px' }}>
+        <div ref={containerRef} className="analysis-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '0 clamp(12px, 3vw, 28px) 24px' }}>
           
           {(viewMode === 'chart' || viewMode === 'split') && (
-            <div style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
+            <div className="analysis-chart" style={{ height: viewMode === 'chart' ? '100%' : `${splitRatio}%`, position: 'relative', flexShrink: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
@@ -255,8 +260,9 @@ export default function DisponibilidadAnalysisModal({ onClose }: { onClose: () =
           )}
 
           {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12, textAlign: 'center' }}>
+            <div className="analysis-table table-responsive-container" style={{ flex: viewMode === 'table' ? 1 : undefined, height: viewMode === 'split' ? `calc(${100 - splitRatio}% - 20px)` : undefined, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div className="mobile-scroll-tip" style={{ padding: '4px 12px' }}>Desliza horizontalmente para ver todos los días &rarr;</div>
+              <table style={{ width: '100%', minWidth: Math.max(650, days.length * 28 + 190), borderCollapse: 'separate', borderSpacing: 0, fontSize: 12, textAlign: 'center' }}>
                 <thead>
                   <tr>
                     <th style={{ position: 'sticky', top: 0, left: 0, zIndex: 3, textAlign: 'left', padding: '12px 16px', background: 'var(--card)', borderBottom: `2px solid var(--border)`, borderRight: `1px solid var(--border)`, color: MUT, fontWeight: 600 }}>Tipo Brigada</th>

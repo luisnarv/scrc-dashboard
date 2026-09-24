@@ -996,7 +996,8 @@ export default function InformesPage() {
             <span style={{ fontWeight: 500, color: MUT }}> — {prodRows.length} {prodTienePorTecnico ? 'técnicos' : 'operativas'}</span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div className="mobile-scroll-tip" style={{ padding: '8px 16px 0' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
+          <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {prodRows.length === 0 && !prodLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: MUT, fontSize: 13 }}>Sin datos para los filtros seleccionados.</div>
             ) : (
@@ -1215,7 +1216,8 @@ export default function InformesPage() {
             Digitación {digMes} · {descDiasDig()}{digZona ? ` · ${digZona}` : ''}{digTipo ? ` · ${digTipo}` : ''}
             <span style={{ fontWeight: 500, color: MUT }}> — {digRows.length} filas</span>
           </div>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="mobile-scroll-tip" style={{ padding: '8px 16px 0' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
+          <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {digRows.length === 0 && !digLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: MUT, fontSize: 13 }}>Sin datos para los filtros seleccionados.</div>
             ) : (

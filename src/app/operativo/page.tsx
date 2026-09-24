@@ -2679,7 +2679,7 @@ export default function OperativoPage() {
                 Ver en Mapa
               </ButtonPrimary>
 
-              <ButtonGhost onClick={() => setBrigadaModalOpen(true)}>
+              <ButtonGhost className="btn-expand" onClick={() => setBrigadaModalOpen(true)}>
                 <span style={{ fontSize: 14 }}>⤢</span> Expandir
               </ButtonGhost>
             </div>

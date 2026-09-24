@@ -463,28 +463,28 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(20,27,45,.55)', backdropFilter: 'blur(2px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 'clamp(6px, 2vw, 20px)',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Detalle por brigadas"
         style={{
-          background: 'var(--bg)', borderRadius: 16, width: 'min(1180px, 96vw)', maxHeight: '90vh',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
+          background: 'var(--bg)', borderRadius: 16, width: 'min(1180px, 98vw)', maxHeight: '94dvh',
+          display: 'flex', flexDirection: 'column', overflow: 'auto', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
         }}
       >
         {/* Fila 1: Título y Cerrar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 10px', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 1.5, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
+            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1.2, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
             <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
               Tipo de Brigada › Zona › Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
           <button
             onClick={onClose} aria-label="Cerrar"
-            style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >×</button>
         </div>
 
@@ -504,32 +504,32 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             }}>
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>EFECTIVAS</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>EFECTIVAS</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: OK }}>{fmtN(total.efec)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL VISITAS</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL VISITAS</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.totVis)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>PERDIDAS</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>PERDIDAS</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ERR }}>{fmtN(total.perd)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--otc)' }}>{fmtCOP(total.ingreso)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{metaLabel}</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{metaLabel}</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtCOP(total.costo)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: getPctColor(promValue(total, 'cump', categoriaFiltro)) }}>{promValue(total, 'cump', categoriaFiltro).toFixed(1)}%</div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TÉCNICO-DÍAS</div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TÉCNICO-DÍAS</div>
                 <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.dias)}</div>
               </div>
             </div>
@@ -598,7 +598,8 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         </div>
 
         {/* Tabla jerárquica con encabezado de 2 niveles y celdas fijas */}
-        <div style={{ overflow: 'auto', flex: 1 }}>
+        <div className="mobile-scroll-tip" style={{ padding: '0 16px 6px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
+        <div className="table-responsive-container" style={{ overflow: 'auto', WebkitOverflowScrolling: 'touch', flex: 1 }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
               {/* Nivel 1 de encabezado: Grupos */}
@@ -621,7 +622,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   style={{
                     position: 'sticky', top: 0, zIndex: 6,
                     background: 'var(--panel)', padding: '6px 8px',
-                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    fontSize: 10, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
                     borderBottom: `1px solid ${LINE}`, textAlign: 'center', userSelect: 'none',
                   }}
                 >
@@ -632,7 +633,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   style={{
                     position: 'sticky', top: 0, zIndex: 6,
                     background: 'var(--panel)', padding: '6px 8px',
-                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    fontSize: 10, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
                     borderBottom: `1px solid ${LINE}`, borderLeft: `1px solid ${LINE}`,
                     textAlign: 'center', userSelect: 'none',
                   }}
@@ -644,7 +645,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
                   style={{
                     position: 'sticky', top: 0, zIndex: 6,
                     background: 'var(--panel)', padding: '6px 8px',
-                    fontSize: 9.5, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
+                    fontSize: 10, fontWeight: 800, color: MUT, textTransform: 'uppercase', letterSpacing: 1,
                     borderBottom: `1px solid ${LINE}`, borderLeft: `1px solid ${LINE}`,
                     textAlign: 'center', userSelect: 'none',
                   }}
@@ -790,7 +791,7 @@ function RowRecursive({
 
   const chev: React.CSSProperties = {
     display: 'inline-block', width: 12, transition: 'transform .18s',
-    transform: open ? 'rotate(90deg)' : 'none', color: railColor, fontSize: 8.5,
+    transform: open ? 'rotate(90deg)' : 'none', color: railColor, fontSize: 10,
     marginRight: 4, textAlign: 'center',
   };
 

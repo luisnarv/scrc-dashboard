@@ -81,6 +81,7 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           </div>
           {hasDetail && (
             <ButtonGhost
+              className="btn-expand"
               id={`btn-expand-${id}`}
               onClick={() => onExpand ? onExpand() : setModalOpen(true)}
             >

@@ -273,6 +273,14 @@ header.dash-header .sub { font-size: 12px; opacity: .85; margin-top: 4px; }
 .kpi .delta.up { color: var(--ok); }
 .kpi .delta.down { color: var(--err); }
 .kpi .delta.neu { color: var(--text-muted); }
+/* Desplegable por tipo de brigada dentro de la card */
+.kpi-toggle { margin-top: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text-muted); font-size: 10px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.kpi-toggle:hover { color: var(--text-title); background: var(--hover-bg); }
+.kpi-detail { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.kpi-detail li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11px; }
+.kpi-detail .kd-lbl { color: var(--text-body); min-width: 0; overflow-wrap: anywhere; }
+.kpi-detail .kd-val { color: var(--text-title); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.kpi-detail .kd-val small { color: var(--text-muted); font-weight: 500; font-size: 10px; }
 .info { cursor: help; color: var(--text-muted); font-size: 10px; }
 .info:hover { color: var(--text-title); }
 
@@ -698,3 +706,103 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
   .filtros { flex-direction: column; align-items: stretch; }
   .filtros select, .filtros input { width: 100%; }
 }
+
+/* ===================== MODALES Y TABLAS RESPONSIVE =====================
+   Cabecera que envuelve, ventana ajustada a la pantalla dinamica (dvh) y scroll
+   interno suave en movil y pantallas bajas. */
+.modal-head { flex-wrap: wrap; }
+.modal-close { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Contenedores genericos para tablas responsivas */
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+.table-responsive-container::-webkit-scrollbar {
+  height: 6px;
+}
+.table-responsive-container::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 160, 0.4);
+  border-radius: 3px;
+}
+
+/* Indicador visual de desplazamiento horizontal en pantallas moviles */
+.mobile-scroll-tip {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-scroll-tip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+}
+
+@media (max-width: 768px), (max-height: 600px) {
+  .modal-back {
+    padding: 6px;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-box {
+    width: calc(100vw - 12px) !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 12px) !important;
+    border-radius: 12px !important;
+  }
+  .analysis-modal {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    width: calc(100vw - 12px) !important;
+    max-height: calc(100dvh - 12px) !important;
+    height: auto !important;
+  }
+  .analysis-modal .analysis-content { flex: 1 0 auto; }
+  .analysis-modal .analysis-chart { flex: 0 0 auto !important; height: 280px !important; min-height: 280px !important; width: 100% !important; }
+  .analysis-modal .analysis-table { flex: 0 0 auto !important; height: auto !important; min-height: 200px !important; max-height: 440px; }
+  
+  /* Ajuste de modal mapa en pantalla movil */
+  #map-modal-container .modal-box {
+    display: flex;
+    flex-direction: column;
+  }
+  #map-modal-container .modal-body {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  #map-modal-container .modal-body > div:first-child {
+    min-height: 320px;
+    height: 45vh;
+  }
+  #map-modal-container .modal-body > div:last-child {
+    width: 100% !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Boton expandir de graficos: habilitado y adaptado al tacto en moviles */
+.btn-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+@media (max-width: 768px) {
+  .btn-expand {
+    min-width: 34px;
+    min-height: 34px;
+    padding: 6px;
+    opacity: 0.9;
+  }
+}
+

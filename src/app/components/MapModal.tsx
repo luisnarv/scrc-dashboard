@@ -311,6 +311,13 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
     ];
   }, [filtered]);
 
+  // Cerrar con Esc (consistente con los demás modales)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div id="map-modal-container" className="modal-back open" style={{ zIndex: 9999 }}>
       <div className="modal-box" style={{ maxWidth: '1600px', width: '95vw', height: '90vh', maxHeight: '90vh' }}>
@@ -391,7 +398,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                  <div style={{ padding: '14px 14px 15px', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 11px 11px', background: 'var(--card)', display: 'flex', flexDirection: 'column', gap: 14 }}>
                    {detailSections.map((sec, i) => (
                      <div key={i}>
-                       <div style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>{sec.title}</div>
+                       <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>{sec.title}</div>
                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                          {sec.rows.map((r, j) => (
                            <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -476,7 +483,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', background: 'var(--panel)' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                     <span style={{ flex: 1, minWidth: 0, fontFamily: 'inherit' }}>
-                      <span style={{ display: 'block', fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>BARRIO SELECCIONADO</span>
+                      <span style={{ display: 'block', fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>BARRIO SELECCIONADO</span>
                       <span id="map-barrio-name" style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedBarrioStats.barrio}</span>
                     </span>
                     <button id="btn-map-close-barrio" onClick={() => { setFBarrio('ALL'); setFMuni('ALL'); }} title="Cerrar detalle" style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
@@ -491,14 +498,14 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--ok)', letterSpacing: '0.08em' }}>EFECTIVIDAD</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ok)', letterSpacing: '0.08em' }}>EFECTIVIDAD</div>
                         <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--ok)', marginTop: 2 }}>{selectedBarrioStats.efectividadPct}%</div>
-                        <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.efectivas} / {selectedBarrioStats.total}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.efectivas} / {selectedBarrioStats.total}</div>
                       </div>
                       <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--err)', letterSpacing: '0.08em' }}>FALLIDO</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--err)', letterSpacing: '0.08em' }}>FALLIDO</div>
                         <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--err)', marginTop: 2 }}>{selectedBarrioStats.fallidoPct}%</div>
-                        <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.fallido} (fall.+perd.)</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.fallido} (fall.+perd.)</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 5, textAlign: 'center' }}>
@@ -509,13 +516,13 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                         { lbl: 'PERDIDAS (SIN PAGO)', val: selectedBarrioStats.perdidas, col: 'var(--err)' },
                       ].map((s, i) => (
                         <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 2px' }}>
-                          <div style={{ fontSize: 8.5, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
                           <div style={{ fontSize: 15, fontWeight: 700, color: s.col, marginTop: 1 }}>{s.val ?? 0}</div>
                         </div>
                       ))}
                     </div>
                     <div>
-                      <div style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>PRINCIPALES MOTIVOS DE FALLO</div>
+                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>PRINCIPALES MOTIVOS DE FALLO</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {Object.entries(selectedBarrioStats.motivos || {})
                           .sort((a: any, b: any) => b[1] - a[1])
@@ -532,7 +539,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>TÉCNICOS ({selectedBarrioStats.tecnicos.length})</div>
+                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>TÉCNICOS ({selectedBarrioStats.tecnicos.length})</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
                         {selectedBarrioStats.tecnicos.map((t: any, i: number) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontFamily: 'inherit' }}>
@@ -545,7 +552,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>ÓRDENES ({selectedBarrioStats.total})</div>
+                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>ÓRDENES ({selectedBarrioStats.total})</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 260, overflowY: 'auto' }}>
                         {selectedBarrioStats.ordenes.slice(0, 500).map((o: any, i: number) => {
                           const col = o.es === 'Efectiva' ? 'var(--ok)' : (o.es === 'Fallida' || o.es === 'Perdida') ? 'var(--err)' : 'var(--brand-secondary)';
@@ -573,7 +580,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', background: 'var(--panel)' }}>
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                    <span style={{ flex: 1, minWidth: 0, fontFamily: 'inherit' }}>
-                     <span style={{ display: 'block', fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>NIC SELECCIONADO</span>
+                     <span style={{ display: 'block', fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>NIC SELECCIONADO</span>
                      <span id="map-nic-name" style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedNic.nic ?? 'Sin NIC'}</span>
                    </span>
                    <button id="btn-map-close-nic" onClick={() => setSelectedNic(null)} title="Cerrar detalle" style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
@@ -600,13 +607,13 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
                        { lbl: 'PERDIDAS (SIN PAGO)', val: selectedNic.perdidas, col: 'var(--err)' },
                      ].map((s, i) => (
                        <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 2px' }}>
-                         <div style={{ fontSize: 8.5, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
+                         <div style={{ fontSize: 10, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
                          <div style={{ fontSize: 15, fontWeight: 700, color: s.col, marginTop: 1 }}>{s.val ?? 0}</div>
                        </div>
                      ))}
                    </div>
                    <div>
-                     <div style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>OBSERVACIONES</div>
+                     <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>OBSERVACIONES</div>
                      {nicObs === null ? (
                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit' }}>Cargando observaciones…</div>
                      ) : nicObs.length === 0 ? (

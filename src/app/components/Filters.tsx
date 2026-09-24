@@ -246,7 +246,7 @@ export default function Filters() {
           style={{ ...ctrl, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 130 }}
         >
           <span>{mesLabel}</span>
-          <span style={{ fontSize: 9, opacity: 0.55 }}>&#9662;</span>
+          <span style={{ fontSize: 10, opacity: 0.55 }}>&#9662;</span>
         </button>
         {mesOpen && (
           <div
@@ -314,7 +314,7 @@ export default function Filters() {
           style={{ ...ctrl, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 140 }}
         >
           <span>{diaLabel}</span>
-          <span style={{ fontSize: 9, opacity: 0.55 }}>&#9662;</span>
+          <span style={{ fontSize: 10, opacity: 0.55 }}>&#9662;</span>
         </button>
         {diaOpen && (
           <div

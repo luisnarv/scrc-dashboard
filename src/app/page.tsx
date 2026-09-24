@@ -139,6 +139,19 @@ export default function ResumenPage() {
     // Productividad por tipo de brigada
     const tipoRows = unitEconomicsPorTipo(rawF);
 
+    // Detalle por tipo de brigada (alimenta el desplegable de cada card operativa)
+    const tipoMap: Record<string, { b: Set<unknown>; ef: number; vi: number; asig: number; ing: number }> = {};
+    rawF.forEach(r => {
+      const t = String(r.Tipo_Brigada_Operaciones || 'Sin tipo');
+      const x = (tipoMap[t] ??= { b: new Set(), ef: 0, vi: 0, asig: 0, ing: 0 });
+      x.b.add(r.Cedula);
+      x.ef += num(r.Efectivas);
+      x.vi += num(r.Visitas);
+      x.asig += num(r.Asignacion);
+      x.ing += num(r.Ingresos);
+    });
+    const tipoDet = Object.entries(tipoMap).map(([tipo, v]) => ({ tipo, brig: v.b.size, ef: v.ef, vi: v.vi, asig: v.asig, ing: v.ing }));
+
     // Narrativa (ahora en términos de ingreso real + cumplimiento de producción)
     const periodoLabel = F.mes.length ? F.mes.join(', ') : 'periodo seleccionado';
     const narrativa = `En ${periodoLabel}, el proyecto registra un ingreso real de ${fmtCOP(ingresoReal)} con ${fmtN(brigadas)} brigadas activas y una eficiencia del ${eficiencia !== null ? fmtPct(eficiencia) : '—'}. El cumplimiento de producción (efectivas vs meta) es del ${cumpProd !== null ? fmtPct(cumpProd) : '—'}.`;
@@ -147,7 +160,7 @@ export default function ResumenPage() {
       health, narrativa,
       ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas: pSIP.efectivas,
       ingXbrig, costoXbrig, ingElec,
-      meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
+      meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows, tipoDet,
       alertas, nivelAlerta,
       pOTC,
     };
@@ -159,7 +172,7 @@ export default function ResumenPage() {
 
   const {
     health, narrativa, ingresoReal, eficiencia, brigadas, cumpProd, metaEfec, efectivas,
-    ingElec, meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows,
+    ingElec, meses12, efMes, selWin, prevWin, winA, winB, winIncompleto, tipoRows, tipoDet,
     alertas, nivelAlerta, pOTC
   } = data;
 
@@ -178,6 +191,17 @@ export default function ResumenPage() {
     data: { labels: meses12, datasets: [{ label: 'Brigadas', data: efMes.map(x => x.brig), backgroundColor: CFG.sip + 'AA' }] },
     options: { ...baseOpt, plugins: { ...baseOpt.plugins, legend: { display: false } } },
   };
+
+  // Filas del desplegable por tipo de brigada: valor principal de la card + cantidad de brigadas del tipo
+  const porTipo = (orden: (t: (typeof tipoDet)[number]) => number, fmt: (t: (typeof tipoDet)[number]) => string) =>
+    [...tipoDet]
+      .sort((a, b) => orden(b) - orden(a))
+      .map(t => ({ label: t.tipo, value: fmt(t), extra: ` · ${fmtN(t.brig)} brig.` }));
+  const detCumpProd = porTipo(t => (t.asig ? t.ef / t.asig : 0), t => (t.asig ? fmtPct(t.ef / t.asig) : '-'));
+  const detEficiencia = porTipo(t => (t.vi ? t.ef / t.vi : 0), t => (t.vi ? fmtPct(t.ef / t.vi) : '-'));
+  const detBrigadas = porTipo(t => t.brig, t => fmtN(t.brig));
+  const detEfectivas = porTipo(t => t.ef, t => fmtN(t.ef));
+  const detProduccion = porTipo(t => t.ing, t => fmtCOP(t.ing));
 
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
     { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
@@ -233,10 +257,10 @@ export default function ResumenPage() {
             <h2>🎯 Desempeño Operativo</h2>
             <div className="sec-sub">Basado en registros de terreno (Estimación)</div>
             <div className="kpi-grid c2">
-              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." />
-              <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '-'} help="Efectivas / Visitas." />
-              <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." />
-              <KpiCard cls="sip" lbl="Órdenes Efectivas" val={fmtN(efectivas)} help="Órdenes resueltas con éxito." />
+              <KpiCard cls="sip" lbl="Cumplimiento Producción" val={cumpProd !== null ? fmtPct(cumpProd) : '-'} help="Efectivas / Meta (Asignacion)." detalle={detCumpProd} />
+              <KpiCard cls="sip" lbl="Eficiencia" val={eficiencia !== null ? fmtPct(eficiencia) : '-'} help="Efectivas / Visitas." detalle={detEficiencia} />
+              <KpiCard cls="sip" lbl="Brigadas Activas" val={fmtN(brigadas)} help="Cédulas únicas con actividad en el periodo." detalle={detBrigadas} />
+              <KpiCard cls="sip" lbl="Órdenes Efectivas" val={fmtN(efectivas)} help="Órdenes resueltas con éxito." detalle={detEfectivas} />
             </div>
           </div>
         </div>
@@ -247,7 +271,7 @@ export default function ResumenPage() {
             <h2>⚖️ Comparativo (Producción vs Ingreso)</h2>
             <div className="sec-sub">Diferencia entre lo ejecutado valorizado y lo facturado real</div>
             <div className="kpi-grid c2">
-              <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(ingresoReal)} help="Valor teórico del trabajo realizado en terreno (Tarifario)." />
+              <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(ingresoReal)} help="Valor teórico del trabajo realizado en terreno (Tarifario)." detalle={detProduccion} />
               <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso contable facturado." />
               <KpiCard cls="neu" lbl="Brecha de Ingresos" val={fmtCOP((pOTC.ingresos || 0) - ingresoReal)} help="Diferencia absoluta entre OTC y Operación." />
               <KpiCard cls="neu" lbl="Desviación %" val={ingresoReal ? fmtPct(((pOTC.ingresos || 0) - ingresoReal) / ingresoReal) : '—'} help="Desviación porcentual." />

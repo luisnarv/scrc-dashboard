@@ -17,7 +17,7 @@ export const bot = {
     for (const el of document.querySelectorAll('body *')) {
       if (el.closest('svg, canvas, .leaflet-container, table') && el.tagName !== 'TABLE') continue;
       const cs = getComputedStyle(el);
-      if (cs.display === 'inline' || cs.overflowX !== 'visible') continue;
+      if (cs.display === 'inline' || cs.overflowX !== 'visible' || cs.animationName !== 'none') continue;
       if (!visible(el)) continue;
       const diff = el.scrollWidth - el.clientWidth;
       if (diff > 2 && el.clientWidth > 0) spill.push({ el, diff });
