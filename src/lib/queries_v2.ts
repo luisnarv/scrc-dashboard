@@ -111,8 +111,7 @@ const META_DIARIA_SQL = `MAX(CASE
               WHEN 'Gestor Integral Multi' THEN 357349.97
               WHEN 'Brigada Minicanasta' THEN 2362400.95
               WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
-              WHEN 'Pesada Disponible' THEN
-                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=0 THEN 1387882.61 ELSE 1028061.19 END)
+              WHEN 'Pesada Disponible' THEN 1028061.19
               WHEN 'Brigada Canasta' THEN 3026324.43
               ELSE ${COSTO_MENSUAL_SQL} / 24.0
             END

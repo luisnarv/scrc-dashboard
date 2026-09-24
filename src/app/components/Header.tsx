@@ -9,7 +9,6 @@ export const ALL_NAV_ROUTES = [
   { path: '/operativo', label: 'Operativo' },
   { path: '/tecnicos', label: 'Cantidades Técnicos' },
   { path: '/tecnico/productivo', label: 'Producción Técnico' },
-  { path: '/cierre_diario', label: 'Cierre Diario' },
   { path: '/informes', label: 'Informes' },
 ];
 
