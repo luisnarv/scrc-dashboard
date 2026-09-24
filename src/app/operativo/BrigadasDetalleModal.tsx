@@ -460,6 +460,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
 
   return (
     <div
+      className="bdm-overlay"
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(20,27,45,.55)', backdropFilter: 'blur(2px)',
@@ -467,6 +468,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
       }}
     >
       <div
+        className="bdm-dialog"
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Detalle por brigadas"
         style={{
@@ -475,14 +477,15 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         }}
       >
         {/* Fila 1: Título y Cerrar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', gap: 12 }}>
+        <div className="bdm-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1.2, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
+            <div className="bdm-title" style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1.2, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
             <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
               Tipo de Brigada › Zona › Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
             </div>
           </div>
           <button
+            className="bdm-close"
             onClick={onClose} aria-label="Cerrar"
             style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >×</button>
@@ -490,7 +493,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
 
         {/* Fila 2: Franja de resumen del periodo */}
         {total && (
-          <div style={{ padding: '0 20px 12px' }}>
+          <div className="bdm-summary" style={{ padding: '0 20px 12px' }}>
             <div style={{
               background: 'var(--hover-bg)',
               borderRadius: 10,
@@ -502,7 +505,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               flexWrap: 'wrap',
               gap: 16,
             }}>
-              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="bdm-summary-kpis" style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>EFECTIVAS</div>
                   <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: OK }}>{fmtN(total.efec)}</div>
@@ -537,9 +540,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         )}
 
         {/* Fila 3: Barra de herramientas */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 14px', flexWrap: 'wrap' }}>
+        <div className="bdm-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 14px', flexWrap: 'wrap' }}>
           {/* Segmentado de categoría */}
-          <div style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 3, borderRadius: 8, border: `1px solid ${LINE}` }}>
+          <div className="bdm-seg" style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 3, borderRadius: 8, border: `1px solid ${LINE}` }}>
             <button
               onClick={() => setCategoriaFiltro('ALL')}
               style={{
@@ -573,6 +576,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
           </div>
 
           <input
+            className="bdm-search"
             value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo, zona o técnico"
             style={{ padding: '6px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 12.5, width: 220, outline: 'none', background: 'var(--card)', color: INK }}
           />
@@ -584,7 +588,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             {allExpanded ? 'Contraer todo' : 'Desplegar todo'}
           </button>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="bdm-toolbar-right" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 11.5, color: MUT }}>
               {brigadasSort.length} agrupaciones · {fmtN(totalMostrado.dias)} técnico-días
             </span>
@@ -600,7 +604,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         {/* Tabla jerárquica con encabezado de 2 niveles y celdas fijas */}
         <div className="mobile-scroll-tip" style={{ padding: '0 16px 6px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
         <div className="table-responsive-container" style={{ overflow: 'auto', WebkitOverflowScrolling: 'touch', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
+          <table className="bdm-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
               {/* Nivel 1 de encabezado: Grupos */}
               <tr>
@@ -694,9 +698,10 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               )}
             </tbody>
             {brigadasSort.length > 0 && (
-              <tfoot>
+              <tfoot className="bdm-foot">
                 <tr style={{ position: 'sticky', bottom: 0, zIndex: 4 }}>
                   <td
+                    className="bdm-first"
                     style={{
                       ...tdBase, fontWeight: 800, color: INK,
                       position: 'sticky', left: 0, zIndex: 5,
@@ -760,7 +765,7 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         </div>
 
         {/* Pie informativo */}
-        <div style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="bdm-footnote" style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Clic en una fila para desplegar zonas y técnicos · clic en un encabezado para ordenar</span>
           <span>% Cumplimiento = (producción ÷ meta) × 100</span>
         </div>
@@ -796,14 +801,17 @@ function RowRecursive({
   };
 
   const padLeft = level * 20 + 12;
+  const levelClass = level === 0 ? 'bdm-l0' : level === 1 ? 'bdm-l1' : 'bdm-l2';
 
   return (
     <>
       <tr
+        className={`bdm-row ${levelClass}`}
         onClick={() => !isLeaf && onToggle(node.key)}
         style={{ background: rowBg, cursor: isLeaf ? 'default' : 'pointer', borderBottom: `1px solid ${LINE}` }}
       >
         <td
+          className="bdm-first"
           style={{
             padding: `7px 12px 7px ${padLeft}px`, fontSize: 13 - level * 0.5, fontWeight: level === 0 ? 700 : 500,
             color: isLeaf ? 'var(--text-body)' : INK, whiteSpace: 'nowrap',
