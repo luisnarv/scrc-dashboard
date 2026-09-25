@@ -36,7 +36,7 @@ const dot = (c: string): React.CSSProperties => ({ width: 8, height: 8, borderRa
 // solicitada. La clave se normaliza a MAYUSCULAS. Nombres no listados caen a la
 // paleta de reserva (evPal).
 const COLOR_BRIGADA: Record<string, string> = {
-  // Nombres reales de la data V2 (historico_mo.tipo_brigada), mapeados a la paleta.
+  // Nombres reales de la data V2, mapeados a la paleta.
   'SCR PESADA': '#38764C',                // verde oscuro
   'SCR LIVIANA': '#2E6FB5',               // azul
   'SCR MULTIFAMILIAR': '#78BE20',         // verde lima
@@ -46,7 +46,7 @@ const COLOR_BRIGADA: Record<string, string> = {
   'CANASTA': '#D64A2A',                   // rojo-naranja
   'WEB': '#8F5A24',                       // cafe
   'SCR DISPONIBLE': '#97999B',            // gris
-  // Nombres homologados (data vieja / si se homologa el nombre en la consulta).
+  // Nombres homologados.
   'BRIGADA PESADA': '#38764C',        // verde oscuro
   'BRIGADA TIPO PESADA': '#38764C',   // verde oscuro
   'GESTOR INTEGRAL MULTI': '#78BE20', // verde lima

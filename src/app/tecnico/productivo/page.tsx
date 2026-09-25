@@ -574,7 +574,7 @@ export default function TecnicoProductivoPage() {
       };
     }
 
-    // Filtrar los registros de PostgreSQL según los Filtros Generales del Dashboard
+    // Filtrar los registros según los Filtros Generales del Dashboard
     const rows = filtRaw(raw.raw, filters);
 
     // Eje temporal adaptable: con UN solo mes seleccionado el desglose es por DÍA
@@ -941,7 +941,7 @@ export default function TecnicoProductivoPage() {
         <div>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 2, color: INK }}>Evolutivo Monetario por Brigada y Técnico (Producción $ COP)</div>
           <div style={{ fontSize: 12.5, color: MUT, marginTop: 2 }}>
-            Monitoreo en tiempo real (Fuente: Base de Datos PostgreSQL) de ingresos monetarios ($ COP) por brigada y técnico
+            Monitoreo en tiempo real de ingresos monetarios ($ COP) por brigada y técnico
           </div>
         </div>
 

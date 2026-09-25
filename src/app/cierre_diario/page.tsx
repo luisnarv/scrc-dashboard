@@ -7,7 +7,7 @@ import { ButtonMenuOperativo } from '../components/Buttons';
 import { fmtN, fmtCOP } from '../components/utils/formatters';
 import { getMetaDiariaEfectivas } from '../components/utils/metasBrigadas';
 
-// Estructura de fila de analitica.v_ordenes_dia_barrio
+// Estructura de fila de consolidado por barrio
 export interface BarrioRow {
   dia_operativo: string;
   proyecto_id: number;
@@ -29,7 +29,7 @@ export interface BarrioRow {
   deuda_total: number;
 }
 
-// Estructura multidimensional de analitica.v_ordenes_dia
+// Estructura multidimensional de órdenes agrupadas
 export interface OrdenAgrupadaRow {
   proyecto: string;
   zona: string;
@@ -43,6 +43,7 @@ export interface OrdenAgrupadaRow {
   tecnico: string;
   cantidad: number;
   deuda_total: number | string | null;
+  fac_venc_0?: number;
   fac_venc_1?: number;
   fac_venc_2?: number;
   fac_venc_3?: number;
@@ -78,9 +79,8 @@ export interface MoPorDiaRow {
   cantidad: number;
 }
 
-// Pendientes REALES por día (no un estimado): analitica.v_ordenes_mes es un snapshot diario del
-// universo completo de órdenes -- para cada día, órdenes que el sistema origen marcaba
-// 'DISPONIBLE' ese día y que mano de obra todavía no había cerrado (fecha_cierre <= ese día).
+// Pendientes por día:
+// universo completo de órdenes por día operativo.
 export interface MesPendientesRow {
   fecha: string;
   proyecto: string;
@@ -105,7 +105,7 @@ export interface TecnicoRow {
   barrios_count: number;
 }
 
-// Estructura de distribución horaria de analitica.v_ordenes_dia
+// Estructura de distribución horaria
 export interface BarrioHoraRow {
   hora: string;
   proyecto: string;
@@ -119,7 +119,7 @@ export interface BarrioHoraRow {
   ejecutadas: number;
 }
 
-// Estructura de detalle de analitica.v_ordenes_dia
+// Estructura de detalle de órdenes
 export interface OrdenDetalleRow {
   dia_operativo: string;
   proyecto_id: number;
@@ -157,7 +157,7 @@ export interface MetaBrigadaRow {
   pendientes: number;
 }
 
-// Cierres del mes completo por barrio (mano de obra / SIPREM) -- alimenta el gráfico cuando
+// Cierres del mes completo por barrio -- alimenta el gráfico cuando
 // el usuario activa "Ver todo el mes". "asignadas" aquí es el acumulado mensual de mano de obra,
 // no un estado del día.
 export interface BarrioMesRow {
@@ -265,8 +265,10 @@ export default function AsignacionOperativaPage() {
   const [modoVisualizacion, setModoVisualizacion] = useState<'barras_agrupadas' | 'barras_apiladas' | 'horario'>('barras_agrupadas');
   const [mostrarEtiquetas, setMostrarEtiquetas] = useState<boolean>(true);
   const [mostrarLineasPromedio, setMostrarLineasPromedio] = useState<boolean>(true);
+  // Ajuste de totales en gráfico (subtotales en el centro de las barras y Total General en la parte superior y en la etiqueta)
+  const [ajustarTotalesGrafico, setAjustarTotalesGrafico] = useState<boolean>(true);
 
-  // Modal para detalle de órdenes individuales de analitica.v_ordenes_dia
+  // Modal para detalle de órdenes individuales
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [barrioModal, setBarrioModal] = useState<string | null>(null);
   const [ordenesDetalle, setOrdenesDetalle] = useState<OrdenDetalleRow[]>([]);
@@ -315,13 +317,13 @@ export default function AsignacionOperativaPage() {
       setDataAsignadasTotal(json.asignadasTotal || []);
       setDataMesPorDia(json.mesPorDia || []);
     } catch (err: any) {
-      console.error('Error cargando datos de cierre diario:', err);
-      setError(err.message || 'Error al conectar con la base de datos');
+      console.error('Error cargando datos de cierre diario');
+      setError('Error al cargar la información');
     } finally {
       setLoading(false);
     }
 
-    // Pendientes por día: consulta pesada (v_ordenes_mes), va aparte y sin bloquear la pantalla --
+    // Pendientes por día: carga en segundo plano --
     // las barras de barrios pendientes del gráfico aparecen cuando llega.
     try {
       const resPend = await fetch('/api/data/cierre_diario_pendientes');
@@ -330,7 +332,7 @@ export default function AsignacionOperativaPage() {
         setDataMesPendientesPorDia(jsonPend.mesPendientesPorDia || []);
       }
     } catch (err) {
-      console.error('Error cargando pendientes por día:', err);
+      console.error('Error cargando pendientes por día');
     }
   }, []);
 
@@ -338,7 +340,7 @@ export default function AsignacionOperativaPage() {
     fetchData();
   }, [fetchData]);
 
-  // Cargar detalle de órdenes individuales de v_ordenes_dia
+  // Cargar detalle de órdenes individuales
   const fetchDetalle = async (barrioNombre?: string) => {
     setLoadingDetalle(true);
     setBarrioModal(barrioNombre || null);
@@ -376,11 +378,11 @@ export default function AsignacionOperativaPage() {
       }
 
       const res = await fetch(`/api/data/cierre_diario?${params.toString()}`);
-      if (!res.ok) throw new Error('Error al consultar detalle');
+      if (!res.ok) throw new Error('Error al cargar detalle');
       const json = await res.json();
       setOrdenesDetalle(json.ordenes || []);
     } catch (err: any) {
-      console.error('Error cargando v_ordenes_dia:', err);
+      console.error('Error cargando detalle de órdenes');
       setOrdenesDetalle([]);
     } finally {
       setLoadingDetalle(false);
@@ -608,6 +610,7 @@ export default function AsignacionOperativaPage() {
       suspension: number;
       reconexion: number;
       deuda: number;
+      fac_venc_0: number;
       fac_venc_1: number;
       fac_venc_2: number;
       fac_venc_3: number;
@@ -633,6 +636,7 @@ export default function AsignacionOperativaPage() {
           suspension: 0,
           reconexion: 0,
           deuda: 0,
+          fac_venc_0: 0,
           fac_venc_1: 0,
           fac_venc_2: 0,
           fac_venc_3: 0,
@@ -645,6 +649,7 @@ export default function AsignacionOperativaPage() {
       const cant = r.cantidad || 0;
       item.total += cant;
       item.deuda += Number(r.deuda_total) || 0;
+      item.fac_venc_0 += Number(r.fac_venc_0) || 0;
       item.fac_venc_1 += Number(r.fac_venc_1) || 0;
       item.fac_venc_2 += Number(r.fac_venc_2) || 0;
       item.fac_venc_3 += Number(r.fac_venc_3) || 0;
@@ -658,8 +663,10 @@ export default function AsignacionOperativaPage() {
       } else if (r.estado_legible === 'Pendiente') {
         item.pendientes += cant;
       } else if (r.estado_legible === 'Ejecutada') {
+        item.asignadas += cant;
         item.ejecutadas += cant;
       } else if (r.estado_legible === 'Baja por WebService') {
+        item.excluidas += cant;
         item.canceladas += cant;
       } else if (r.estado_legible === 'Excluida' || r.estado_legible === 'Sin ubicar') {
         item.excluidas += cant;
@@ -672,8 +679,9 @@ export default function AsignacionOperativaPage() {
         item.reconexion += cant;
       }
 
-      // Técnicos asignados en el barrio
-      if (r.tecnico && r.tecnico !== 'No asignado') {
+      // Técnicos asignados en el barrio: solo órdenes con carga asignada (Asignadas o Ejecutadas)
+      const esAsignadaParaTec = r.estado_legible === 'Asignada' || r.estado_legible === 'Ejecutada';
+      if (esAsignadaParaTec && r.tecnico && r.tecnico !== 'No asignado' && r.tecnico.trim() !== '') {
         let tEntry = item.tecnicosMap.get(r.tecnico);
         if (!tEntry) {
           tEntry = { total: 0, suspension: 0, reconexion: 0 };
@@ -853,10 +861,9 @@ export default function AsignacionOperativaPage() {
       .sort((a, b) => a.fecha.localeCompare(b.fecha));
   }, [dataMesPorDia, filters.proy, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS]);
 
-  // Pendientes (DISPONIBLE) y Asignadas (ASIGNADA) REALES por día: analitica.v_ordenes_mes es un
-  // snapshot diario de TODO el universo de órdenes, así que sí existe el histórico. Las órdenes
-  // pendientes por definición no tienen técnico, así que si hay un filtro de técnico activo esta
-  // serie no aplica (queda vacía) y los asignados se toman de mano de obra, que sí trae técnico.
+  // Pendientes (DISPONIBLE) y Asignadas (ASIGNADA) por día:
+  // órdenes por día. Las órdenes pendientes por definición no tienen técnico, así que si hay un
+  // filtro de técnico activo esta serie no aplica y los asignados se toman de mano de obra.
   const porDiaMesPendientes = useMemo(() => {
     type Dia = { ordenes: number; barrios: Set<string>; barriosAsignados: Set<string> };
     if (filtroTecnico !== 'ALL') return new Map<string, Dia>();
@@ -889,8 +896,8 @@ export default function AsignacionOperativaPage() {
     const mapa = new Map<string, { asignados: number; excluidos: number; pendientes: number; pendientesOrdenes: number }>();
     porDiaMes.forEach(d => {
       const pend = porDiaMesPendientes.get(d.fecha);
-      // Asignados: estado ASIGNADA de v_ordenes_mes (ejecutadas o no). Con filtro de técnico se
-      // usa mano de obra, que es la única fuente que trae técnico.
+      // Asignados: estado ASIGNADA (ejecutadas o no). Con filtro de técnico se
+      // usa mano de obra, que es la que vincula técnico.
       const asignados = filtroTecnico === 'ALL' && pend ? pend.barriosAsignados : d.barriosAsignadosMoSet;
       let excluidos = 0;
       d.barriosExcluidosRawSet.forEach(key => { if (!asignados.has(key)) excluidos++; });
@@ -908,10 +915,38 @@ export default function AsignacionOperativaPage() {
     return mapa;
   }, [porDiaMes, porDiaMesPendientes, filtroTecnico]);
 
-  // Desglose real de Pendientes por barrio, pero SOLO para hoy: es el único día del que existe
-  // este dato (analitica.v_ordenes_dia es un snapshot del momento actual, no guarda historial),
-  // así que no se puede reconstruir para los demás días del mes -- ver "Disponibles" en el
-  // gráfico, que sí es un estimado reconstruido, pero sin desglose por barrio posible.
+  // Resumen de totales consolidados para el gráfico "Órdenes Asignadas y Excluidas" (suma de todo el período)
+  const resumenTotalesGraficoAsigExcl = useMemo(() => {
+    let totAsignadas = 0;
+    let totExcluidas = 0;
+    let totBarriosAsig = 0;
+    let totBarriosExcl = 0;
+    let totBarriosPend = 0;
+
+    porDiaMes.forEach(d => {
+      totAsignadas += d.ejecutadas || 0;
+      totExcluidas += d.excluidosDia || 0;
+      const b = porDiaMesBarrios.get(d.fecha);
+      if (b) {
+        totBarriosAsig += b.asignados || 0;
+        totBarriosExcl += b.excluidos || 0;
+        totBarriosPend += b.pendientes || 0;
+      }
+    });
+
+    const totOrdenes = totAsignadas + totExcluidas;
+    return {
+      totOrdenes,
+      totAsignadas,
+      totExcluidas,
+      totBarriosAsig,
+      totBarriosExcl,
+      totBarriosPend,
+      totBarrios: totBarriosAsig + totBarriosExcl + totBarriosPend,
+    };
+  }, [porDiaMes, porDiaMesBarrios]);
+
+  // Desglose de Pendientes por barrio para hoy (snapshot del momento actual).
   const topBarriosPendientesHoy = useMemo(() => {
     return rankingBarrios
       .filter(b => b.pendientes > 0)
@@ -1001,9 +1036,13 @@ export default function AsignacionOperativaPage() {
     const total = rankingBarrios.reduce((s, b) => s + b.total, 0);
     const totalAsignadas = rankingBarrios.reduce((s, b) => s + b.asignadas, 0);
     const totalPendientes = rankingBarrios.reduce((s, b) => s + b.pendientes, 0);
+    const totalEjecutadas = rankingBarrios.reduce((s, b) => s + (b.ejecutadas || 0), 0);
+    const totalCanceladas = rankingBarrios.reduce((s, b) => s + (b.canceladas || 0), 0);
+    const totalExcluidas = rankingBarrios.reduce((s, b) => s + (b.excluidas || 0), 0);
     const totalSuspension = rankingBarrios.reduce((s, b) => s + b.suspension, 0);
     const totalReconexion = rankingBarrios.reduce((s, b) => s + b.reconexion, 0);
     const totalDeuda = rankingBarrios.reduce((s, b) => s + b.deuda, 0);
+    const totalFacVenc0 = rankingBarrios.reduce((s, b) => s + (b.fac_venc_0 || 0), 0);
     const totalFacVenc1 = rankingBarrios.reduce((s, b) => s + b.fac_venc_1, 0);
     const totalFacVenc2 = rankingBarrios.reduce((s, b) => s + b.fac_venc_2, 0);
     const totalFacVenc3 = rankingBarrios.reduce((s, b) => s + b.fac_venc_3, 0);
@@ -1029,9 +1068,13 @@ export default function AsignacionOperativaPage() {
       total,
       totalAsignadas,
       totalPendientes,
+      totalEjecutadas,
+      totalCanceladas,
+      totalExcluidas,
       totalSuspension,
       totalReconexion,
       totalDeuda,
+      totalFacVenc0,
       totalFacVenc1,
       totalFacVenc2,
       totalFacVenc3,
@@ -1417,37 +1460,133 @@ export default function AsignacionOperativaPage() {
         afterDatasetsDraw(chart: any) {
           if (!mostrarEtiquetas) return;
           const { ctx } = chart;
-          chart.data.datasets.forEach((dataset: any, datasetIdx: number) => {
-            if (dataset.isPromedio) return; // Las líneas de promedio no llevan etiqueta flotante
-            const meta = chart.getDatasetMeta(datasetIdx);
-            if (meta.hidden) return;
 
-            meta.data.forEach((element: any, dataIdx: number) => {
-              const val = dataset.data[dataIdx];
-              if (val === null || val === undefined || isNaN(val) || val === 0) return;
+          if (filtroModoGrafico === 'asig_vs_pend' && ajustarTotalesGrafico) {
+            // =========================================================================
+            // MODO ASIGNADAS Y EXCLUIDAS CON TOTALES EN LA MITAD Y TOTAL GENERAL ARRIBA
+            // =========================================================================
+            // Agrupar elementos por stack ('ordenes' y 'barrios')
+            const stacksInfo: Record<string, { datasets: { meta: any; dataset: any }[] }> = {};
 
-              // La cantidad de barrios ahora es su propia serie (con eje propio) en vez de un
-              // texto superpuesto sobre la barra de Asignados -- usa la etiqueta genérica.
-              let texto = fmtN(val);
-              if (filtroModoGrafico === 'asig_vs_pend' && dataset.yAxisID === 'y1') {
-                texto = `${texto} barrios`;
+            chart.data.datasets.forEach((dataset: any, datasetIdx: number) => {
+              if (dataset.isPromedio) return;
+              const meta = chart.getDatasetMeta(datasetIdx);
+              if (meta.hidden) return;
+              const stackName = dataset.stack || 'default';
+              if (!stacksInfo[stackName]) {
+                stacksInfo[stackName] = { datasets: [] };
               }
-
-              ctx.save();
-              ctx.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-              ctx.fillStyle = dataset.borderColor || dataset.backgroundColor || textInk;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'bottom';
-
-              // Halo para garantizar contraste
-              ctx.strokeStyle = isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-              ctx.lineWidth = 2.5;
-              ctx.lineJoin = 'round';
-              ctx.strokeText(texto, element.x, element.y - 4);
-              ctx.fillText(texto, element.x, element.y - 4);
-              ctx.restore();
+              stacksInfo[stackName].datasets.push({ meta, dataset });
             });
-          });
+
+            const numPoints = chart.data.labels?.length || 0;
+
+            Object.entries(stacksInfo).forEach(([stackName, { datasets: stackDatasets }]) => {
+              for (let i = 0; i < numPoints; i++) {
+                let stackSum = 0;
+                let highestY = Infinity;
+                let barX = 0;
+                let hasVisibleSegment = false;
+
+                // 1. Subtotales en la mitad de cada segmento de la columna
+                stackDatasets.forEach(({ meta, dataset }) => {
+                  const element = meta.data?.[i];
+                  if (!element) return;
+                  const val = Number(dataset.data?.[i]) || 0;
+                  if (val <= 0) return;
+
+                  stackSum += val;
+                  hasVisibleSegment = true;
+                  barX = element.x;
+
+                  const segTop = element.y;
+                  const segBase = element.base !== undefined ? element.base : element.y;
+                  if (segTop < highestY) highestY = segTop;
+
+                  const midY = (segTop + segBase) / 2;
+                  let textoSegmento = fmtN(val);
+                  if (dataset.yAxisID === 'y1') {
+                    textoSegmento = `${textoSegmento} b.`;
+                  }
+
+                  ctx.save();
+                  ctx.font = '400 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+
+                  // Halo oscuro fino y suave para nitidez dentro de la barra sin engrosar
+                  ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+                  ctx.lineWidth = 1.5;
+                  ctx.lineJoin = 'round';
+                  ctx.strokeText(textoSegmento, element.x, midY);
+
+                  // Texto blanco suave sin negrita dentro de la barra
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillText(textoSegmento, element.x, midY);
+                  ctx.restore();
+                });
+
+                // 2. Total General (suma de todos los segmentos del stack) arriba de la columna
+                if (hasVisibleSegment && stackSum > 0 && highestY !== Infinity) {
+                  const isBarrios = stackName === 'barrios';
+                  const textoTotal = isBarrios
+                    ? `Tot: ${fmtN(stackSum)} b.`
+                    : `Total: ${fmtN(stackSum)}`;
+
+                  ctx.save();
+                  ctx.font = '500 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'bottom';
+
+                  // Halo fino en el color del fondo para separar de líneas de cuadrícula
+                  ctx.strokeStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+                  ctx.lineWidth = 2;
+                  ctx.lineJoin = 'round';
+                  ctx.strokeText(textoTotal, barX, highestY - 5);
+
+                  // Colores temáticos legibles y sobrios sin negrita:
+                  // Órdenes: textInk (tono natural del tema); Barrios: ámbar sutil
+                  ctx.fillStyle = isBarrios
+                    ? (isDark ? '#fcd34d' : '#d97706')
+                    : textInk;
+                  ctx.fillText(textoTotal, barX, highestY - 5);
+                  ctx.restore();
+                }
+              }
+            });
+          } else {
+            chart.data.datasets.forEach((dataset: any, datasetIdx: number) => {
+              if (dataset.isPromedio) return; // Las líneas de promedio no llevan etiqueta flotante
+              const meta = chart.getDatasetMeta(datasetIdx);
+              if (meta.hidden) return;
+
+              meta.data.forEach((element: any, dataIdx: number) => {
+                const val = dataset.data[dataIdx];
+                if (val === null || val === undefined || isNaN(val) || val === 0) return;
+
+                // La cantidad de barrios ahora es su propia serie (con eje propio) en vez de un
+                // texto superpuesto sobre la barra de Asignados -- usa la etiqueta genérica.
+                let texto = fmtN(val);
+                if (filtroModoGrafico === 'asig_vs_pend' && dataset.yAxisID === 'y1') {
+                  texto = `${texto} barrios`;
+                }
+
+                ctx.save();
+                ctx.font = '400 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.fillStyle = dataset.borderColor || dataset.backgroundColor || textInk;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                // Halo fino para garantizar contraste sin verse pesado
+                ctx.strokeStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+                ctx.lineWidth = 1.5;
+                ctx.lineJoin = 'round';
+                ctx.strokeText(texto, element.x, element.y - 4);
+                ctx.fillText(texto, element.x, element.y - 4);
+                ctx.restore();
+              });
+            });
+          }
         },
       };
 
@@ -1517,8 +1656,8 @@ export default function AsignacionOperativaPage() {
             stack: 'ordenes',
           });
 
-          // Barrios pendientes por asignar: dato REAL por día (v_ordenes_mes DISPONIBLE cruzado
-          // con MO), excluyendo los barrios que ese mismo día ya cuentan como Asignado o Excluido
+          // Barrios pendientes por asignar: dato por día (DISPONIBLE cruzado
+          // con órdenes ejecutadas), excluyendo los barrios que ese mismo día ya cuentan como Asignado o Excluido
           // (prioridad Asignado > Excluido > Pendiente, ver porDiaMesBarrios).
           datasets.push({
             type: 'bar',
@@ -1705,7 +1844,7 @@ export default function AsignacionOperativaPage() {
               legend: {
                 display: true,
                 position: 'top',
-                labels: { boxWidth: 14, padding: 14, color: textInk, font: { weight: 'bold', size: 11.5 } },
+                labels: { boxWidth: 14, padding: 14, color: textInk, font: { weight: '500', size: 11 } },
               },
               tooltip: {
                 backgroundColor: cardBg,
@@ -1739,16 +1878,21 @@ export default function AsignacionOperativaPage() {
                     if (esModoDia) {
                       const d = porDiaMes[idx];
                       if (!d) return '';
+                      const bInfo = porDiaMesBarrios.get(d.fecha);
+                      const totOrdenesDia = (d.excluidosDia || 0) + (d.ejecutadas || 0);
+                      const totBarriosDia = (bInfo?.asignados ?? 0) + (bInfo?.excluidos ?? 0) + (bInfo?.pendientes ?? 0);
                       return [
+                        `\n★ TOTAL GENERAL ÓRDENES: ${fmtN(totOrdenesDia)} (Asignadas: ${fmtN(d.ejecutadas)} + Excluidas: ${fmtN(d.excluidosDia)})`,
+                        `★ TOTAL GENERAL BARRIOS: ${fmtN(totBarriosDia)} (Asignados: ${fmtN(bInfo?.asignados ?? 0)} | Excluidos: ${fmtN(bInfo?.excluidos ?? 0)} | Pendientes: ${fmtN(bInfo?.pendientes ?? 0)})`,
                         `\nResultado de ese día (mano de obra):`,
                         `  • Excluidos: ${fmtN(d.excluidosDia)} (Perdida: ${fmtN(d.perdidas)} | Sin Clasificar: ${fmtN(d.sinClasificar)})`,
                         `  • Asignados (ejecutados): ${fmtN(d.ejecutadas)}`,
                         `    ↳ Efectivas: ${fmtN(d.efectivas)} (${d.pctEfectivas}%) | Fallidas: ${fmtN(d.fallidas)}`,
                         `Suspensión: ${fmtN(d.suspension)} | Reconexión: ${fmtN(d.reconexion)}`,
                         `\nBarrios ese día (cada barrio cuenta en una sola categoría; prioridad Asignado > Excluido > Pendiente):`,
-                        `  • Asignados: ${fmtN(porDiaMesBarrios.get(d.fecha)?.asignados ?? 0)}`,
-                        `  • Excluidos: ${fmtN(porDiaMesBarrios.get(d.fecha)?.excluidos ?? 0)}`,
-                        `  • Pendientes por asignar: ${fmtN(porDiaMesBarrios.get(d.fecha)?.pendientes ?? 0)} (${fmtN(porDiaMesBarrios.get(d.fecha)?.pendientesOrdenes ?? 0)} órdenes)`,
+                        `  • Asignados: ${fmtN(bInfo?.asignados ?? 0)}`,
+                        `  • Excluidos: ${fmtN(bInfo?.excluidos ?? 0)}`,
+                        `  • Pendientes por asignar: ${fmtN(bInfo?.pendientes ?? 0)} (${fmtN(bInfo?.pendientesOrdenes ?? 0)} órdenes)`,
                         `Técnicos/brigadas activas ese día: ${fmtN(d.tecnicosCount)}`,
                         `Promedio de barrios por técnico ese día: ${d.avgBarriosPorTecnico}`,
                       ].join('\n');
@@ -1785,15 +1929,15 @@ export default function AsignacionOperativaPage() {
                 // y stack "barrios"), sin importar el toggle Agrupadas/Apiladas del resto de modos.
                 stacked: esModoDia ? true : isStacked,
                 grid: { display: false },
-                ticks: { color: textInk, font: { weight: 'bold', size: 10.5 }, maxRotation: 35 },
-                title: { display: true, text: esModoDia ? 'Día del Mes' : 'Barrios Ordenados por Criterio Seleccionado', color: textMut, font: { weight: 'bold' } },
+                ticks: { color: textInk, font: { weight: 'normal', size: 10 }, maxRotation: 35 },
+                title: { display: true, text: esModoDia ? 'Día del Mes' : 'Barrios Ordenados por Criterio Seleccionado', color: textMut, font: { weight: 'normal', size: 11.5 } },
               },
               y: {
                 stacked: esModoDia ? true : isStacked,
                 beginAtZero: true,
                 grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
-                ticks: { color: textMut, precision: 0 },
-                title: { display: true, text: 'Cantidad de Órdenes', color: textMut, font: { weight: 'bold' } },
+                ticks: { color: textMut, precision: 0, font: { weight: 'normal', size: 10 } },
+                title: { display: true, text: 'Cantidad de Órdenes', color: textMut, font: { weight: 'normal', size: 11.5 } },
               },
               // Eje propio para la columna de barrios: su escala (decenas) es mucho más chica que
               // las órdenes (miles), así que comparte el mismo gráfico pero con su propio eje a la
@@ -1804,8 +1948,8 @@ export default function AsignacionOperativaPage() {
                   position: 'right' as const,
                   beginAtZero: true,
                   grid: { display: false },
-                  ticks: { color: colors.otc, precision: 0 },
-                  title: { display: true, text: 'Cantidad de Barrios', color: colors.otc, font: { weight: 'bold' } },
+                  ticks: { color: colors.otc, precision: 0, font: { weight: 'normal', size: 10 } },
+                  title: { display: true, text: 'Cantidad de Barrios', color: colors.otc, font: { weight: 'normal', size: 11.5 } },
                 },
               } : {}),
             },
@@ -1942,6 +2086,7 @@ export default function AsignacionOperativaPage() {
     colorSuspension,
     colorReconexion,
     colorSeMantiene,
+    ajustarTotalesGrafico,
   ]);
 
   return (
@@ -2012,8 +2157,9 @@ export default function AsignacionOperativaPage() {
                   fontSize: 12,
                   cursor: 'pointer',
                 }}
+                title="Gráfico: Órdenes Asignadas y Excluidas por día"
               >
-                Asig. vs. Pend.
+                Asignadas y Excluidas
               </button>
               <button
                 onClick={() => {
@@ -2167,6 +2313,28 @@ export default function AsignacionOperativaPage() {
               />
               Ver Todo el Mes
             </label>
+
+            <button
+              onClick={() => setAjustarTotalesGrafico(prev => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 12px',
+                borderRadius: 6,
+                border: `1.5px solid ${ajustarTotalesGrafico ? colorAsignadas : borderCol}`,
+                background: ajustarTotalesGrafico ? colorAsignadas : 'transparent',
+                color: ajustarTotalesGrafico ? '#ffffff' : textMut,
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: ajustarTotalesGrafico ? (isDark ? '0 2px 8px rgba(2, 132, 199, 0.35)' : '0 2px 8px rgba(2, 132, 199, 0.2)') : 'none',
+              }}
+              title="Ajusta el gráfico Órdenes Asignadas y Excluidas: subtotales en el centro de las barras y Total General arriba y en la etiqueta"
+            >
+              <span>📊</span>
+              <span>{ajustarTotalesGrafico ? 'Totales y General Activos' : 'Ajustar Totales y General'}</span>
+            </button>
           </div>
         </div>
 
@@ -2857,37 +3025,93 @@ export default function AsignacionOperativaPage() {
               {filtroModoGrafico === 'asig_vs_pend'
                 ? 'Datos reales por día, en 2 columnas apiladas: Órdenes (Excluidas + Asignadas) y Barrios (Pendientes + Asignados + Excluidos). Cada barrio cuenta una sola vez por día, priorizando Asignado > Excluido > Pendiente.'
                 : verGraficoMes
-                ? 'Asignadas = cierres acumulados del mes en mano de obra (SIPREM). Pendientes = carga actual de hoy.'
+                ? 'Asignadas = cierres acumulados del mes en mano de obra. Pendientes = carga actual de hoy.'
                 : filtroTecnico !== 'ALL'
                 ? `Mostrando únicamente órdenes asignadas al técnico: ${filtroTecnico}`
                 : filtroTipoOS !== 'ALL'
                 ? `Filtrado por tipo de orden: ${filtroTipoOS}`
-                : 'Monitoreo de órdenes consolidadas desde la base de datos operativa en tiempo real.'}
+                : 'Monitoreo de órdenes consolidadas en tiempo real.'}
             </div>
+            {filtroModoGrafico === 'asig_vs_pend' && porDiaMes.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                <span style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: colorAsignadas,
+                  background: isDark ? 'rgba(2, 132, 199, 0.18)' : 'rgba(2, 132, 199, 0.08)',
+                  padding: '3px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${isDark ? 'rgba(2, 132, 199, 0.35)' : 'rgba(2, 132, 199, 0.2)'}`,
+                }}>
+                  Total General Período: {fmtN(resumenTotalesGraficoAsigExcl.totOrdenes)} órdenes
+                </span>
+                <span style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ color: textMut }}>(</span>
+                  <span style={{ color: colorAsignadas, fontWeight: 500 }}>
+                    {fmtN(resumenTotalesGraficoAsigExcl.totAsignadas)} Asignadas
+                  </span>
+                  <span style={{ color: textMut }}>+</span>
+                  <span style={{ color: 'var(--err)', fontWeight: 500 }}>
+                    {fmtN(resumenTotalesGraficoAsigExcl.totExcluidas)} Excluidas
+                  </span>
+                  <span style={{ color: textMut }}>·</span>
+                  <span style={{ color: colorPendientes, fontWeight: 500 }}>
+                    {fmtN(resumenTotalesGraficoAsigExcl.totBarrios)} Barrios
+                  </span>
+                  <span style={{ color: textMut }}>)</span>
+                </span>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: textMut }}>Ordenar Ranking por:</span>
-            <select
-              value={criterioOrden}
-              onChange={e => setCriterioOrden(e.target.value as any)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: 6,
-                border: `1px solid ${borderCol}`,
-                background: 'var(--panel)',
-                color: textInk,
-                fontSize: 11.5,
-                fontWeight: 600,
-                outline: 'none',
-              }}
-            >
-              <option value="pendientes">Pendientes (Mayor a Menor)</option>
-              <option value="asignadas">Asignadas (Mayor a Menor)</option>
-              <option value="total">Total Órdenes</option>
-              <option value="suspension">Suspensión (TO501/504/503/506)</option>
-              <option value="reconexion">Reconexión (TO502)</option>
-            </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {filtroModoGrafico === 'asig_vs_pend' ? (
+              <button
+                onClick={() => setAjustarTotalesGrafico(prev => !prev)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 6,
+                  border: `1.5px solid ${ajustarTotalesGrafico ? colorAsignadas : borderCol}`,
+                  background: ajustarTotalesGrafico ? colorAsignadas : 'var(--panel)',
+                  color: ajustarTotalesGrafico ? '#ffffff' : textMut,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: ajustarTotalesGrafico ? (isDark ? '0 2px 8px rgba(2, 132, 199, 0.4)' : '0 2px 8px rgba(2, 132, 199, 0.25)') : 'none',
+                }}
+                title="Ajustar gráfica: ubicar subtotales en la mitad y Total General arriba y en la etiqueta"
+              >
+                <span>📊</span>
+                <span>{ajustarTotalesGrafico ? '✓ Totales Ajustados (Centro + General)' : 'Ajustar Totales (Centro + General)'}</span>
+              </button>
+            ) : (
+              <>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: textMut }}>Ordenar Ranking por:</span>
+                <select
+                  value={criterioOrden}
+                  onChange={e => setCriterioOrden(e.target.value as any)}
+                  style={{
+                    padding: '5px 8px',
+                    borderRadius: 6,
+                    border: `1px solid ${borderCol}`,
+                    background: 'var(--panel)',
+                    color: textInk,
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    outline: 'none',
+                  }}
+                >
+                  <option value="pendientes">Pendientes (Mayor a Menor)</option>
+                  <option value="asignadas">Asignadas (Mayor a Menor)</option>
+                  <option value="total">Total Órdenes</option>
+                  <option value="suspension">Suspensión (TO501/504/503/506)</option>
+                  <option value="reconexion">Reconexión (TO502)</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
 
@@ -2906,9 +3130,8 @@ export default function AsignacionOperativaPage() {
           )}
         </div>
 
-        {/* Desglose real de Pendientes por barrio -- solo existe para HOY (analitica.v_ordenes_dia
-            es un snapshot del momento actual, no guarda historial por día). Los demás días del
-            gráfico no tienen este desglose porque el dato nunca se guardó. */}
+        {/* Desglose real de Pendientes por barrio -- solo existe para HOY
+            (es un snapshot del momento actual, no guarda historial por día). */}
         {filtroModoGrafico === 'asig_vs_pend' && topBarriosPendientesHoy.length > 0 && (
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${borderCol}` }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: textInk, marginBottom: 2 }}>
@@ -3370,19 +3593,21 @@ export default function AsignacionOperativaPage() {
 
         <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las columnas y métricas &rarr;</div>
         <div className="table-responsive-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', minWidth: 1220, borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <table style={{ width: '100%', minWidth: 1420, borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${borderCol}`, textAlign: 'left', color: textMut, fontWeight: 700 }}>
                 <th style={{ padding: '10px 10px' }}>#</th>
                 <th style={{ padding: '10px 12px' }}>Barrio</th>
                 <th style={{ padding: '10px 10px' }}>Municipio</th>
                 <th style={{ padding: '10px 8px' }}>Zona</th>
-                <th style={{ padding: '10px 10px', textAlign: 'right', color: colorPendientes }}>Pendientes</th>
-                <th style={{ padding: '10px 10px', textAlign: 'right', color: colorAsignadas }}>Asignadas</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total Carga</th>
+                <th style={{ padding: '10px 10px', textAlign: 'right', color: colorAsignadas }} title="Órdenes asignadas a técnicos (incluye asignadas activas y ejecutadas en campo)">Asignadas</th>
+                <th style={{ padding: '10px 10px', textAlign: 'right', color: colorPendientes }} title="Órdenes en cola por asignar">Pendientes</th>
+                <th style={{ padding: '10px 10px', textAlign: 'right', color: textMut }} title="Órdenes excluidas de la operativa (restricciones de sistema y bajas por WebService)">Excluidas</th>
                 <th style={{ padding: '10px 10px', textAlign: 'right', color: colorSuspension }}>Suspensión</th>
                 <th style={{ padding: '10px 10px', textAlign: 'right', color: colorReconexion }}>Reconexión</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total Carga</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right' }}>Deuda Total</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#94a3b8' : '#64748b' }} title="Órdenes al día (0 facturas vencidas)">0 Fac.</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#cbd5e1' : '#475569' }} title="Órdenes con 1 factura vencida">1 Fac.</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#fbbf24' : '#b45309' }} title="Órdenes con 2 facturas vencidas">2 Fac.</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#fb923c' : '#c2410c' }} title="Órdenes con 3 facturas vencidas">3 Fac.</th>
@@ -3394,7 +3619,7 @@ export default function AsignacionOperativaPage() {
             <tbody>
               {rankingBarrios.length === 0 ? (
                 <tr>
-                  <td colSpan={16} style={{ padding: 24, textAlign: 'center', color: textMut }}>
+                  <td colSpan={18} style={{ padding: 24, textAlign: 'center', color: textMut }}>
                     No se encontraron barrios para los filtros seleccionados.
                   </td>
                 </tr>
@@ -3431,11 +3656,23 @@ export default function AsignacionOperativaPage() {
                       </td>
                       <td style={{ padding: '8px 10px', color: textInk }}>{b.municipio}</td>
                       <td style={{ padding: '8px 8px', color: textMut }}>{b.zona}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: textInk, fontSize: 13 }}>
+                        {fmtN(b.total)}
+                      </td>
+                      <td
+                        style={{ padding: '8px 10px', textAlign: 'right', color: colorAsignadas, fontWeight: 700 }}
+                        title={b.ejecutadas > 0 ? `${fmtN(b.asignadas)} asignadas (${fmtN(b.ejecutadas)} ejecutadas)` : undefined}
+                      >
+                        {fmtN(b.asignadas)}
+                      </td>
                       <td style={{ padding: '8px 10px', textAlign: 'right', color: colorPendientes, fontWeight: 700 }}>
                         {fmtN(b.pendientes)}
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', color: colorAsignadas, fontWeight: 700 }}>
-                        {fmtN(b.asignadas)}
+                      <td
+                        style={{ padding: '8px 10px', textAlign: 'right', color: textMut, fontWeight: b.excluidas > 0 ? 600 : 400 }}
+                        title={b.canceladas > 0 ? `${fmtN(b.excluidas)} excluidas (${fmtN(b.canceladas)} bajas WebService)` : undefined}
+                      >
+                        {b.excluidas > 0 ? fmtN(b.excluidas) : '—'}
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'right', color: colorSuspension, fontWeight: 600 }}>
                         {fmtN(b.suspension)}
@@ -3443,13 +3680,13 @@ export default function AsignacionOperativaPage() {
                       <td style={{ padding: '8px 10px', textAlign: 'right', color: colorReconexion, fontWeight: 600 }}>
                         {fmtN(b.reconexion)}
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: textInk, fontSize: 13 }}>
-                        {fmtN(b.total)}
-                      </td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', color: textMut, fontWeight: 600 }}>
                         {fmtCOP(b.deuda)}
                       </td>
-                      {/* Columnas separadas de Facturas Vencidas: 1, 2, 3 y >3 */}
+                      {/* Columnas separadas de Facturas Vencidas: 0, 1, 2, 3 y >3 */}
+                      <td style={{ padding: '8px 8px', textAlign: 'right', color: b.fac_venc_0 > 0 ? (isDark ? '#94a3b8' : '#64748b') : textMut, fontWeight: b.fac_venc_0 > 0 ? 700 : 400 }}>
+                        {b.fac_venc_0 > 0 ? fmtN(b.fac_venc_0) : '—'}
+                      </td>
                       <td style={{ padding: '8px 8px', textAlign: 'right', color: b.fac_venc_1 > 0 ? (isDark ? '#cbd5e1' : '#475569') : textMut, fontWeight: b.fac_venc_1 > 0 ? 700 : 400 }}>
                         {b.fac_venc_1 > 0 ? fmtN(b.fac_venc_1) : '—'}
                       </td>
@@ -3520,12 +3757,14 @@ export default function AsignacionOperativaPage() {
               <tfoot>
                 <tr style={{ borderTop: `2px solid ${borderCol}`, background: 'var(--panel)', fontWeight: 800 }}>
                   <td colSpan={4} style={{ padding: '10px 12px', color: textInk }}>TOTAL CONSOLIDADO</td>
-                  <td style={{ padding: '10px 10px', textAlign: 'right', color: colorPendientes }}>{fmtN(kpis.totalPendientes)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: textInk }}>{fmtN(kpis.total)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: colorAsignadas }}>{fmtN(kpis.totalAsignadas)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: colorPendientes }}>{fmtN(kpis.totalPendientes)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: textMut }}>{fmtN(kpis.totalExcluidas)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: colorSuspension }}>{fmtN(kpis.totalSuspension)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: colorReconexion }}>{fmtN(kpis.totalReconexion)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', color: textInk }}>{fmtN(kpis.total)}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: textMut }}>{fmtCOP(kpis.totalDeuda)}</td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#94a3b8' : '#64748b' }}>{fmtN(kpis.totalFacVenc0)}</td>
                   <td style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#cbd5e1' : '#475569' }}>{fmtN(kpis.totalFacVenc1)}</td>
                   <td style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#fbbf24' : '#b45309' }}>{fmtN(kpis.totalFacVenc2)}</td>
                   <td style={{ padding: '10px 8px', textAlign: 'right', color: isDark ? '#fb923c' : '#c2410c' }}>{fmtN(kpis.totalFacVenc3)}</td>
@@ -3658,7 +3897,7 @@ export default function AsignacionOperativaPage() {
         </div>
       )}
 
-      {/* MODAL 2: DETALLE INDIVIDUAL DE ÓRDENES (v_ordenes_dia) */}
+      {/* MODAL 2: DETALLE INDIVIDUAL DE ÓRDENES */}
       {modalDetalleOpen && (
         <div style={{
           position: 'fixed',
@@ -3691,7 +3930,7 @@ export default function AsignacionOperativaPage() {
             }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 16.5, fontWeight: 800, color: textInk }}>
-                  Detalle Individual de Órdenes (analitica.v_ordenes_dia)
+                  Detalle Individual de Órdenes
                 </div>
                 <div style={{ fontSize: 12, color: textMut, marginTop: 2 }}>
                   {barrioModal ? `Filtrado por Barrio: ${barrioModal}` : 'Listado general de órdenes del día operativo'}
@@ -3724,7 +3963,7 @@ export default function AsignacionOperativaPage() {
             <div style={{ padding: '14px 18px', overflowY: 'auto', flex: 1 }}>
               {loadingDetalle ? (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: textMut, fontSize: 14 }}>
-                  Cargando órdenes desde analitica.v_ordenes_dia...
+                  Cargando órdenes...
                 </div>
               ) : ordenesDetalle.length === 0 ? (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: textMut, fontSize: 14 }}>

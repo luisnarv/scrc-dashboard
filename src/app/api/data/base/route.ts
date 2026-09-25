@@ -27,8 +27,8 @@ export async function GET(request: Request) {
   try {
     const data = await getDashboardDataV2(mes || undefined);
     return NextResponse.json(data);
-  } catch (error) {
-    console.error('DB Error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  } catch {
+    console.error('Error al procesar la solicitud');
+    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
   }
 }

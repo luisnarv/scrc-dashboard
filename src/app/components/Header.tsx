@@ -9,6 +9,7 @@ export const ALL_NAV_ROUTES = [
   { path: '/operativo', label: 'Operativo' },
   { path: '/tecnicos', label: 'Cantidades Técnicos' },
   { path: '/tecnico/productivo', label: 'Producción Técnico' },
+  { path: '/cierre_diario', label: 'Cierre Diario' },
   { path: '/informes', label: 'Informes' },
 ];
 
@@ -24,7 +25,7 @@ export default function Header() {
           <img id="header-logo" src="/ises_symbol.avif" alt="ISES" className="brand-logo" />
           <div>
             <h1 id="header-title">Dashboard Ejecutivo SCRC</h1>
-            <div id="header-subtitle" className="sub">Gerencia · Direcciones · Líderes operativos — Producción operativa (SIPREM) &amp; Realidad financiera (OTC)</div>
+            <div id="header-subtitle" className="sub">Gerencia · Direcciones · Líderes operativos — Producción operativa &amp; Realidad financiera</div>
           </div>
         </div>
         <div id="header-controls" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

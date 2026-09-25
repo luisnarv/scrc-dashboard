@@ -80,8 +80,8 @@ export async function GET() {
 
     const rows = dias.flatMap(({ fecha }) => cache.get(fecha)?.rows ?? []);
     return NextResponse.json({ mesPendientesPorDia: rows });
-  } catch (error) {
-    console.error('Error en /api/data/cierre_diario_pendientes:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  } catch {
+    console.error('Error al procesar la solicitud');
+    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
   }
 }

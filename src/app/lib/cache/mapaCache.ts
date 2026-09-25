@@ -2,7 +2,7 @@ import { idbGet, idbPut, idbClear } from './idb';
 import { STORE_MAPA, TTL_MAPA_MS } from './config';
 
 // Cache local del Mapa Operativo Detallado, por combinacion mes|zona|proy.
-// Reabrir el modal dentro del TTL sirve desde IndexedDB sin consultar la BD.
+// Reabrir el modal dentro del TTL sirve directamente desde IndexedDB.
 interface MapaEntry {
   key: string;
   pts: any[];

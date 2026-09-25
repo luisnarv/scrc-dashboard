@@ -150,7 +150,7 @@ export async function getDashboardDataV2(mes?: string) {
   // 'v\s*s\s*:' -- evita evaluar el regex por fila en cada consulta del dashboard.
   const baseMoCond = "mo.id_tecnico IS NOT NULL AND mo.tiene_vs AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'";
   // Rango sargable sobre fecha_cierre (en vez de to_char(fecha_cierre,'YYYY-MM') = $1):
-  // envolver la columna en una función impide que Postgres use idx_mo_fecha_cierre y
+  // envolver la columna en una función impide el uso del índice y
   // fuerza un sequential scan completo. Con el rango, el índice sí se puede usar.
   const fechaCond = activo
     ? `WHERE mo.fecha_cierre >= ($1 || '-01')::date AND mo.fecha_cierre < ($1 || '-01')::date + interval '1 month' AND ${baseMoCond}`
@@ -479,7 +479,7 @@ export async function getDashboardDataV2(mes?: string) {
       horarioTec: horarioTecRes.rows,
     };
   } catch (error) {
-    console.error('DB Error en V2:', error);
+    console.error('Error al procesar datos');
     throw error;
   }
 }
@@ -573,7 +573,7 @@ export async function getMapDataV2(mes?: string, zona?: string, proy?: string, p
       filtros: listsRes.rows[0]
     };
   } catch (err) {
-    console.error('Error fetching map data V2:', err);
+    console.error('Error al procesar mapa');
     throw err;
   }
 }
@@ -614,14 +614,12 @@ export async function getMonthsDataV2() {
       evolutivo: evolutivoRes.rows,
     };
   } catch (err) {
-    console.error('Error fetching months data V2:', err);
+    console.error('Error al procesar meses');
     throw err;
   }
 }
 
-// Órdenes COMPLETAS de un barrio (o de los barrios homologados) dentro de la
-// ventana mes/zona. V2: lee historico_mo, parte gps -> la/lo y localidad_barrio
-// -> barrio, y cruza con maestro_estados para el estado OFICIAL (por subacción).
+// Órdenes completas de un barrio dentro de la ventana seleccionada.
 //   getBarrioDataV2('2026-07', 'ALL', 'SANTA HELENA||EL RECREO')
 export async function getBarrioDataV2(mes?: string, zona?: string, barriosParam?: string): Promise<{ rows: unknown[] }> {
   const lista = (barriosParam || '').split('||').map(s => s.trim()).filter(Boolean);

@@ -112,12 +112,12 @@ export default function GerencialPage() {
       </div>
 
       <div className="section" style={{ marginTop: 24, paddingBottom: 24, borderBottom: '2px solid var(--border)' }}>
-        <h2>💰 2. Resultado Financiero (Real OTC)</h2>
+        <h2>💰 2. Resultado Financiero Real</h2>
         <div className="sec-sub">Información financiera extraída de la contabilidad</div>
         <div className="kpi-grid">
-          <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(d.ingresoReal)} help="Ingreso contable real facturado." />
-          <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(d.costoReal)} help="Costo contable real." />
-          <KpiCard cls={d.margenReal < 0 ? 'err' : 'ok'} lbl="Margen Real (OTC)" val={fmtCOP(d.margenReal)} help="Ingreso Real - Costo Real." />
+          <KpiCard cls="otc" lbl="Ingreso Real" val={fmtCOP(d.ingresoReal)} help="Ingreso contable real facturado." />
+          <KpiCard cls="otc" lbl="Costo Real" val={fmtCOP(d.costoReal)} help="Costo contable real." />
+          <KpiCard cls={d.margenReal < 0 ? 'err' : 'ok'} lbl="Margen Real" val={fmtCOP(d.margenReal)} help="Ingreso Real - Costo Real." />
           <KpiCard cls="err" lbl="Descuentos Operativos" val={fmtCOP(d.perdidasOperativas)} help="Valor de las órdenes perdidas en operación (Impacto potencial)." />
         </div>
       </div>
@@ -126,7 +126,7 @@ export default function GerencialPage() {
         <h2>⚖️ 3. Variaciones (Real vs Estimado)</h2>
         <div className="sec-sub">Brecha entre la Producción Operativa y el Ingreso Contable</div>
         <div className="kpi-grid c2">
-          <KpiCard cls="neu" lbl="Diferencia Absoluta (Brecha)" val={fmtCOP(d.brechaAbsoluta)} help="Ingreso Real OTC - Producción Valorizada Operativa." />
+          <KpiCard cls="neu" lbl="Diferencia Absoluta (Brecha)" val={fmtCOP(d.brechaAbsoluta)} help="Ingreso Real - Producción Valorizada Operativa." />
           <KpiCard cls="neu" lbl="Diferencia Porcentual" val={fmtPct(d.brechaPct)} help="% de desviación sobre la Producción Valorizada." />
         </div>
       </div>

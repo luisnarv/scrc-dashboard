@@ -260,6 +260,7 @@ export async function GET(request: Request) {
         END as tecnico,
         COUNT(*)::int as cantidad,
         SUM(NULLIF(deuda, '')::numeric) as deuda_total,
+        COUNT(*) FILTER (WHERE facturas_vencidas = 0)::int as fac_venc_0,
         COUNT(*) FILTER (WHERE facturas_vencidas = 1)::int as fac_venc_1,
         COUNT(*) FILTER (WHERE facturas_vencidas = 2)::int as fac_venc_2,
         COUNT(*) FILTER (WHERE facturas_vencidas = 3)::int as fac_venc_3,
@@ -488,8 +489,8 @@ export async function GET(request: Request) {
       asignadasTotal: resAsigTotal.rows,
       mesPorDia: resMesPorDia.rows,
     });
-  } catch (error) {
-    console.error('Error en /api/data/cierre_diario:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  } catch {
+    console.error('Error al procesar la solicitud');
+    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
   }
 }

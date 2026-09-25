@@ -38,7 +38,7 @@ export default function DashboardGate({ children }: { children: ReactNode }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/ises_symbol.avif" alt="" className="load-logo load-logo-static" />
         <div className="load-msg">Sin datos para mostrar</div>
-        <div className="load-hint">La consulta no devolvió registros.</div>
+        <div className="load-hint">No se encontraron registros.</div>
       </div>
     );
   }

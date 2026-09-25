@@ -17,7 +17,7 @@ export const STORE_MONTHS = 'months';   // key = 'YYYY-MM'
 export const STORE_META = 'meta';       // key = string
 export const STORE_MAPA = 'mapa';        // key = 'mes|zona|proy'
 
-// TTL del mapa: 30 min. Reabrir el modal dentro de esa ventana no consulta la BD.
+// TTL del mapa: 30 min. Reabrir el modal dentro de esa ventana usa cache.
 export const TTL_MAPA_MS = 30 * 60 * 1000;
 
 // Pausa entre meses durante la sincronizacion en segundo plano (progresiva).

@@ -114,7 +114,7 @@ export default function ResumenPage() {
     const ingXbrig = brigadas ? ingresoReal / brigadas : 0;
     const costoXbrig = brigadas ? costoPeriodo / brigadas : 0;
 
-    // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
+    // Ing. Eléctrica: ingreso registrado. Contable N/D sin WIP.
     const ingElec = ingresoElectrica(cosF);
 
     // Evolutivos 12m
@@ -238,13 +238,13 @@ export default function ResumenPage() {
         </div>
       )}
 
-      {/* ===== KPIS FINANCIEROS (OTC) ===== */}
+      {/* ===== KPIS FINANCIEROS ===== */}
       <div className="section" style={{ marginTop: 24 }}>
-        <h2>💰 Resultado Financiero Real (Fuente: OTC)</h2>
+        <h2>💰 Resultado Financiero Real</h2>
         <div className="sec-sub">Ventana seleccionada: {fmtRangoMeses(selWin)}</div>
         <div className="kpi-grid">
-          <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso real contable." />
-          <KpiCard cls="otc" lbl="Costo Real (OTC)" val={fmtCOP(pOTC.costos || 0)} help="Costo real contable." />
+          <KpiCard cls="otc" lbl="Ingreso Real" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso real contable." />
+          <KpiCard cls="otc" lbl="Costo Real" val={fmtCOP(pOTC.costos || 0)} help="Costo real contable." />
           <KpiCard cls={pOTC.utilidad && pOTC.utilidad < 0 ? 'err' : 'ok'} lbl="Margen Real" val={fmtCOP(pOTC.utilidad || 0)} help="Ingreso Real - Costo Real." />
           <KpiCard cls={pOTC.margen && pOTC.margen < 0 ? 'err' : 'ok'} lbl="Margen %" val={pOTC.margen !== null ? fmtPct(pOTC.margen) : '—'} help="Rentabilidad real del periodo." />
         </div>
@@ -272,8 +272,8 @@ export default function ResumenPage() {
             <div className="sec-sub">Diferencia entre lo ejecutado valorizado y lo facturado real</div>
             <div className="kpi-grid c2">
               <KpiCard cls="sip" lbl="Producción Valorizada (Operación)" val={fmtCOP(ingresoReal)} help="Valor teórico del trabajo realizado en terreno (Tarifario)." detalle={detProduccion} />
-              <KpiCard cls="otc" lbl="Ingreso Real (OTC)" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso contable facturado." />
-              <KpiCard cls="neu" lbl="Brecha de Ingresos" val={fmtCOP((pOTC.ingresos || 0) - ingresoReal)} help="Diferencia absoluta entre OTC y Operación." />
+              <KpiCard cls="otc" lbl="Ingreso Real" val={fmtCOP(pOTC.ingresos || 0)} help="Ingreso contable facturado." />
+              <KpiCard cls="neu" lbl="Brecha de Ingresos" val={fmtCOP((pOTC.ingresos || 0) - ingresoReal)} help="Diferencia absoluta entre lo real y la operación." />
               <KpiCard cls="neu" lbl="Desviación %" val={ingresoReal ? fmtPct(((pOTC.ingresos || 0) - ingresoReal) / ingresoReal) : '—'} help="Desviación porcentual." />
             </div>
           </div>

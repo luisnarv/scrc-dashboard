@@ -125,7 +125,7 @@ const isDisponibleType = (tLabel: string) => {
   );
 };
 
-/* ---------------- TARJETA DE CANTIDAD DE BRIGADAS POR TIPO (BASE DE DATOS) ---------------- */
+/* ---------------- TARJETA DE CANTIDAD DE BRIGADAS POR TIPO ---------------- */
 function CantidadBrigadaCard({ brig, porDia }: { brig: CantidadBrigadaCardData; porDia: boolean }) {
   const perLabel = porDia ? '/día' : '/mes';
   const maxVal = Math.max(...brig.monthlyData.map(m => m.val), 1);
@@ -831,7 +831,7 @@ export default function TecnicosPage() {
     setTipoFiltro('ALL');
   }
 
-  // Filtrado de tarjetas de cantidad de brigadas por tipo (Base de Datos)
+  // Filtrado de tarjetas de cantidad de brigadas por tipo
   const filteredCantBrigadasCards = useMemo(() => {
     let arr = cantBrigadasCardsData.slice();
     if (categoriaFiltro === 'OPERATIVA') {
@@ -1038,7 +1038,7 @@ export default function TecnicosPage() {
         </div>
       </div>
 
-      {/* SECCIÓN 1: TARJETAS DE CANTIDAD DE BRIGADAS POR TIPO (BASE DE DATOS) CON NUEVO DISEÑO Y TENDENCIA */}
+      {/* SECCIÓN 1: TARJETAS DE CANTIDAD DE BRIGADAS POR TIPO CON NUEVO DISEÑO Y TENDENCIA */}
       {filteredCantBrigadasCards.length > 0 && (
         <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={secH(INDIGO)}>

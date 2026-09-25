@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Dashboard Ejecutivo SCRC',
-  description: 'Gerencia — Direcciones — Líderes operativos — Producción operativa (SIPREM) & Realidad financiera (OTC)',
+  description: 'Gerencia — Direcciones — Líderes operativos — Producción operativa & Realidad financiera',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

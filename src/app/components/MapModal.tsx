@@ -58,7 +58,7 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
         setLoading(false);
         MapaCache.put(localMes, zona, proy, pts, stats, filtros, proceso);
       })
-      .catch(e => { if (!ignore) { console.error("Error cargando puntos:", e); setLoading(false); } });
+      .catch(() => { if (!ignore) { console.error("Error cargando puntos"); setLoading(false); } });
 
     (async () => {
       const cached = await MapaCache.get(localMes, zona, proy, proceso).catch(() => null);
@@ -78,17 +78,17 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
     fetch('/geojson/atlantico_municipios.geojson')
       .then(r => r.json())
       .then(d => !ignore && setGeoMuni(d))
-      .catch(e => console.error("Error cargando municipios:", e));
+      .catch(() => console.error("Error cargando municipios"));
 
     fetch('/geojson/atlantico_barrios.geojson')
       .then(r => r.json())
       .then(d => !ignore && setGeoBarrios(d))
-      .catch(e => console.error("Error cargando barrios:", e));
+      .catch(() => console.error("Error cargando barrios"));
 
     fetch('/geojson/zonas_atlantico.geojson')
       .then(r => r.json())
       .then(d => !ignore && setGeoZonas(d))
-      .catch(e => console.error("Error cargando zonas:", e));
+      .catch(() => console.error("Error cargando zonas"));
 
     return () => { ignore = true; };
   }, [localMes, zona, proy, proceso]);

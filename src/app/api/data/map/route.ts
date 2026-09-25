@@ -23,8 +23,8 @@ export async function GET(request: Request) {
   try {
     const data = await getMapDataV2(mes || undefined, zona || undefined, undefined, proceso || undefined);
     return NextResponse.json(data);
-  } catch (err) {
-    console.error('Error fetching map data:', err);
-    return NextResponse.json({ error: 'DB Error' }, { status: 500 });
+  } catch {
+    console.error('Error al procesar la solicitud');
+    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
   }
 }

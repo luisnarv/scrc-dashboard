@@ -132,8 +132,8 @@ export async function GET(request: Request) {
 
     const res = await query(sql, params);
     return NextResponse.json({ rows: res.rows, porTecnico });
-  } catch (error) {
-    console.error('Informe digitación error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  } catch {
+    console.error('Error al procesar la solicitud');
+    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
   }
 }

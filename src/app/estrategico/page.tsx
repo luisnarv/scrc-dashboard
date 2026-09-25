@@ -105,7 +105,7 @@ export default function ResumenPage() {
     const ingXbrig = brigadas ? ingresoReal / brigadas : 0;
     const costoXbrig = brigadas ? costoPeriodo / brigadas : 0;
 
-    // Ing. Eléctrica (OTC): ingreso registrado. Contable N/D sin WIP.
+    // Ing. Eléctrica: ingreso registrado. Contable N/D sin WIP.
     const ingElec = ingresoElectrica(cosF);
 
     const rawBase = raw.raw.filter(filtBase);
@@ -180,7 +180,7 @@ export default function ResumenPage() {
     const winB = aggVentana(raw.raw, prevWin, filtBase);
     const winIncompleto = prevWin.length < selWin.length;
 
-    // Series Financieras Reales (OTC)
+    // Series Financieras Reales
     const evolutivoOTC = meses12.map(m => {
       const cosM = cosBase.filter(c => c.Mes === m);
       const agg = otcAgg(cosM);
@@ -221,8 +221,8 @@ export default function ResumenPage() {
       };
     });
 
-    // Series de Combustible 12m (Gasto Total OTC, Brigadas SIPREM, Ratio por Brigada)
-    // Se toma la sumatoria neta contable de la OTC (igual que la tabla dinámica de Excel),
+    // Series de Combustible 12m (Gasto Total, Brigadas, Ratio por Brigada)
+    // Se toma la sumatoria neta contable,
     // cancelando automáticamente facturas y sus reversiones de provisión.
     const isCombustible = (cat: unknown, cuenta?: unknown) => {
       const s = (String(cat || '') + ' ' + String(cuenta || '')).toUpperCase();
@@ -470,7 +470,7 @@ export default function ResumenPage() {
       labels: meses12,
       datasets: [
         {
-          label: 'Ingreso Real (OTC)',
+          label: 'Ingreso Real',
           data: evolutivoOTC.map((x: any) => x.ing),
           borderColor: CFG.otc,
           backgroundColor: CFG.otc + '33',
@@ -632,7 +632,7 @@ export default function ResumenPage() {
         },
         {
           type: 'line' as const,
-          label: 'Gasto Total Combustible (OTC)',
+          label: 'Gasto Total Combustible',
           data: evolutivoCombustible.map((x: any) => x.gastoTotal),
           borderColor: '#C62828',
           backgroundColor: 'rgba(198, 40, 40, 0.08)',
@@ -733,9 +733,9 @@ export default function ResumenPage() {
   const combustibleTable = {
     columns: [
       'Mes',
-      'Gasto Neto Combustible (OTC)',
+      'Gasto Neto Combustible',
       'Registros Contables',
-      'Brigadas Activas (SIPREM)',
+      'Brigadas Activas',
       'Ratio Promedio / Brigada',
       'Var % Gasto vs Mes Ant.',
       'Var % Ratio vs Mes Ant.',
@@ -848,15 +848,15 @@ export default function ResumenPage() {
         <div>
           <div className="section" style={{ borderTop: `4px solid ${CFG.otc}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 FINANCIERO</h2>
-            <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales extraídos de la contabilidad (Fuente: OTC)</div>
+            <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales consolidados de contabilidad</div>
             <div style={{ display: 'grid', gap: 16 }}>
-              <ChartCard id="r-otc-ing" title="Ingreso Real (OTC)" subtitle="Facturación contable consolidada: Ene-May (Facturación) · Jun-Jul (Facturación provisional)" config={otcIngCfg as never} height="short" />
-              <ChartCard id="r-otc-cost" title="Costo Real (%) (OTC)" subtitle="Ratio de costo sobre ingresos: Costos / Ingresos" config={otcCostCfg as never} height="short" />
+              <ChartCard id="r-otc-ing" title="Ingreso Real" subtitle="Facturación contable consolidada: Ene-May (Facturación) · Jun-Jul (Facturación provisional)" config={otcIngCfg as never} height="short" />
+              <ChartCard id="r-otc-cost" title="Costo Real (%)" subtitle="Ratio de costo sobre ingresos: Costos / Ingresos" config={otcCostCfg as never} height="short" />
               <ChartCard id="r-otc-mar" title="Margen Real (%)" subtitle="Rentabilidad financiera neta: (Ingresos - Costos) / Ingresos" config={otcMargenCfg as never} height="short" />
               <ChartCard
                 id="r-otc-combustible"
                 title="Evolutivo de Combustible y Brigadas"
-                subtitle="Gasto total (OTC), brigadas activas (SIPREM) y ratio de combustible por brigada"
+                subtitle="Gasto total, brigadas activas y ratio de combustible por brigada"
                 config={combustibleCfg as never}
                 height="normal"
                 hasDetail
