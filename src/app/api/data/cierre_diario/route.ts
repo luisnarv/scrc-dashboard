@@ -34,11 +34,43 @@ const MO_CERRADA_HOY_WHERE = `fecha_cierre = CURRENT_DATE
 // Rango (no DATE_TRUNC sobre la columna): permite usar el índice de fecha_cierre -- pasó de 17s a <1s.
 const MO_MES_CUALQUIERA_WHERE = `fecha_cierre >= DATE_TRUNC('month', CURRENT_DATE) AND fecha_cierre < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'`;
 
-const V_ORD_CTE = `v_ord AS (
+// Mes "actual" para las consultas de historico_mo que agregan todo el mes (gráfico por día, ranking
+// mensual de barrios, Asignadas combinado): normalmente es el mes calendario de hoy, pero los
+// primeros días de cada mes la ETL de historico_mo todavía no ha cargado nada (ver el chat: el 1 de
+// octubre había 0 filas) -- sin este resguardo esas secciones se quedarían en blanco hasta que
+// empezara a llegar data nueva. Si el mes calendario de hoy no tiene NINGÚN cierre todavía, se usa
+// el mes del cierre más reciente en vez de forzar un mes vacío.
+async function resolveMesBase(): Promise<{ inicio: string; fin: string }> {
+  const sql = `
+    SELECT
+      TO_CHAR(mes_base, 'YYYY-MM-DD') as inicio,
+      TO_CHAR(mes_base + INTERVAL '1 month', 'YYYY-MM-DD') as fin
+    FROM (
+      SELECT CASE
+        WHEN EXISTS (
+          SELECT 1 FROM dbanalitica.historico_mo
+          WHERE fecha_cierre >= DATE_TRUNC('month', CURRENT_DATE)
+          LIMIT 1
+        ) THEN DATE_TRUNC('month', CURRENT_DATE)
+        ELSE DATE_TRUNC('month', COALESCE((SELECT MAX(fecha_cierre) FROM dbanalitica.historico_mo), CURRENT_DATE))
+      END AS mes_base
+    ) x;
+  `;
+  const res = await query(sql);
+  return res.rows[0];
+}
+
+const BUILD_V_ORD_CTE = (fechasParam: string | null): { cte: string, params: string[] } => {
+  if (!fechasParam || fechasParam === 'HOY') {
+    return {
+      cte: `v_ord AS (
       SELECT
         v.dia_operativo, v.proyecto_id, v.proyecto, v.zona, v.actividad, v.orden, v.nic,
         v.exclusiones, v.resultado, v.tipo_orden, v.sector, v.prioridad, v.municipio, v.barrio,
         v.deuda, v.tecnico, v.lat, v.lng, v.actualizado_en,
+        -- Proceso: 'GESTOR' (Multifamiliar) o 'SCR' (todo lo demás) -- mismo criterio que el
+        -- filtro global "Proceso" del resto del dashboard (ver utils/filters.ts: BRIG_GESTOR).
+        CASE WHEN v.actividad = 'MULTIFAMILIAR SCR' THEN 'GESTOR' ELSE 'SCR' END as proceso,
         CASE
           WHEN mo.orden IS NOT NULL AND COALESCE(mo.valor_orden, 0) > 0 THEN 'EJECUTADA'
           WHEN mo.orden IS NOT NULL THEN 'BAJA_POR_WEBSERVICE'
@@ -87,6 +119,7 @@ const V_ORD_CTE = `v_ord AS (
         NULL::double precision as lat,
         NULL::double precision as lng,
         (h.fecha_cierre + COALESCE(h.hora_fin, '00:00'::time))::timestamptz as actualizado_en,
+        CASE WHEN h.brigada_homologada = 'Gestor Integral Multi' THEN 'GESTOR' ELSE 'SCR' END as proceso,
         CASE WHEN COALESCE(h.valor_orden, 0) > 0 THEN 'EJECUTADA' ELSE 'BAJA_POR_WEBSERVICE' END as estado,
         CASE WHEN COALESCE(h.valor_orden, 0) > 0 THEN 'Ejecutada' ELSE 'Baja por WebService' END as estado_legible,
         NULL::integer as facturas_vencidas
@@ -94,10 +127,53 @@ const V_ORD_CTE = `v_ord AS (
       WHERE h.fecha_cierre = CURRENT_DATE
         AND h.estado_norm IN ('Efectiva', 'Fallida', 'Perdida', 'Sin Clasificar')
         AND NOT EXISTS (SELECT 1 FROM analitica.v_ordenes_dia v2 WHERE v2.orden = h.orden)
-    )`;
+    )`,
+      params: []
+    };
+  } else {
+    const fechas = fechasParam.split(',').map(f => f.trim());
+    const inClause = fechas.map((_, i) => `$${i + 1}::date`).join(', ');
+    return {
+      cte: `v_ord AS (
+      SELECT
+        h.fecha_cierre as dia_operativo,
+        NULL::integer as proyecto_id,
+        CASE
+          WHEN UPPER(TRIM(COALESCE(NULLIF(h.zona_maestro, ''), REPLACE(UPPER(h.zona), 'ATLANTICO ', '')))) = 'SUR'
+            THEN 'Sur' ELSE 'Norte-Centro'
+        END as proyecto,
+        UPPER(TRIM(COALESCE(NULLIF(h.zona_maestro, ''), REPLACE(UPPER(h.zona), 'ATLANTICO ', '')))) as zona,
+        'SCR'::text as actividad,
+        h.orden,
+        h.nic,
+        NULL::text as exclusiones,
+        NULL::text as resultado,
+        h.tipo_os as tipo_orden,
+        NULL::text as sector,
+        NULL::text as prioridad,
+        h.municipio,
+        h.localidad_barrio as barrio,
+        COALESCE(h.deuda_cierre::text, '0') as deuda,
+        COALESCE(NULLIF(TRIM(h.tecnico), ''), 'No asignado') as tecnico,
+        NULL::double precision as lat,
+        NULL::double precision as lng,
+        (h.fecha_cierre + COALESCE(h.hora_fin, '00:00'::time))::timestamptz as actualizado_en,
+        CASE WHEN h.brigada_homologada = 'Gestor Integral Multi' THEN 'GESTOR' ELSE 'SCR' END as proceso,
+        CASE WHEN COALESCE(h.valor_orden, 0) > 0 THEN 'EJECUTADA' ELSE 'BAJA_POR_WEBSERVICE' END as estado,
+        CASE WHEN COALESCE(h.valor_orden, 0) > 0 THEN 'Ejecutada' ELSE 'Baja por WebService' END as estado_legible,
+        NULL::integer as facturas_vencidas
+      FROM dbanalitica.historico_mo h
+      WHERE h.fecha_cierre IN (${inClause})
+        AND h.estado_norm IN ('Efectiva', 'Fallida', 'Perdida', 'Sin Clasificar')
+    )`,
+      params: fechas
+    };
+  }
+};
 
 export async function GET(request: Request) {
   const url = new URL(request.url, 'http://localhost:3000');
+  const fechasParam = url.searchParams.get('fechas');
   const proy = url.searchParams.get('proy');
   const zona = url.searchParams.get('zona');
   const municipio = url.searchParams.get('municipio');
@@ -107,13 +183,16 @@ export async function GET(request: Request) {
   const estado = url.searchParams.get('estado');
   const tecnico = url.searchParams.get('tecnico');
   const q = url.searchParams.get('q');
+  const proceso = url.searchParams.get('proceso');
   const detalle = url.searchParams.get('detalle') === 'true';
+
+  const cteResult = BUILD_V_ORD_CTE(fechasParam);
 
   try {
     // Si solicitan el detalle completo de órdenes (equivalente a v_ordenes_dia, ya con el ajuste de MO)
     if (detalle) {
       const conditions: string[] = [];
-      const params: unknown[] = [];
+      const params: unknown[] = [...cteResult.params];
 
       if (proy && proy !== 'ALL') {
         params.push(proy);
@@ -162,16 +241,20 @@ export async function GET(request: Request) {
         params.push(`%${q.trim()}%`);
         conditions.push(`(orden ILIKE $${params.length} OR nic ILIKE $${params.length} OR barrio ILIKE $${params.length})`);
       }
+      if (proceso && proceso !== 'ALL') {
+        conditions.push(`proceso = '${proceso === 'GESTOR' ? 'GESTOR' : 'SCR'}'`);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const sqlDetalle = `
-        WITH ${V_ORD_CTE}
+        WITH ${cteResult.cte}
         SELECT
           dia_operativo::text as dia_operativo,
           proyecto_id,
           proyecto,
           zona,
           actividad,
+          proceso,
           orden,
           nic,
           estado,
@@ -236,8 +319,8 @@ export async function GET(request: Request) {
     // Consulta 2: Desglose multidimensional (por barrio, OS, estado y técnico) -- estado/estado_legible
     // ya vienen ajustados por mano de obra desde v_ord.
     const sqlOrdenesAgrupadas = `
-      WITH ${V_ORD_CTE}
-      SELECT
+      WITH ${cteResult.cte}
+        SELECT
         proyecto,
         zona,
         municipio,
@@ -258,6 +341,7 @@ export async function GET(request: Request) {
           WHEN tecnico IS NOT NULL AND TRIM(tecnico) != '' AND TRIM(tecnico) != 'No asignado' THEN TRIM(tecnico)
           ELSE 'No asignado'
         END as tecnico,
+        proceso,
         COUNT(*)::int as cantidad,
         SUM(NULLIF(deuda, '')::numeric) as deuda_total,
         COUNT(*) FILTER (WHERE facturas_vencidas = 0)::int as fac_venc_0,
@@ -266,14 +350,14 @@ export async function GET(request: Request) {
         COUNT(*) FILTER (WHERE facturas_vencidas = 3)::int as fac_venc_3,
         COUNT(*) FILTER (WHERE facturas_vencidas > 3)::int as fac_venc_mas_3
       FROM v_ord
-      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
       ORDER BY cantidad DESC;
     `;
 
     // Consulta 3: Lista de técnicos activos con métricas de asignación y especialidad
     const sqlTecnicos = `
-      WITH ${V_ORD_CTE}
-      SELECT
+      WITH ${cteResult.cte}
+        SELECT
         TRIM(tecnico) as tecnico,
         proyecto,
         zona,
@@ -291,8 +375,8 @@ export async function GET(request: Request) {
 
     // Consulta 4: agrupada por hora y barrio para la vista temporal
     const sqlHoras = `
-      WITH ${V_ORD_CTE}
-      SELECT
+      WITH ${cteResult.cte}
+        SELECT
         TO_CHAR(actualizado_en AT TIME ZONE 'America/Bogota', 'HH24:00') as hora,
         proyecto,
         zona,
@@ -310,8 +394,8 @@ export async function GET(request: Request) {
 
     // Consulta 5: Resumen global por estados legibles
     const sqlResumenDia = `
-      WITH ${V_ORD_CTE}
-      SELECT
+      WITH ${cteResult.cte}
+        SELECT
         estado_legible,
         COUNT(*)::int as cantidad
       FROM v_ord
@@ -321,8 +405,8 @@ export async function GET(request: Request) {
 
     // Consulta 6: Metas de órdenes, asignación y cumplimiento por Zona y Tipo de Brigada
     const sqlMetasBrigadas = `
-      WITH ${V_ORD_CTE},
-      tec_brig AS (
+      WITH ${cteResult.cte},
+        tec_brig AS (
         SELECT DISTINCT ON (UPPER(TRIM("Tecnico")))
           UPPER(TRIM("Tecnico")) as tecnico,
           "Tipo Brigada" as tipo_brigada,
@@ -347,6 +431,11 @@ export async function GET(request: Request) {
       ORDER BY asignadas DESC;
     `;
 
+    // Mes efectivo para las 3 consultas de abajo (ver resolveMesBase): el calendario de hoy, salvo
+    // que todavía no tenga ningún cierre cargado, en cuyo caso cae al último mes con datos reales.
+    const mesBase = await resolveMesBase();
+    const MES_ACTUAL_WHERE = `fecha_cierre >= '${mesBase.inicio}'::date AND fecha_cierre < '${mesBase.fin}'::date`;
+
     // Consulta 7: Cierres del MES completo por barrio -- alimenta el gráfico "Comparativa de
     // Órdenes Asignadas vs. Pendientes por Barrio" cuando el usuario activa "Ver todo el mes"
     // (las Pendientes ahí siguen siendo las de HOY, porque "pendiente" es un concepto de ahora
@@ -366,20 +455,21 @@ export async function GET(request: Request) {
           localidad_barrio as barrio,
           tipo_os,
           orden,
-          deuda_cierre
+          deuda_cierre,
+          CASE WHEN brigada_homologada = 'Gestor Integral Multi' THEN 'GESTOR' ELSE 'SCR' END as proceso
         FROM dbanalitica.historico_mo
-        WHERE fecha_cierre >= DATE_TRUNC('month', CURRENT_DATE) AND fecha_cierre < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+        WHERE ${MES_ACTUAL_WHERE}
           AND estado_norm IN ('Efectiva', 'Fallida', 'Perdida')
           AND localidad_barrio IS NOT NULL AND TRIM(localidad_barrio) != ''
       )
       SELECT
-        proyecto, zona, municipio, barrio,
+        proyecto, zona, municipio, barrio, proceso,
         COUNT(DISTINCT orden)::int as asignadas,
         COUNT(DISTINCT orden) FILTER (WHERE tipo_os IN ('TO501', 'TO504', 'TO503', 'TO506'))::int as suspension,
         COUNT(DISTINCT orden) FILTER (WHERE tipo_os = 'TO502')::int as reconexion,
         SUM(COALESCE(deuda_cierre, 0)) as deuda
       FROM mo_mes
-      GROUP BY 1, 2, 3, 4
+      GROUP BY 1, 2, 3, 4, 5
       ORDER BY asignadas DESC;
     `;
 
@@ -392,7 +482,8 @@ export async function GET(request: Request) {
       WITH asig_hoy AS (
         SELECT orden, proyecto, zona, municipio, barrio, tipo_orden,
           COALESCE(NULLIF(TRIM(tecnico), ''), 'No asignado') as tecnico,
-          COALESCE(NULLIF(deuda, ''), '0') as deuda
+          COALESCE(NULLIF(deuda, ''), '0') as deuda,
+          CASE WHEN actividad = 'MULTIFAMILIAR SCR' THEN 'GESTOR' ELSE 'SCR' END as proceso
         FROM analitica.v_ordenes_dia
         WHERE estado_legible = 'Asignada'
       ),
@@ -408,13 +499,14 @@ export async function GET(request: Request) {
           localidad_barrio as barrio,
           tipo_os as tipo_orden,
           COALESCE(NULLIF(TRIM(tecnico), ''), 'No asignado') as tecnico,
-          COALESCE(deuda_cierre::text, '0') as deuda
+          COALESCE(deuda_cierre::text, '0') as deuda,
+          CASE WHEN brigada_homologada = 'Gestor Integral Multi' THEN 'GESTOR' ELSE 'SCR' END as proceso
         FROM dbanalitica.historico_mo
-        WHERE fecha_cierre >= DATE_TRUNC('month', CURRENT_DATE) AND fecha_cierre < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+        WHERE ${MES_ACTUAL_WHERE}
           AND estado_norm IN ('Efectiva', 'Fallida', 'Perdida')
       ),
       combinado AS (
-        SELECT DISTINCT ON (orden) orden, proyecto, zona, municipio, barrio, tipo_orden, tecnico, deuda
+        SELECT DISTINCT ON (orden) orden, proyecto, zona, municipio, barrio, tipo_orden, tecnico, deuda, proceso
         FROM (SELECT * FROM asig_hoy UNION ALL SELECT * FROM mo_mes_asig) x
         ORDER BY orden
       )
@@ -426,10 +518,11 @@ export async function GET(request: Request) {
           ELSE 'Otro'
         END as categoria_os,
         tecnico,
+        proceso,
         COUNT(*)::int as cantidad,
         SUM(NULLIF(deuda, '')::numeric) as deuda_total
       FROM combinado
-      GROUP BY 1, 2, 3, 4, 5, 6, 7
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
       ORDER BY cantidad DESC;
     `;
 
@@ -456,11 +549,12 @@ export async function GET(request: Request) {
         COALESCE(NULLIF(TRIM(tecnico), ''), 'No asignado') as tecnico,
         CASE WHEN estado_norm IN ('Efectiva', 'Fallida') THEN 'Ejecutada' ELSE 'Cancelada' END as resultado,
         estado_norm,
+        CASE WHEN brigada_homologada = 'Gestor Integral Multi' THEN 'GESTOR' ELSE 'SCR' END as proceso,
         COUNT(DISTINCT orden)::int as cantidad
       FROM dbanalitica.historico_mo
-      WHERE fecha_cierre >= DATE_TRUNC('month', CURRENT_DATE) AND fecha_cierre < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+      WHERE ${MES_ACTUAL_WHERE}
         AND estado_norm IN ('Efectiva', 'Fallida', 'Perdida', 'Sin Clasificar')
-      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
       ORDER BY fecha;
     `;
 
@@ -468,11 +562,11 @@ export async function GET(request: Request) {
     // consulta más pesada y se cargan aparte, con caché por día, para no bloquear esta respuesta.
     const [resBarrios, resAgrupadas, resTecnicos, resHoras, resResumen, resMetas, resMes, resAsigTotal, resMesPorDia] = await Promise.all([
       query(sqlBarrios),
-      query(sqlOrdenesAgrupadas),
-      query(sqlTecnicos),
-      query(sqlHoras),
-      query(sqlResumenDia),
-      query(sqlMetasBrigadas),
+      query(sqlOrdenesAgrupadas, cteResult.params),
+      query(sqlTecnicos, cteResult.params),
+      query(sqlHoras, cteResult.params),
+      query(sqlResumenDia, cteResult.params),
+      query(sqlMetasBrigadas, cteResult.params),
       query(sqlMesBarrios),
       query(sqlAsignadasTotal),
       query(sqlMesPorDia),
@@ -489,8 +583,8 @@ export async function GET(request: Request) {
       asignadasTotal: resAsigTotal.rows,
       mesPorDia: resMesPorDia.rows,
     });
-  } catch {
-    console.error('Error al procesar la solicitud');
-    return NextResponse.json({ error: 'Error al procesar la solicitud' }, { status: 500 });
+  } catch (err: any) {
+    console.error('Error al procesar la solicitud', err);
+    return NextResponse.json({ error: err.message || 'Error al procesar la solicitud', details: err.stack }, { status: 500 });
   }
 }

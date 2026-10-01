@@ -1445,7 +1445,7 @@ export default function OperativoPage() {
       ? dias
       : dias.map(d => fmtDiaAxis(d));
 
-    const periodTotalsTipos = periodosListTipos.map(p => {
+    const periodTotalsEfectivas = periodosListTipos.map(p => {
       if (isFuturePeriod(p)) return null;
       return tiposArr.reduce((sum, t) => {
         const val = vistaEvolutivo === 'mes'
@@ -1454,7 +1454,26 @@ export default function OperativoPage() {
         return sum + val;
       }, 0);
     });
-    const granTotalEfectivas = periodTotalsTipos.reduce((s: number, v) => s + (v || 0), 0);
+
+    const periodTotalsTipos = periodosListTipos.map(p => {
+      if (isFuturePeriod(p)) return null;
+      let sumE = 0;
+      let sumT = 0;
+      tiposArr.forEach(t => {
+        if (vistaEvolutivo === 'mes') {
+          sumE += byTypeMonth[t]?.[p] || 0;
+          sumT += byTypeMonthOrd[`${t}__${p}`] || 0;
+        } else {
+          const bd = byTypeDay[t]?.[p];
+          if (bd) {
+            sumE += bd.efec;
+            sumT += bd.efec + bd.fall + bd.perd;
+          }
+        }
+      });
+      return sumT > 0 ? (sumE / sumT) * 100 : 0;
+    });
+    const granTotalEfectivas = periodTotalsEfectivas.reduce((s: number, v) => s + (v || 0), 0);
 
     const tiposTotales = tiposArr.map(t => {
       const total = vistaEvolutivo === 'mes'
@@ -1495,7 +1514,7 @@ export default function OperativoPage() {
 
     const datasetsTipos = [
       {
-        label: 'Total Efectivas (Suma brigadas)',
+        label: 'Efectividad General (%)',
         data: periodTotalsTipos,
         borderColor: TEAL,
         backgroundColor: 'rgba(0, 137, 123, 0.14)',
@@ -1536,7 +1555,7 @@ export default function OperativoPage() {
               label: (ctx: any) => {
                 if (ctx.raw === null || ctx.raw === undefined) return '';
                 const val = Number(ctx.raw) || 0;
-                return `${ctx.dataset.label}: ${fmtN(val)} efectivas`;
+                return `${ctx.dataset.label}: ${Number(val).toFixed(1)}%`;
               },
             }
           },
@@ -1548,7 +1567,7 @@ export default function OperativoPage() {
           },
           y: {
             beginAtZero: true,
-            title: { display: true, text: 'Órdenes efectivas' }
+            title: { display: true, text: 'Efectividad (%)' }, ticks: { callback: (v: any) => v + '%' }
           }
         }
       }
@@ -1559,11 +1578,17 @@ export default function OperativoPage() {
       const t = item.t;
       const col = item.color;
       const rawData = periodosListTipos.map(p => {
-        if (isFuturePeriod(p)) return null;
-        return vistaEvolutivo === 'mes'
-          ? (byTypeMonth[t]?.[p] || 0)
-          : (byTypeDay[t]?.[p]?.efec || 0);
-      });
+          if (isFuturePeriod(p)) return null;
+          let e = 0, tot = 0;
+          if (vistaEvolutivo === 'mes') {
+            e = byTypeMonth[t]?.[p] || 0;
+            tot = byTypeMonthOrd[`${t}__${p}`] || 0;
+          } else {
+            e = byTypeDay[t]?.[p]?.efec || 0;
+            tot = e + (byTypeDay[t]?.[p]?.fall || 0) + (byTypeDay[t]?.[p]?.perd || 0);
+          }
+          return tot > 0 ? (e / tot) * 100 : 0;
+        });
 
       return {
         label: t,
@@ -1606,7 +1631,7 @@ export default function OperativoPage() {
               },
               label: (ctx: any) => {
                 if (ctx.raw === null || ctx.raw === undefined) return '';
-                return `${ctx.dataset.label}: ${fmtN(Number(ctx.raw) || 0)} efectivas`;
+                return `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`;
               },
             }
           },
@@ -1618,7 +1643,7 @@ export default function OperativoPage() {
           },
           y: {
             beginAtZero: true,
-            title: { display: true, text: 'Órdenes efectivas' }
+            title: { display: true, text: 'Efectividad (%)' }, ticks: { callback: (v: any) => v + '%' }
           }
         }
       }
@@ -2471,7 +2496,7 @@ export default function OperativoPage() {
           <span>· {filters.fecha !== 'ALL' ? filters.fecha : 'Fecha'} · Franjas sombreadas: no laborable / almuerzo</span>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 12 }}>
         {/* Card 1 */}
         <div>
           <ChartCard
@@ -2606,8 +2631,8 @@ export default function OperativoPage() {
         <div>
           <ChartCard
             id="op-tipos"
-            title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Efectivas por Tipo" : vistaEvolutivo === 'hora' ? "Evolutivo Horario de Efectivas por Tipo" : "Evolutivo Diario de Efectivas por Tipo"}
-            subtitle={vistaEvolutivo === 'hora' ? "Suma total de órdenes efectivas por franja horaria. Clic en Expandir para ver el detalle por cada tipo de brigada." : vistaEvolutivo === 'dia' ? "Suma total de órdenes efectivas por día. Clic en Expandir para ver el detalle por cada tipo de brigada." : "Suma total de órdenes efectivas por mes. Clic en Expandir para ver el detalle por cada tipo de brigada."}
+            title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Efectividad por Tipo" : vistaEvolutivo === 'hora' ? "Evolutivo Horario de Efectividad por Tipo" : "Evolutivo Diario de Efectividad por Tipo"}
+            subtitle={vistaEvolutivo === 'hora' ? "Porcentaje de efectividad por franja horaria. Clic en Expandir para ver el detalle por cada tipo de brigada." : vistaEvolutivo === 'dia' ? "Porcentaje de efectividad por día. Clic en Expandir para ver el detalle por cada tipo de brigada." : "Porcentaje de efectividad por mes. Clic en Expandir para ver el detalle por cada tipo de brigada."}
             config={d.chartTipos as never}
             modalConfig={d.chartTiposModal as never}
             singleCategorySelect
@@ -2662,7 +2687,7 @@ export default function OperativoPage() {
               <SegmentedControl
                 options={[
                   { value: 'mes', label: 'Por mes' },
-                  { value: 'dia', label: 'Por día' },
+            
                   { value: 'hora', label: 'Por hora' }
                 ]}
                 value={vistaEvolutivo}
@@ -2686,7 +2711,7 @@ export default function OperativoPage() {
           }
           customLayout={(canvas) => (
             <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '20px', minHeight: '340px' }}>
-              <div style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: '3 1 400px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.1, color: MUT }}>
                     {vistaEvolutivo === 'mes' ? 'Órdenes por mes' : vistaEvolutivo === 'hora' ? 'Órdenes por hora' : 'Órdenes por día'} {d.brigadaActiva ? `· ${d.brigadaActiva}` : '· por tipo de brigada'}
@@ -2709,7 +2734,7 @@ export default function OperativoPage() {
                 </div>
               </div>
               {/* Panel Lateral Ranking */}
-              <div style={{ width: '280px', maxWidth: '100%', flex: '1 1 240px', borderLeft: '1px solid var(--border)', paddingLeft: '20px', display: 'flex', flexDirection: 'column' }}>
+              <div className="panel-lateral">
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-title)', marginBottom: 12 }}>Detalle por brigada</div>
                 {(() => {
                   const bActive = d.brigadaDetalle.find((x: any) => x.brigada === d.brigadaActiva);
@@ -2771,13 +2796,7 @@ export default function OperativoPage() {
         />
       </div>
 
-      {/* 2 · Cumplimiento */}
-      <div style={secH(TEAL)}><span style={dot(TEAL)} /> Cumplimiento · Meta vs Real</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: 12 }}>
-        {cumplCard('Órdenes efectivas', d.asignado, d.efect, fmtN)}
-        {cumplCard('Días ejecutados', d.diasHabiles, d.diasEjec, fmtN)}
-        {cumplCard('Asignado vs ejecutado', d.asignado, d.visitas, fmtN)}
-      </div>
+     
 
       <DisponibilidadSection />
 

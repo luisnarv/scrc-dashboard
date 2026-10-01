@@ -195,7 +195,7 @@ export default function Filters() {
   };
 
   return (
-    <div id="filters-container" className="filtros" style={{ position: 'relative' }}>
+    <div id="filters-container" className="filtros">
       <label htmlFor="select-proceso">Proceso</label>
       <select
         id="select-proceso"

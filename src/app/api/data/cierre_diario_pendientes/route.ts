@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // mano de obra, de ahí el TTL). Solo hoy se refresca seguido.
 type Fila = {
   fecha: string; proyecto: string; zona: string; municipio: string; barrio: string;
-  categoria_os: string; pendientes: number; asignadas: number;
+  categoria_os: string; pendientes: number; asignadas: number; proceso: string;
 };
 type Entrada = { rows: Fila[]; at: number };
 
@@ -37,12 +37,13 @@ const sqlDia = `
       WHEN vm.tipo_orden = 'TO502' THEN 'Reconexión'
       ELSE 'Otro'
     END as categoria_os,
+    CASE WHEN vm.actividad = 'MULTIFAMILIAR SCR' THEN 'GESTOR' ELSE 'SCR' END as proceso,
     COUNT(DISTINCT vm.orden) FILTER (WHERE vm.estado = 'DISPONIBLE')::int as pendientes,
     COUNT(DISTINCT vm.orden) FILTER (WHERE vm.estado = 'ASIGNADA')::int as asignadas
   FROM analitica.v_ordenes_mes vm
   WHERE vm.estado IN ('DISPONIBLE', 'ASIGNADA')
     AND vm.dia_operativo = $1::date
-  GROUP BY 1, 2, 3, 4, 5, 6;
+  GROUP BY 1, 2, 3, 4, 5, 6, 7;
 `;
 
 function cargarDia(fecha: string): Promise<Fila[]> {

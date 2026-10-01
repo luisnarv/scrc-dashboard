@@ -41,6 +41,7 @@ export interface OrdenAgrupadaRow {
   estado_legible: string;
   asignacion_status: 'Asignado' | 'No asignado';
   tecnico: string;
+  proceso?: 'SCR' | 'GESTOR';
   cantidad: number;
   deuda_total: number | string | null;
   fac_venc_0?: number;
@@ -60,6 +61,7 @@ export interface AsignadaTotalRow {
   tipo_orden: string;
   categoria_os: 'Suspensión' | 'Reconexión' | 'Otro';
   tecnico: string;
+  proceso?: 'SCR' | 'GESTOR';
   cantidad: number;
   deuda_total: number | string | null;
 }
@@ -76,6 +78,7 @@ export interface MoPorDiaRow {
   tecnico: string;
   resultado: 'Ejecutada' | 'Cancelada';
   estado_norm: 'Efectiva' | 'Fallida' | 'Perdida' | 'Sin Clasificar';
+  proceso?: 'SCR' | 'GESTOR';
   cantidad: number;
 }
 
@@ -88,6 +91,7 @@ export interface MesPendientesRow {
   municipio: string;
   barrio: string;
   categoria_os: 'Suspensión' | 'Reconexión' | 'Otro';
+  proceso?: 'SCR' | 'GESTOR';
   pendientes: number;
   asignadas: number;
 }
@@ -113,6 +117,7 @@ export interface BarrioHoraRow {
   municipio: string;
   barrio: string;
   tipo_orden?: string;
+  proceso?: 'SCR' | 'GESTOR';
   total: number;
   asignadas: number;
   pendientes: number;
@@ -165,6 +170,7 @@ export interface BarrioMesRow {
   zona: string;
   municipio: string;
   barrio: string;
+  proceso?: 'SCR' | 'GESTOR';
   asignadas: number;
   suspension: number;
   reconexion: number;
@@ -195,6 +201,15 @@ export function proyCoincide(rProy: string, filtro: string): boolean {
   if (filtro === 'Sur') return p.includes('SUR');
   if (filtro === 'Norte-Centro') return p.includes('NORTE') || p.includes('CENTRO');
   return p.includes(filtro.toUpperCase());
+}
+
+// Función robusta para coincidencia de Proceso ('ALL' = SCR, muestra todo; 'GESTOR' = solo
+// Multifamiliar) -- mismo criterio que el resto del dashboard (ver utils/filters.ts: BRIG_GESTOR).
+// El backend ya resuelve 'SCR' | 'GESTOR' en cada fila (distinto campo origen según la fuente:
+// actividad en analitica.v_ordenes_dia/v_ordenes_mes, brigada_homologada en historico_mo).
+export function procesoCoincide(rProceso: string | undefined, filtro: string): boolean {
+  if (filtro !== 'GESTOR') return true;
+  return rProceso === 'GESTOR';
 }
 
 // Función robusta para coincidencia de zona (admite individual, múltiple por comas y ALL)
@@ -304,7 +319,9 @@ export default function AsignacionOperativaPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/data/cierre_diario');
+      const fArr = Array.isArray(filters.fecha) ? filters.fecha : (filters.fecha === 'ALL' ? [] : [filters.fecha]);
+      const fechaQuery = fArr.length > 0 ? fArr.join(',') : 'HOY';
+      const res = await fetch(`/api/data/cierre_diario?fechas=${fechaQuery}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}: Error al obtener datos`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);
@@ -334,11 +351,28 @@ export default function AsignacionOperativaPage() {
     } catch (err) {
       console.error('Error cargando pendientes por día');
     }
-  }, []);
+  }, [filters.fecha]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Cargar horas dinámicas según el filtro de fecha
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchHorasDinamic = async () => {
+      try {
+        const fechaQuery = (!filters.fecha || filters.fecha === 'ALL') ? 'HOY' : filters.fecha;
+        const res = await fetch(`/api/data/cierre_diario_horas?fechas=${fechaQuery}`);
+        if (res.ok && !isCancelled) {
+          const json = await res.json();
+          setDataHoras(json.barriosHoras || []);
+        }
+      } catch (err) {}
+    };
+    fetchHorasDinamic();
+    return () => { isCancelled = true; };
+  }, [filters.fecha]);
 
   // Cargar detalle de órdenes individuales
   const fetchDetalle = async (barrioNombre?: string) => {
@@ -350,6 +384,7 @@ export default function AsignacionOperativaPage() {
       if (barrioNombre) params.set('barrio', barrioNombre);
       if (filters.proy !== 'ALL') params.set('proy', filters.proy);
       if (filters.zona !== 'ALL') params.set('zona', filters.zona);
+      if (filters.proceso === 'GESTOR') params.set('proceso', 'GESTOR');
       if (municipioFiltro !== 'ALL') params.set('municipio', municipioFiltro);
       if (filtroTipoOS !== 'ALL') {
         if (filtroTipoOS === 'SUSPENSION') {
@@ -394,21 +429,23 @@ export default function AsignacionOperativaPage() {
     const s = new Set<string>();
     ordenesAgrupadas.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (r.zona && (r.cantidad || 0) > 0) s.add(r.zona.toUpperCase().trim());
     });
     return Array.from(s).sort();
-  }, [ordenesAgrupadas, filters.proy]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso]);
 
   // Municipios disponibles con datos reales según proyecto y zona activos
   const municipiosDisponibles = useMemo(() => {
     const s = new Set<string>();
     ordenesAgrupadas.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (r.municipio && (r.cantidad || 0) > 0) s.add(r.municipio.trim());
     });
     return Array.from(s).sort();
-  }, [ordenesAgrupadas, filters.proy, filters.zona]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso, filters.zona]);
 
   // Tipos de OS disponibles con datos reales (> 0 órdenes)
   const tiposOSDisponibles = useMemo(() => {
@@ -423,6 +460,7 @@ export default function AsignacionOperativaPage() {
     };
     ordenesAgrupadas.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && (r.municipio || '').toUpperCase() !== municipioFiltro.toUpperCase()) return;
       const t = (r.tipo_orden || '').toUpperCase().trim();
@@ -436,7 +474,7 @@ export default function AsignacionOperativaPage() {
       }
     });
     return counts;
-  }, [ordenesAgrupadas, filters.proy, filters.zona, municipioFiltro]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso, filters.zona, municipioFiltro]);
 
   // Estados de Asignación disponibles con datos reales
   const estadosAsignacionDisponibles = useMemo(() => {
@@ -448,6 +486,7 @@ export default function AsignacionOperativaPage() {
     let total = 0;
     ordenesAgrupadas.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && (r.municipio || '').toUpperCase() !== municipioFiltro.toUpperCase()) return;
       if (filtroTipoOS !== 'ALL') {
@@ -468,13 +507,14 @@ export default function AsignacionOperativaPage() {
       else if (r.estado_legible === 'Excluida' || r.estado_legible === 'Sin ubicar') excluidas += c;
     });
     return { asignadas, noAsignadas, ejecutadas, canceladas, excluidas, total };
-  }, [ordenesAgrupadas, filters.proy, filters.zona, municipioFiltro, filtroTipoOS]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso, filters.zona, municipioFiltro, filtroTipoOS]);
 
   // Técnicos disponibles con datos reales (órdenes asignadas > 0 en el contexto filtrado)
   const tecnicosDisponibles = useMemo(() => {
     const map = new Map<string, { total: number; suspension: number; reconexion: number; barrios: Set<string> }>();
     ordenesAgrupadas.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && (r.municipio || '').toUpperCase() !== municipioFiltro.toUpperCase()) return;
       if (filtroTipoOS !== 'ALL') {
@@ -506,7 +546,7 @@ export default function AsignacionOperativaPage() {
         barrios_count: d.barrios.size,
       }))
       .sort((a, b) => b.total - a.total);
-  }, [ordenesAgrupadas, filters.proy, filters.zona, municipioFiltro, filtroTipoOS]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso, filters.zona, municipioFiltro, filtroTipoOS]);
 
   // Auto-reseteo de filtros huérfanos cuando cambian dimensiones superiores
   useEffect(() => {
@@ -553,6 +593,7 @@ export default function AsignacionOperativaPage() {
     return ordenesAgrupadas.filter(r => {
       // 1. Proyecto
       if (!proyCoincide(r.proyecto, filters.proy)) return false;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return false;
       // 2. Zona
       if (!zonaCoincide(r.zona, filters.zona)) return false;
       // 3. Municipio
@@ -592,7 +633,7 @@ export default function AsignacionOperativaPage() {
 
       return true;
     });
-  }, [ordenesAgrupadas, filters.proy, filters.zona, municipioFiltro, busquedaBarrio, filtroTipoOS, filtroAsignacion, filtroTecnico]);
+  }, [ordenesAgrupadas, filters.proy, filters.proceso, filters.zona, municipioFiltro, busquedaBarrio, filtroTipoOS, filtroAsignacion, filtroTecnico]);
 
   // Consolidación de datos por Barrio para Ranking y Gráfico (TO503 y TO506 consolidadas con Suspensión)
   const rankingBarrios = useMemo(() => {
@@ -736,6 +777,7 @@ export default function AsignacionOperativaPage() {
 
     dataMesBarrios.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && (r.municipio || '').toUpperCase() !== municipioFiltro.toUpperCase()) return;
       if (busquedaBarrio.trim()) {
@@ -767,11 +809,12 @@ export default function AsignacionOperativaPage() {
     });
 
     return lista;
-  }, [dataMesBarrios, filteredAgrupadas, filters.proy, filters.zona, municipioFiltro, busquedaBarrio, criterioOrden]);
+  }, [dataMesBarrios, filteredAgrupadas, filters.proy, filters.proceso, filters.zona, municipioFiltro, busquedaBarrio, criterioOrden]);
 
   // Mano de obra del mes agrupada por DÍA -- eje X del gráfico "Comparativa..." cuando está
   // activo "Ver Todo el Mes". Cada punto es un día real del mes (no un barrio).
-  const porDiaMes = useMemo(() => {
+    const porDiaMes = useMemo(() => {
+    const fArr = Array.isArray(filters.fecha) ? filters.fecha : (filters.fecha === 'ALL' ? [] : [filters.fecha]);
     const mapa = new Map<string, {
       fecha: string; asignadas: number; ejecutadas: number; canceladas: number;
       efectivas: number; fallidas: number; perdidas: number; sinClasificar: number;
@@ -782,7 +825,9 @@ export default function AsignacionOperativaPage() {
       barriosAsignados: Set<string>; barriosExcluidosRaw: Set<string>;
     }>();
     dataMesPorDia.forEach(r => {
+      if (fArr.length > 0 && !fArr.includes(r.fecha)) return;
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && r.municipio !== municipioFiltro) return;
       if (filtroTecnico !== 'ALL' && r.tecnico !== filtroTecnico) return;
@@ -859,17 +904,20 @@ export default function AsignacionOperativaPage() {
         };
       })
       .sort((a, b) => a.fecha.localeCompare(b.fecha));
-  }, [dataMesPorDia, filters.proy, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS]);
+  }, [dataMesPorDia, filters.proy, filters.proceso, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS, filters.fecha]);
 
   // Pendientes (DISPONIBLE) y Asignadas (ASIGNADA) por día:
   // órdenes por día. Las órdenes pendientes por definición no tienen técnico, así que si hay un
   // filtro de técnico activo esta serie no aplica y los asignados se toman de mano de obra.
   const porDiaMesPendientes = useMemo(() => {
+    const fArr = Array.isArray(filters.fecha) ? filters.fecha : (filters.fecha === 'ALL' ? [] : [filters.fecha]);
     type Dia = { ordenes: number; barrios: Set<string>; barriosAsignados: Set<string> };
     if (filtroTecnico !== 'ALL') return new Map<string, Dia>();
     const mapa = new Map<string, Dia>();
     dataMesPendientesPorDia.forEach(r => {
+      if (fArr.length > 0 && !fArr.includes(r.fecha)) return;
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && r.municipio !== municipioFiltro) return;
       if (filtroTipoOS === 'SUSPENSION' && r.categoria_os !== 'Suspensión') return;
@@ -887,7 +935,7 @@ export default function AsignacionOperativaPage() {
       if (r.barrio && (r.asignadas || 0) > 0) item.barriosAsignados.add(`${r.barrio}__${r.municipio}`);
     });
     return mapa;
-  }, [dataMesPendientesPorDia, filters.proy, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS]);
+  }, [dataMesPendientesPorDia, filters.proy, filters.proceso, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS, filters.fecha]);
 
   // Clasificación final de barrios por día para el gráfico apilado: cada barrio (barrio__municipio)
   // se cuenta en UNA sola categoría por día, con prioridad Asignado > Excluido > Pendiente -- así
@@ -968,6 +1016,7 @@ export default function AsignacionOperativaPage() {
   const filteredHoras = useMemo(() => {
     return dataHoras.filter(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return false;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return false;
       if (!zonaCoincide(r.zona, filters.zona)) return false;
       if (municipioFiltro !== 'ALL' && (r.municipio || '').toUpperCase() !== municipioFiltro.toUpperCase()) return false;
       if (busquedaBarrio.trim()) {
@@ -983,7 +1032,7 @@ export default function AsignacionOperativaPage() {
       }
       return true;
     });
-  }, [dataHoras, filters.proy, filters.zona, municipioFiltro, busquedaBarrio, filtroTipoOS]);
+  }, [dataHoras, filters.proy, filters.proceso, filters.zona, municipioFiltro, busquedaBarrio, filtroTipoOS]);
 
   // Barrios que se están visualizando REALMENTE en el gráfico en tiempo real
   const barriosVisiblesEnGrafica = useMemo(() => {
@@ -1165,6 +1214,12 @@ export default function AsignacionOperativaPage() {
       // Filtros globales del Dashboard
       if (!proyCoincide(item.proyecto, filters.proy)) return false;
       if (!zonaCoincide(item.zona, filters.zona)) return false;
+      // Proceso: Metas no trae un campo `proceso` propio (viene de mano de obra de hoy sin ese
+      // dato); se usa `tipo_brigada` -- mismo marcador que ya usa el filtro local "GESTOR" de abajo.
+      if (filters.proceso === 'GESTOR') {
+        const tbGlobal = (item.tipo_brigada || '').toUpperCase();
+        if (!tbGlobal.includes('GESTOR') && !tbGlobal.includes('MULTI')) return false;
+      }
 
       // Filtros locales de la sección
       if (!zonaCoincide(item.zona, filtroMetaZona)) return false;
@@ -1192,7 +1247,7 @@ export default function AsignacionOperativaPage() {
       if (ordenMetas === 'cumplimiento_meta') return b.pctCumplidoVsMeta - a.pctCumplidoVsMeta;
       return 0;
     });
-  }, [metasProcesadas, filters.proy, filters.zona, filtroMetaZona, filtroMetaBrigada, filtroMetaCumplimiento, ordenMetas]);
+  }, [metasProcesadas, filters.proy, filters.proceso, filters.zona, filtroMetaZona, filtroMetaBrigada, filtroMetaCumplimiento, ordenMetas]);
 
   // Totales y KPIs consolidados de metas
   const totalesMetas = useMemo(() => {
@@ -1262,6 +1317,7 @@ export default function AsignacionOperativaPage() {
     const tecs = new Set<string>();
     dataAsignadasTotal.forEach(r => {
       if (!proyCoincide(r.proyecto, filters.proy)) return;
+      if (!procesoCoincide(r.proceso, filters.proceso)) return;
       if (!zonaCoincide(r.zona, filters.zona)) return;
       if (municipioFiltro !== 'ALL' && r.municipio !== municipioFiltro) return;
       if (filtroTecnico !== 'ALL' && r.tecnico !== filtroTecnico) return;
@@ -1277,7 +1333,7 @@ export default function AsignacionOperativaPage() {
       if (r.tecnico && r.tecnico !== 'No asignado') tecs.add(r.tecnico);
     });
     return { total, suspension, reconexion, deuda, tecnicos: tecs.size };
-  }, [dataAsignadasTotal, filters.proy, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS]);
+  }, [dataAsignadasTotal, filters.proy, filters.proceso, filters.zona, municipioFiltro, filtroTecnico, filtroTipoOS]);
 
   // =========================================================================
   // MÉTRICAS PARA LAS 2 CARDS PRINCIPALES: ASIGNADAS Y PENDIENTES CON % Y VALORES
@@ -2126,7 +2182,7 @@ export default function AsignacionOperativaPage() {
       </div>
 
       {/* PANEL 1: SELECTORES DE MODO Y FILTROS MINIMALISTAS */}
-      <div style={{
+      <div className="cd-filtros-panel" style={{
         background: bgCard,
         borderRadius: 12,
         border: `1px solid ${borderCol}`,

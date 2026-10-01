@@ -373,6 +373,7 @@ table.det th {
   font-weight: 600;
   position: sticky;
   top: 0;
+  z-index: 1;
   border-bottom: 2px solid var(--border);
 }
 table.det td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
@@ -1183,4 +1184,49 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
   }
 }
 
+/* Panel de filtros de Cierre Diario ("PANEL 1: SELECTORES DE MODO Y FILTROS MINIMALISTAS"):
+   texto más liviano y compacto. Todo ahí adentro trae fontSize/fontWeight en línea (style={{}}),
+   así que hace falta !important para pisarlo -- mismo criterio que el resto de overrides de este
+   archivo. -webkit-font-smoothing evita que un peso tan liviano (200) se vea deshilachado. */
+.cd-filtros-panel,
+.cd-filtros-panel button,
+.cd-filtros-panel select,
+.cd-filtros-panel input,
+.cd-filtros-panel label,
+.cd-filtros-panel span,
+.cd-filtros-panel div {
+  font-family: sans-serif !important;
+  font-weight: 200 !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.cd-filtros-panel button,
+.cd-filtros-panel span,
+.cd-filtros-panel label {
+  font-size: 11px !important;
+}
+.cd-filtros-panel select,
+.cd-filtros-panel input {
+  font-size: 12px !important;
+}
 
+
+
+.panel-lateral {
+  flex: 1 1 240px;
+  max-width: 300px;
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 768px) {
+  .panel-lateral {
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 20px;
+  }
+}
