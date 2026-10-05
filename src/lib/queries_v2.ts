@@ -124,7 +124,21 @@ const META_DIARIA_SQL = `MAX(CASE
 
 // Limpieza y normalización de cédula/id_tecnico: quita decimales (.0), puntos de miles y cualquier carácter no numérico
 const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.0+$', ''), '\\D', '', 'g')";
-const SQL_CLEAN_MB_CED = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mb.\"Cedula\"), '\\.0+$', ''), '\\D', '', 'g')";
+
+// maestro_brigadas con UNA fila por cédula y mes (columnas ced, mes, supervisor, observacion).
+// La tabla trae filas TECNICO y AUXILIAR, y puede haber eventos INGRESO/RETIRO sueltos (rol NULL) en el
+// mismo mes: sin deduplicar, el LEFT JOIN multiplicaría las órdenes de ese técnico. Gana la fila TECNICO,
+// luego la que trae RETIRO y por último la de fecha más reciente.
+const SQL_MAESTRO_MES = `(
+  SELECT DISTINCT ON (ced, mes) ced, mes, supervisor, observacion
+  FROM (
+    SELECT REGEXP_REPLACE(REGEXP_REPLACE(TRIM(cedula), '\\.0+$', ''), '\\D', '', 'g') AS ced,
+           left(fecha, 7) AS mes, supervisor, observacion, rol, fecha
+    FROM dbanalitica.maestro_brigadas
+    WHERE cedula IS NOT NULL
+  ) m
+  ORDER BY ced, mes, (rol = 'TECNICO') DESC NULLS LAST, (observacion ILIKE '%RETIRO%') DESC NULLS LAST, fecha DESC
+)`;
 
 export async function getDashboardDataV2(mes?: string) {
   if (mes === '__NINGUNO__' || (mes && mes !== 'ALL' && !/^\d{4}-\d{2}$/.test(mes))) {
@@ -173,8 +187,8 @@ export async function getDashboardDataV2(mes?: string) {
         MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes",
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym",
         MAX(mo.zona) as "zona",
-        MAX(mb."Supervisor") as "supervisor",
-        MAX(mb."observacion") as "observacion",
+        MAX(mb.supervisor) as "supervisor",
+        MAX(mb.observacion) as "observacion",
         SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
         SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
         SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
@@ -266,12 +280,9 @@ export async function getDashboardDataV2(mes?: string) {
         SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN COALESCE(mo.valor_orden,0) ELSE 0 END) as "Perdidas_COP",
         0 as "Costo_Operativo"
       FROM dbanalitica.historico_mo mo
-      LEFT JOIN dbanalitica.maestro_brigadas mb
-        ON ${SQL_CLEAN_MO_ID} = ${SQL_CLEAN_MB_CED}
-        AND (
-          mb."Fecha" IS NULL
-          OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7)
-        )
+      LEFT JOIN ${SQL_MAESTRO_MES} mb
+        ON ${SQL_CLEAN_MO_ID} = mb.ced
+        AND to_char(mo.fecha_cierre, 'YYYY-MM') = mb.mes
       -- Costo mensual por brigada (maestro_metas), mapeando el nombre del maestro
       -- (seguimiento) al nombre homologado de historico_mo. Costo igual en ambas zonas.
       LEFT JOIN (
@@ -369,8 +380,8 @@ export async function getDashboardDataV2(mes?: string) {
     }));
 
       const mesRes = await query(`
-        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb."Supervisor") as "Supervisor",
-               MAX(mb."observacion") as "Observacion",
+        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb.supervisor) as "Supervisor",
+               MAX(mb.observacion) as "Observacion",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
                mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
@@ -405,7 +416,7 @@ export async function getDashboardDataV2(mes?: string) {
                COUNT(DISTINCT mo.fecha_cierre) as "Dias_Laborados", 
                (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
         FROM dbanalitica.historico_mo mo
-        LEFT JOIN dbanalitica.maestro_brigadas mb ON ${SQL_CLEAN_MO_ID} = ${SQL_CLEAN_MB_CED} AND (mb."Fecha" IS NULL OR to_char(mo.fecha_cierre, 'YYYY-MM') = left(mb."Fecha"::text, 7))
+        LEFT JOIN ${SQL_MAESTRO_MES} mb ON ${SQL_CLEAN_MO_ID} = mb.ced AND to_char(mo.fecha_cierre, 'YYYY-MM') = mb.mes
           ${fechaCond}
         -- Agrupa TAMBIÉN por brigada_homologada: un técnico con 2 brigadas en el mes
         -- aparece en cada una con SUS órdenes (antes MAX escondía la brigada real).

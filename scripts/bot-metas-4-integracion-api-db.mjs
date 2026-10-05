@@ -72,12 +72,14 @@ async function run() {
   await test('Consulta de sqlMetasBrigadas agrupa correctamente por zona y brigada', async () => {
     const sql = `
       WITH tec_brig AS (
-        SELECT DISTINCT ON (UPPER(TRIM("Tecnico")))
-          UPPER(TRIM("Tecnico")) as tecnico,
-          "Tipo Brigada" as tipo_brigada,
-          "Zona" as zona
+        SELECT DISTINCT ON (UPPER(TRIM(tecnico)))
+          UPPER(TRIM(tecnico)) as tecnico,
+          tipo_brigada,
+          zona
         FROM dbanalitica.maestro_brigadas
-        WHERE "Tecnico" IS NOT NULL
+        WHERE tecnico IS NOT NULL
+          AND COALESCE(rol, 'TECNICO') = 'TECNICO'
+        ORDER BY UPPER(TRIM(tecnico)), fecha DESC
       )
       SELECT 
         v.dia_operativo::text as dia_operativo,
