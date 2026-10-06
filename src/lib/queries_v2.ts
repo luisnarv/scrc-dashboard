@@ -64,7 +64,7 @@ interface EmpRowV2 {
 //       - Desde Septiembre 2026: jornada 44h (8h L-J, 7h Vie, 5h Sáb, divisor 176h)
 //   • Disponibles (MT-AT/Minicanasta/Canasta/Gestor/Pesada Disponible) → Costo/24
 const META_SUR = {
-  pesada:  { semana: 650_000, sabado: 425_000 },
+  pesada:  { semana: 780_000, sabado: 780_000 },
   liviana: { semana: 380_000, sabado: 310_000 },
 } as const;
 
@@ -100,14 +100,8 @@ const META_DIARIA_SQL = `MAX(CASE
                 (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 175679.27
                       WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 245950.97
                       ELSE 281086.83 END)
-              WHEN 'Brigada Pesada' THEN
-                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
-                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
-                      ELSE 693957.14 END)
-              WHEN '(D) Brigada Pesada' THEN
-                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 433723.21
-                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 607212.49
-                      ELSE 693957.14 END)
+              WHEN 'Brigada Pesada' THEN 780000.00
+              WHEN '(D) Brigada Pesada' THEN 780000.00
               WHEN 'Gestor Integral Multi' THEN 357349.97
               WHEN 'Brigada Minicanasta' THEN 2362400.95
               WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
@@ -117,7 +111,8 @@ const META_DIARIA_SQL = `MAX(CASE
             END
 
           -- ZONA NORTE Y CENTRO: ANTES DE SEPTIEMBRE 2026
-          WHEN mo.brigada_homologada IN ('Brigada Pesada','(D) Brigada Pesada','Brigada Liviana')
+          WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') THEN 780000.00
+            WHEN mo.brigada_homologada IN ('Brigada Liviana')
             THEN (${COSTO_MENSUAL_SQL} / 184.0) * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
           ELSE ${COSTO_MENSUAL_SQL} / 24.0
         END)`;
