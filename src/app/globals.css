@@ -53,6 +53,15 @@
   --ok-border: rgba(80,158,47,.32);
   --warn-border: rgba(181,189,0,.38);
   --err-border: rgba(192,57,43,.28);
+
+  /* Texto accesible (WCAG AA >= 4.5:1) para los modales: --text-muted, --ok, --warn y el texto sobre
+     --brand-primary no llegan a 4.5:1 en el tema claro. Se usan solo para TEXTO; los gráficos conservan
+     los colores de siempre. */
+  --text-muted-aa: #6C6E70;
+  --ok-text: #436236;
+  --warn-text: #6B6F23;
+  --err-text: #C0392B;
+  --on-primary-aa: #14260A;
 }
 
 .theme-light {
@@ -1077,7 +1086,7 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
     gap: 8px !important;
   }
   .bdm-summary-kpis div > div:first-child {
-    font-size: 8.5px !important;
+    font-size: 10px !important;
   }
   .bdm-summary-kpis div > div:nth-child(2) {
     font-size: 13.5px !important;
@@ -1230,3 +1239,110 @@ table.det.sortable th[data-sort].desc::after { content: '\25BC'; opacity: 1; col
     padding-top: 20px;
   }
 }
+
+/* ===================== MODALES DE /operativo · PANEL LATERAL (ModalShell) =====================
+   Solo variables de tema. Escritorio: panel de 244px a la izquierda (plegable). Movil (<=768px): el panel
+   pasa a hoja inferior con controles de 44px. Contrato de atributos data-* documentado en ModalShell.tsx. */
+.ms-box {
+  background: var(--card); color: var(--text-body); border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  width: 95vw; max-width: 1600px; height: 90dvh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.ms-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ms-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.ms-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.ms-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.ms-title { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.ms-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 0; }
+.ms-badge { background: var(--sip); color: var(--brand-grad-text); font-weight: 800; font-size: 12px; border-radius: 8px; padding: 4px 8px; flex-shrink: 0; }
+.ms-rail-toggle {
+  width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel);
+  color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.ms-rail-toggle:hover { color: var(--text-title); background: var(--hover-bg); }
+.ms-filters-btn { display: none; }
+.ms-close:hover { color: var(--err); }
+
+.ms-body { display: flex; flex: 1 1 auto; min-height: 0; position: relative; }
+.ms-rail {
+  width: 244px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border);
+  padding: 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; box-sizing: border-box;
+}
+.ms-rail[data-folded="true"] { display: none; }
+.ms-sec { display: flex; flex-direction: column; gap: 8px; }
+.ms-label { font-size: 10px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-muted); }
+.ms-field { display: flex; flex-direction: column; gap: 4px; }
+.ms-field-l { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.ms-select, .ms-input {
+  height: 30px; width: 100%; box-sizing: border-box; border-radius: 7px; padding: 0 8px; font-size: 12px;
+  background: var(--card); color: var(--text-body); border: 1px solid var(--border); font-family: inherit;
+}
+.ms-select:focus, .ms-input:focus { outline: 2px solid var(--brand-primary); outline-offset: 0; }
+.ms-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-body); cursor: pointer; }
+.ms-more { background: transparent; border: 1px dashed var(--border); color: var(--text-muted); border-radius: 7px; height: 28px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.ms-more:hover { color: var(--text-title); background: var(--hover-bg); }
+.ms-more-body { display: flex; flex-direction: column; gap: 8px; }
+.ms-link { background: none; border: none; color: var(--brand-secondary); font-size: 10px; font-weight: 700; cursor: pointer; padding: 0; text-transform: none; letter-spacing: 0; }
+.ms-series { display: flex; flex-direction: column; gap: 2px; }
+.ms-serie { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 3px 2px; border-radius: 6px; user-select: none; }
+.ms-serie.on { color: var(--text-title); font-weight: 600; }
+.ms-serie:hover { background: var(--hover-bg); }
+.ms-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.ms-serie-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ms-kpi { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; min-width: 0; }
+/* 10px (no 9px): el bot responsive 6 rechaza textos < 10px */
+.ms-kpi-l { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; color: var(--text-muted); }
+.ms-kpi-v { font-size: 13.5px; font-weight: 800; margin-top: 2px; overflow-wrap: anywhere; }
+.ms-export { margin-top: auto; }
+.ms-export-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.ms-apply { display: none; }
+.ms-sheet-bg { display: none; }
+
+.ms-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px 14px; box-sizing: border-box; }
+.ms-chartwrap { display: flex; flex-direction: column; min-height: 140px; flex-shrink: 0; }
+.ms-chartlabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; color: var(--text-muted); margin-bottom: 6px; flex-shrink: 0; }
+.ms-chartbox { position: relative; flex: 1 1 auto; min-height: 0; }
+.ms-divider { height: 10px; flex-shrink: 0; cursor: row-resize; display: flex; align-items: center; justify-content: center; }
+.ms-divider::after { content: ''; width: 48px; height: 3px; border-radius: 2px; background: var(--border); }
+.ms-tablewrap { flex: 1 1 0; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--card); -webkit-overflow-scrolling: touch; }
+.ms-free { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+
+@media (max-width: 768px) {
+  .ms-box { width: min(100%, 98vw); max-width: 100%; height: calc(100dvh - 12px); border-radius: 12px; }
+  .ms-head { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .ms-head-left { flex: 1 1 100%; order: 1; }
+  .ms-head-right { order: 2; flex: 1 1 100%; justify-content: flex-start; }
+  .ms-head-right .ms-close { margin-left: auto; width: 36px !important; height: 36px !important; }
+  .ms-sub { display: none; }
+  .ms-title { white-space: normal; font-size: 14px; }
+  .ms-rail-toggle { display: none; }
+  .ms-filters-btn { display: flex; min-height: 36px !important; }
+  .ms-rail, .ms-rail[data-folded="true"] {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh;
+    border: 1px solid var(--border); border-bottom: none; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 40px rgba(0,0,0,.35); z-index: 10002;
+    transform: translateY(105%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .ms-rail.ms-open { transform: translateY(0); visibility: visible; transition: transform .22s ease; }
+  .ms-sheet-bg { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 10001; }
+  .ms-rail .ms-select, .ms-rail .ms-input, .ms-rail .ms-more { height: 44px; min-height: 44px; font-size: 14px; }
+  .ms-rail .ms-serie, .ms-rail .ms-check { min-height: 44px; }
+  .ms-rail input[type="checkbox"], .ms-rail input[type="radio"] { width: 20px; height: 20px; }
+  .ms-rail button, .ms-rail button[aria-pressed] { min-height: 44px !important; }
+  .ms-rail .ms-link { min-height: 44px; padding: 0 8px; }
+  .ms-apply { display: block; width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--brand-primary); background: var(--brand-primary); color: var(--brand-grad-text); font-weight: 700; font-size: 14px; cursor: pointer; flex-shrink: 0; }
+  .ms-main { overflow-y: auto; padding: 10px 12px 14px; }
+  .ms-chartwrap { height: clamp(240px, 42dvh, 360px) !important; flex: 0 0 auto; }
+  .ms-tablewrap { flex: 0 0 auto; min-height: 200px; max-height: 60dvh; margin-top: 10px; }
+  .ms-divider { display: none; }
+}
+
+/* Texto accesible por tema (ver comentario en :root) */
+.theme-light { --text-muted-aa: #6C6E70; --ok-text: #436236; --warn-text: #6B6F23; --err-text: #C0392B; --on-primary-aa: #14260A; }
+.theme-dark  { --text-muted-aa: #85A3C4; --ok-text: #2BD98C; --warn-text: #F0C040; --err-text: #FF5A5F; --on-primary-aa: #06142A; }
+/* Dentro de los modales de /operativo el texto secundario y el texto sobre --brand-primary usan los tokens AA. */
+.ms-box { --text-muted: var(--text-muted-aa); --brand-grad-text: var(--on-primary-aa); }

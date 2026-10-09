@@ -151,7 +151,6 @@ export interface RawData {
   raw: RawRecord[];
   costos: CostoRecord[];
   emps: EmpleadoRecord[];
-  det: OrdenDetalle[];
   mes: MesRecord[];
   disp: DispDiariaRecord[];
   evolutivo: EvolutivoRecord[];
@@ -159,6 +158,7 @@ export interface RawData {
   // Digitación horaria POR TÉCNICO (hora tomada de hora_fin) -- misma forma que
   // HorarioRecord más Cedula/Tecnico. Ver nota en queries_v2.ts::horarioTecRes.
   horarioTec?: HorarioRecord[];
+  perdidas: PerdidaRecord[];
 }
 
 export interface Filters {
@@ -181,4 +181,20 @@ export interface SipAgg {
   prod: number;
   ordenes: number;
   tecnicos: number;
+}
+export interface PerdidaRecord {
+  Fecha?: string;
+  Hora?: string;
+  Proyecto?: string;
+  Zona?: string;
+  Brigada?: string;
+  Tecnico?: string;
+  Accion?: string;
+  Subaccion?: string;
+  // 'Fallida' | 'Perdida'. Cantidad = órdenes agrupadas en el registro (ausente = 1).
+  Estado?: string;
+  Cantidad?: number;
+  _Proyecto?: string;
+  _Zona?: string;
+  _ZonaDet?: string;
 }

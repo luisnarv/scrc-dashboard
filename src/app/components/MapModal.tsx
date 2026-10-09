@@ -3,9 +3,97 @@ import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { canonBarrio, normBase } from './utils/barrio';
 import { MapaCache } from '../lib/cache/mapaCache';
-import SearchableSelect from './SearchableSelect';
+import ModalShell, { RailField, RailSelect } from './ModalShell';
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false });
+
+/** true en viewport móvil (<=768px): los controles del panel pasan a 44px. */
+function useMovil() {
+  const [m, setM] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const f = () => setM(mq.matches);
+    f();
+    mq.addEventListener('change', f);
+    return () => mq.removeEventListener('change', f);
+  }, []);
+  return m;
+}
+
+/** Selector con búsqueda a ancho del panel (reemplaza a SearchableSelect, que tiene ancho fijo de 180px). La lista se despliega en línea. */
+function RailCombo({ value, onChange, options, placeholder, label }: {
+  value: string; onChange: (v: string) => void; options: string[]; placeholder: string; label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const movil = useMovil();
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQ(''); }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  const MAX = 200;
+  const coincidencias = options.filter(o => o && o.toLowerCase().includes(q.toLowerCase()));
+  const lista = coincidencias.slice(0, MAX);
+  const pick = (v: string) => { onChange(v); setOpen(false); setQ(''); };
+  const row = (activo: boolean): React.CSSProperties => ({
+    padding: movil ? '12px 10px' : '6px 10px', fontSize: movil ? 14 : 12, cursor: 'pointer',
+    color: 'var(--text-body)', background: activo ? 'var(--hover-bg)' : 'transparent',
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  });
+  return (
+    <RailField label={label}>
+      <div ref={ref}>
+        <input
+          className="ms-input"
+          type="search"
+          value={open ? q : (value === 'ALL' ? '' : value)}
+          placeholder={placeholder}
+          aria-label={label}
+          onFocus={() => setOpen(true)}
+          onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); setQ(''); } }}
+        />
+        {open && (
+          <div role="listbox" style={{ marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--card)' }}>
+            <div role="option" aria-selected={value === 'ALL'} onClick={() => pick('ALL')} style={{ ...row(value === 'ALL'), color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>Todos</div>
+            {lista.length === 0 ? (
+              <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-muted)' }}>Sin resultados</div>
+            ) : lista.map(opt => (
+              <div key={opt} role="option" aria-selected={value === opt} title={opt} onClick={() => pick(opt)} style={row(value === opt)}>{opt}</div>
+            ))}
+            {coincidencias.length > MAX && (
+              <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)' }}>Mostrando {MAX} de {coincidencias.length}. Escriba para afinar.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </RailField>
+  );
+}
+
+/** Rejilla 2×2 TOTAL / EFECTIVAS / FALLIDAS / PERDIDAS de las tarjetas de barrio y NIC. */
+function Stats4({ total, efectivas, fallidas, perdidas }: { total?: number; efectivas?: number; fallidas?: number; perdidas?: number }) {
+  const items = [
+    { lbl: 'TOTAL', val: total, col: 'var(--text-title)' },
+    { lbl: 'EFECTIVAS', val: efectivas, col: 'var(--ok)' },
+    { lbl: 'FALLIDAS (CON PAGO)', val: fallidas, col: 'var(--warn)' },
+    { lbl: 'PERDIDAS (SIN PAGO)', val: perdidas, col: 'var(--err)' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, textAlign: 'center' }}>
+      {items.map((s, i) => (
+        <div key={i} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 4px' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: s.col, opacity: 0.8, letterSpacing: '0.04em' }}>{s.lbl}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: s.col, marginTop: 1 }}>{s.val ?? 0}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface MapModalProps {
   onClose: () => void;
@@ -265,7 +353,6 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
     }).filter(b => b.count > 0).sort((a, b) => b.failPct - a.failPct).slice(0, 6);
   }, [filtered]);
 
-  const [detailOpen, setDetailOpen] = useState(false);
   const [techOpen, setTechOpen] = useState(false);
   const [barriosOpen, setBarriosOpen] = useState(false);
 
@@ -311,333 +398,347 @@ export default function MapModal({ onClose, filtrosBase, mesesDisponibles = [] }
     ];
   }, [filtered]);
 
-  // Cerrar con Esc (consistente con los demás modales)
+  // Resumen (KPIs) sobre el conjunto filtrado: mismas definiciones que la tarjeta de barrio
+  // (Efectividad = efectivas/total; Fallido = (Fallida + Perdida)/total).
+  const resumenKpis = React.useMemo(() => {
+    const total = filtered.length;
+    const nic = new Set(filtered.map(r => r.nic ?? `${r.la},${r.lo}`)).size;
+    let ef = 0, fa = 0;
+    for (const r of filtered) {
+      if (r.es === 'Efectiva') ef++;
+      else if (r.es === 'Fallida' || r.es === 'Perdida') fa++;
+    }
+    return {
+      total, nic,
+      efPct: total ? Math.round((ef / total) * 100) : 0,
+      faPct: total ? Math.round((fa / total) * 100) : 0,
+    };
+  }, [filtered]);
+
+  // Leaflet necesita recalcular su tamaño cuando cambia el del contenedor (p. ej. al plegar o
+  // desplegar el panel lateral). Leaflet escucha el evento 'resize' de window (trackResize) y llama
+  // a map.invalidateSize(); un ResizeObserver sobre el contenedor lo dispara sin tocar MapComponent.
+  const mapBoxRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    const el = mapBoxRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    });
+    ro.observe(el);
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
+  }, []);
+
+  const opts = (key: string, todos: string) => [
+    { value: 'ALL', label: todos },
+    ...optionsFor(key).map(x => ({ value: x, label: x })),
+  ];
+  const nf = (n: number) => n.toLocaleString('es-CO');
+
+  const subtitulo = (data.length >= 25000 && fBarrio === 'ALL')
+    ? <span style={{ color: 'var(--warn)' }}>⚠️ Mostrando muestra de 25k puntos recientes (filtre para afinar)</span>
+    : fBarrio !== 'ALL'
+      ? <span style={{ color: 'var(--ok)' }}>✓ Barrio con todas sus órdenes ({filtered.length})</span>
+      : undefined;
+
+  // Acordeón del panel: botón con etiqueta .ms-label.
+  const accordionBtn: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: 0,
+    border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+  };
+  const chev = (open: boolean) => <span style={{ fontSize: 11, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .16s' }}>▾</span>;
+  const cardBox: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 10, background: 'var(--card)', overflow: 'hidden' };
+  const cardHead: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: 'var(--panel)', borderBottom: '1px solid var(--border)' };
+  const closeX: React.CSSProperties = { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 };
+  const infoRow: React.CSSProperties = { display: 'flex', gap: 8, fontSize: 11.5 };
+  const infoK: React.CSSProperties = { color: 'var(--text-muted)', width: 58, flexShrink: 0 };
+  const infoV: React.CSSProperties = { color: 'var(--text-body)', fontWeight: 500, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 
   return (
-    <div id="map-modal-container" className="modal-back open" style={{ zIndex: 9999 }}>
-      <div className="modal-box" style={{ maxWidth: '1600px', width: '95vw', height: '90vh', maxHeight: '90vh' }}>
-        <div className="modal-head">
-          <h3 id="map-modal-title">Mapa Operativo Detallado</h3>
-          <button id="btn-close-map-modal" className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-tools">
-          <select value={localMes} onChange={e => setLocalMes(e.target.value)}>
-            <option value={filtrosBase.mes}>Meses Seleccionados</option>
-            {mesesDisponibles.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-          <select value={fEstado} onChange={e => setFEstado(e.target.value)}><option value="ALL">Todos los Estados</option>{optionsFor('es').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <select value={fZona} onChange={e => setFZona(e.target.value)}><option value="ALL">Todas las Zonas</option>{optionsFor('zo').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <select value={fAccion} onChange={e => setFAccion(e.target.value)}><option value="ALL">Todas las Acciones</option>{optionsFor('ac').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <select value={fSubaccion} onChange={e => setFSubaccion(e.target.value)}><option value="ALL">Todas las Subacciones</option>{optionsFor('su').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <SearchableSelect value={fTecnico} onChange={setFTecnico} options={optionsFor('te')} placeholder="Todos los Técnicos" />
-          <SearchableSelect value={fMuni} onChange={setFMuni} options={optionsFor('mu')} placeholder="Todos los Municipios" />
-          <SearchableSelect value={fBarrio} onChange={setFBarrio} options={optionsFor('ba')} placeholder="Todos los Barrios" />
-          <select value={fTipo} onChange={e => setFTipo(e.target.value)}><option value="ALL">Todos los Tipos OS</option>{optionsFor('to').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <select value={fDia} onChange={e => setFDia(e.target.value)}><option value="ALL">Día</option>{optionsFor('dia').map(x => <option key={x} value={x}>{x}</option>)}</select>
-          <div className="stats">
-            {new Set(filtered.map(r => r.nic ?? `${r.la},${r.lo}`)).size} NIC • {filtered.length} órdenes
-            {data.length >= 25000 && fBarrio === 'ALL' && <span style={{ marginLeft: 8, color: 'var(--warn)', fontSize: 11, fontWeight: 'normal' }}>⚠️ Mostrando muestra de 25k puntos recientes (filtre para afinar)</span>}
-            {fBarrio !== 'ALL' && <span style={{ marginLeft: 8, color: 'var(--ok)', fontSize: 11, fontWeight: 'normal' }}>✓ Barrio con todas sus órdenes ({filtered.length})</span>}
-          </div>
-        </div>
-        <div className="modal-body" style={{ position: 'relative', display: 'flex', flexDirection: 'row' }}>
-          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-            {loading ? <div style={{ padding: 20, color: 'var(--text-muted)' }}>Cargando coordenadas...</div> : <MapComponent points={filtered} mes={localMes} geoMuni={geoMuni} geoBarrios={geoBarrios} geoZonas={geoZonas} statsBarrios={mapStatsBarrios} selectedBarrio={fBarrio} selectedMuni={fMuni} selectedZona={fZona} isMassive={isMassive}
-                onSelectNic={setSelectedNic}
-                onSelectBarrio={(mu, ba) => {
-                  setSelectedNic(null);
-                  setFBarrio(prev => {
-                    if (prev === ba) {
-                      setFMuni('ALL');
-                      return 'ALL';
-                    }
-                    setFMuni(mu || 'ALL');
-                    return ba || 'ALL';
-                  });
-                }}
-                onReset={() => { setFBarrio('ALL'); setFMuni('ALL'); setSelectedNic(null); }} />}
-                
-            {!loading && (
-              <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 1000, background: 'rgba(11, 15, 22, 0.85)', backdropFilter: 'blur(8px)', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto', color: '#F2F7FF', fontFamily: 'inherit', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
-                <div style={{ fontSize: 10.5, letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>EFECTIVIDAD DE BARRIO</div>
-                {[
-                  { color: 'var(--ok)', label: '≥ 85%', title: 'Verde fuerte: Efectividad ≥ 85% (Rendimiento muy bueno).' },
-                  { color: 'var(--ef-70)', label: '≥ 70%', title: 'Verde lima: Efectividad ≥ 70% (Rendimiento bueno).' },
-                  { color: 'var(--ef-50)', label: '≥ 50%', title: 'Amarillo: Efectividad ≥ 50% (Rendimiento regular).' },
-                  { color: 'var(--ef-30)', label: '≥ 30%', title: 'Naranja: Efectividad ≥ 30% (Riesgo medio).' },
-                  { color: 'var(--err)', label: '< 30%', title: 'Rojo: Efectividad < 30% (Riesgo alto / muy baja efectividad).' },
-                  { color: 'var(--ef-nan)', label: '0%', title: 'Gris: Sin órdenes registradas.' }
-                ].map((leg, i) => (
-                  <div key={i} title={leg.title} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'help' }}>
-                    <span style={{ width: 14, height: 14, borderRadius: 3, background: leg.color }}></span>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{leg.label}</span>
+    <ModalShell
+      title="Mapa Operativo Detallado"
+      subtitle={subtitulo}
+      onClose={onClose}
+      rootId="map-modal-container"
+      closeId="btn-close-map-modal"
+      hideViewToggle
+      filtros={
+        <>
+          <RailField label="Periodo">
+            <select className="ms-select" value={localMes} onChange={e => setLocalMes(e.target.value)} aria-label="Periodo">
+              <option value={filtrosBase.mes}>Meses Seleccionados</option>
+              {mesesDisponibles.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </RailField>
+          <RailSelect label="Estado" value={fEstado} onChange={setFEstado} options={opts('es', 'Todos los Estados')} />
+          <RailCombo label="Municipio" value={fMuni} onChange={setFMuni} options={optionsFor('mu')} placeholder="Todos los Municipios" />
+          <RailCombo label="Barrio" value={fBarrio} onChange={setFBarrio} options={optionsFor('ba')} placeholder="Todos los Barrios" />
+        </>
+      }
+      filtrosMas={
+        <>
+          <RailSelect label="Zona" value={fZona} onChange={setFZona} options={opts('zo', 'Todas las Zonas')} />
+          <RailSelect label="Acción" value={fAccion} onChange={setFAccion} options={opts('ac', 'Todas las Acciones')} />
+          <RailSelect label="Subacción" value={fSubaccion} onChange={setFSubaccion} options={opts('su', 'Todas las Subacciones')} />
+          <RailCombo label="Técnico" value={fTecnico} onChange={setFTecnico} options={optionsFor('te')} placeholder="Todos los Técnicos" />
+          <RailSelect label="Tipo de orden" value={fTipo} onChange={setFTipo} options={opts('to', 'Todos los Tipos OS')} />
+          <RailSelect label="Día" value={fDia} onChange={setFDia} options={opts('dia', 'Todos los días')} />
+        </>
+      }
+      filtrosMasCount={6}
+      resumen={[
+        { label: 'NIC', value: nf(resumenKpis.nic) },
+        { label: 'Órdenes', value: nf(resumenKpis.total) },
+        { label: 'Efectividad', value: `${resumenKpis.efPct}%`, color: 'var(--ok)' },
+        { label: 'Fallido', value: `${resumenKpis.faPct}%`, color: 'var(--err)' },
+      ]}
+      railExtra={
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {selectedBarrioStats && !selectedNic && (
+            <div id="map-barrio-card" style={cardBox}>
+              <div style={cardHead}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="ms-label" style={{ display: 'block' }}>Barrio seleccionado</span>
+                  <span id="map-barrio-name" style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedBarrioStats.barrio}</span>
+                </span>
+                <button id="btn-map-close-barrio" onClick={() => { setFBarrio('ALL'); setFMuni('ALL'); }} title="Cerrar detalle" aria-label="Cerrar detalle del barrio" style={closeX}>✕</button>
+              </div>
+              <div style={{ padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={infoRow}>
+                  <span style={infoK}>Municipio</span>
+                  <span style={infoV}>{selectedBarrioStats.municipio || '—'}</span>
+                </div>
+                {barrioLoading && <div style={{ fontSize: 10, color: 'var(--warn)' }}>Cargando todas las órdenes del barrio…</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ok)', letterSpacing: '0.08em' }}>EFECTIVIDAD</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ok)', marginTop: 2 }}>{selectedBarrioStats.efectividadPct}%</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.efectivas} / {selectedBarrioStats.total}</div>
+                  </div>
+                  <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--err)', letterSpacing: '0.08em' }}>FALLIDO</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--err)', marginTop: 2 }}>{selectedBarrioStats.fallidoPct}%</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.fallido} (fall.+perd.)</div>
+                  </div>
+                </div>
+                <Stats4 total={selectedBarrioStats.total} efectivas={selectedBarrioStats.efectivas} fallidas={selectedBarrioStats.fallidas} perdidas={selectedBarrioStats.perdidas} />
+                <div>
+                  <div className="ms-label" style={{ marginBottom: 6 }}>Principales motivos de fallo</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {Object.entries(selectedBarrioStats.motivos || {})
+                      .sort((a: any, b: any) => b[1] - a[1])
+                      .slice(0, 5)
+                      .map(([mot, cant]: any, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>{mot}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-title)' }}>{cant}</span>
+                        </div>
+                      ))}
+                    {Object.keys(selectedBarrioStats.motivos || {}).length === 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No hay fallas registradas</div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="ms-label" style={{ marginBottom: 6 }}>Técnicos ({selectedBarrioStats.tecnicos.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
+                    {selectedBarrioStats.tecnicos.map((t: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                        <span style={{ flex: 1, minWidth: 0, color: 'var(--text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                        <span title="Efectivas" style={{ color: 'var(--ok)', fontWeight: 700, width: 24, textAlign: 'right' }}>{t.efectivas}</span>
+                        <span title="Fallido (fallidas + perdidas)" style={{ color: 'var(--err)', fontWeight: 700, width: 24, textAlign: 'right' }}>{t.fallido}</span>
+                        <span title="Total" style={{ color: 'var(--text-muted)', width: 30, textAlign: 'right' }}>{t.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="ms-label" style={{ marginBottom: 6 }}>Órdenes ({selectedBarrioStats.total})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 260, overflowY: 'auto' }}>
+                    {selectedBarrioStats.ordenes.slice(0, 500).map((o: any, i: number) => {
+                      const col = o.es === 'Efectiva' ? 'var(--ok)' : (o.es === 'Fallida' || o.es === 'Perdida') ? 'var(--err)' : 'var(--brand-secondary)';
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 7px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 10.5 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }}></span>
+                          <span style={{ color: 'var(--text-body)', fontWeight: 600, width: 54, flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nic ?? 's/NIC'}</span>
+                          <span style={{ flex: 1, minWidth: 0, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.te || 'Sin técnico'}</span>
+                          <span style={{ color: col, flexShrink: 0 }}>{o.es}</span>
+                        </div>
+                      );
+                    })}
+                    {selectedBarrioStats.ordenes.length > 500 && (
+                      <div style={{ fontSize: 10, color: 'var(--warn)', textAlign: 'center', padding: '4px 0' }}>Mostrando 500 de {selectedBarrioStats.ordenes.length} (KPIs calculados sobre el total)</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedNic && (
+            <div id="map-nic-card" ref={nicCardRef} style={cardBox}>
+              <div style={cardHead}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="ms-label" style={{ display: 'block' }}>NIC seleccionado</span>
+                  <span id="map-nic-name" style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedNic.nic ?? 'Sin NIC'}</span>
+                </span>
+                <button id="btn-map-close-nic" onClick={() => setSelectedNic(null)} title="Cerrar detalle" aria-label="Cerrar detalle del NIC" style={closeX}>✕</button>
+              </div>
+              <div style={{ padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={infoRow}>
+                    <span style={infoK}>Municipio</span>
+                    <span style={infoV}>{selectedNic.mu || 'Sin dato'}</span>
+                  </div>
+                  <div style={infoRow}>
+                    <span style={infoK}>Barrio</span>
+                    <span style={infoV}>{selectedNic.ba || 'Sin dato'}</span>
+                  </div>
+                  {selectedNic.isNoGps && (
+                    <div style={{ fontSize: 10, color: 'var(--brand-secondary)', marginTop: 2 }}>Ubicado por centroide de barrio (sin GPS)</div>
+                  )}
+                </div>
+                <Stats4 total={selectedNic.total} efectivas={selectedNic.efectivas} fallidas={selectedNic.fallidas} perdidas={selectedNic.perdidas} />
+                <div>
+                  <div className="ms-label" style={{ marginBottom: 6 }}>Observaciones</div>
+                  {nicObs === null ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cargando observaciones…</div>
+                  ) : nicObs.length === 0 ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sin observaciones registradas.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 230, overflowY: 'auto' }}>
+                      {nicObs.map((o, i) => {
+                        const col = o.es === 'Efectiva' ? 'var(--ok)' : o.es === 'Fallida' ? 'var(--warn)' : 'var(--err)';
+                        return (
+                          <details key={i} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 9px' }}>
+                            <summary style={{ cursor: 'pointer', fontSize: 11, color: col, fontWeight: 600 }}>{o.fe} · {o.su || o.es}</summary>
+                            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.4 }}>{`"${o.ob || 'Sin observación'}"`}</div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Detalle del conjunto filtrado: ESTADO, ZONA, SUBACCIÓN, TIPO DE ORDEN */}
+          {detailSections.map((sec, i) => (
+            <div key={i} data-map-detail={sec.title}>
+              <div className="ms-label" style={{ marginBottom: 8 }}>{sec.title}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {sec.rows.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sin datos</div>}
+                {sec.rows.map((r, j) => (
+                  <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span title={r.label} style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+                    <span style={{ width: 26, height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', flexShrink: 0 }}>
+                      <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.barColor, borderRadius: 4 }}></span>
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: r.color, minWidth: 28, textAlign: 'right', flexShrink: 0 }}>{r.count}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', width: 28, textAlign: 'right', flexShrink: 0 }}>{r.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div>
+            <button id="btn-map-toggle-tech" className="ms-label" aria-expanded={techOpen} onClick={() => setTechOpen(!techOpen)} style={accordionBtn}>
+              <span>Carga por técnico</span>
+              {chev(techOpen)}
+            </button>
+            {techOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {techCards.map((t, i) => (
+                  <div key={i} style={{ padding: '8px 9px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-title)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 26, height: 26, borderRadius: 8, background: `color-mix(in srgb, ${t.color} 16%, transparent)`, color: t.color, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{t.initials}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span title={t.name} style={{ display: 'block', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                        <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 1 }}>{t.zone}</span>
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: t.color }}>{t.count}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 2, marginTop: 8, height: 5, borderRadius: 3, overflow: 'hidden', background: 'var(--border)' }}>
+                      {t.efectivas > 0 && <span style={{ height: '100%', width: `${t.efectivas / t.count * 100}%`, background: 'var(--ok)' }}></span>}
+                      {t.fallidas > 0 && <span style={{ height: '100%', width: `${t.fallidas / t.count * 100}%`, background: 'var(--warn)' }}></span>}
+                      {t.perdidas > 0 && <span style={{ height: '100%', width: `${t.perdidas / t.count * 100}%`, background: 'var(--err)' }}></span>}
+                      {t.pendiente > 0 && <span style={{ height: '100%', width: `${t.pendiente / t.count * 100}%`, background: 'var(--brand-secondary)' }}></span>}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          
-          <div style={{ width: 334, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--bg)', overflowY: 'auto', padding: 17, display: 'flex', flexDirection: 'column', gap: 20 }}>
-             
-             <div style={{ padding: '0 8px 14px' }}>
-               <button id="btn-map-toggle-detail" onClick={() => setDetailOpen(!detailOpen)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 13px', border: 'none', borderRadius: detailOpen ? '11px 11px 0 0' : '11px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, background: detailOpen ? 'var(--panel)' : 'var(--card)', color: detailOpen ? 'var(--brand-primary)' : 'var(--text-title)' }}>
-                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
-                 <span>{detailOpen ? 'Ocultar detalle' : 'Ver detalle'} · {filtered.length}</span>
-                 <span style={{ display: 'flex', marginLeft: 'auto', transition: 'transform .16s', transform: `rotate(${detailOpen ? 180 : 0}deg)` }}>
-                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                 </span>
-               </button>
-               {detailOpen && (
-                 <div style={{ padding: '14px 14px 15px', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 11px 11px', background: 'var(--card)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                   {detailSections.map((sec, i) => (
-                     <div key={i}>
-                       <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>{sec.title}</div>
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                         {sec.rows.map((r, j) => (
-                           <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                             <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'inherit' }}>{r.label}</span>
-                             <span style={{ width: 40, height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', flexShrink: 0 }}>
-                               <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.barColor, borderRadius: 4 }}></span>
-                             </span>
-                             <span style={{ fontSize: 11, fontWeight: 700, color: r.color, width: 32, textAlign: 'right', flexShrink: 0, fontFamily: 'inherit' }}>{r.count}</span>
-                             <span style={{ fontSize: 10, color: 'var(--text-muted)', width: 28, textAlign: 'right', flexShrink: 0, fontFamily: 'inherit' }}>{r.pct}%</span>
-                           </div>
-                         ))}
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               )}
-             </div>
 
-             <div>
-               <button id="btn-map-toggle-tech" onClick={() => setTechOpen(!techOpen)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 13px', border: 'none', borderRadius: techOpen ? '11px 11px 0 0' : '11px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, letterSpacing: '0.14em', fontWeight: 600, background: 'transparent', color: 'var(--text-muted)' }}>
-                 <span>CARGA POR TÉCNICO</span>
-                 <span style={{ display: 'flex', marginLeft: 'auto', transition: 'transform .16s', transform: `rotate(${techOpen ? 180 : 0}deg)` }}>
-                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                 </span>
-               </button>
-               {techOpen && (
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 4px' }}>
-                   {techCards.map((t, i) => {
-                      const hexA = (hex: string, alpha: number) => {
-                        let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-                        return `rgba(${r},${g},${b},${alpha})`;
-                      };
-                      const bg = hexA(t.color, 0.16);
-                      return (
-                        <div key={i} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-title)', fontFamily: 'inherit' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ width: 29, height: 29, borderRadius: 9, background: bg, color: t.color, fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{t.initials}</span>
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-                              <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 1 }}>{t.zone}</span>
-                            </span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: t.color }}>{t.count}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 2, marginTop: 9, height: 5, borderRadius: 3, overflow: 'hidden', background: 'var(--border)' }}>
-                             {t.efectivas > 0 && <span style={{ height: '100%', width: `${t.efectivas/t.count*100}%`, background: 'var(--ok)' }}></span>}
-                             {t.fallidas > 0 && <span style={{ height: '100%', width: `${t.fallidas/t.count*100}%`, background: 'var(--warn)' }}></span>}
-                             {t.perdidas > 0 && <span style={{ height: '100%', width: `${t.perdidas/t.count*100}%`, background: 'var(--err)' }}></span>}
-                             {t.pendiente > 0 && <span style={{ height: '100%', width: `${t.pendiente/t.count*100}%`, background: 'var(--brand-secondary)' }}></span>}
-                          </div>
-                        </div>
-                      );
-                   })}
-                 </div>
-               )}
-             </div>
-
-             <div>
-               <button id="btn-map-toggle-barrios" onClick={() => setBarriosOpen(!barriosOpen)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 13px', border: 'none', borderRadius: barriosOpen ? '11px 11px 0 0' : '11px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, letterSpacing: '0.14em', fontWeight: 600, background: 'transparent', color: 'var(--text-muted)' }}>
-                 <span>BARRIOS CRÍTICOS</span>
-                 <span style={{ display: 'flex', marginLeft: 'auto', transition: 'transform .16s', transform: `rotate(${barriosOpen ? 180 : 0}deg)` }}>
-                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                 </span>
-               </button>
-               {barriosOpen && (
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 4px' }}>
-                   {hotBarrios.map((b, i) => (
-                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--border)', fontFamily: 'inherit' }}>
-                       <span style={{ width: 5, height: 24, borderRadius: 3, background: b.color, flexShrink: 0 }}></span>
-                       <span style={{ flex: 1, minWidth: 0 }}>
-                         <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-title)' }}>{b.name}</span>
-                         <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)' }}>{b.municipio} · riesgo {b.failPct >= 34 ? 'alto' : b.failPct >= 22 ? 'medio' : 'bajo'}</span>
-                       </span>
-                       <span style={{ fontSize: 13.5, fontWeight: 700, color: b.color }}>{b.failPct}%</span>
-                     </div>
-                   ))}
-                 </div>
-               )}
-             </div>
-
-              {selectedBarrioStats && !selectedNic && (
-                <div id="map-barrio-card" style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', background: 'var(--panel)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <span style={{ flex: 1, minWidth: 0, fontFamily: 'inherit' }}>
-                      <span style={{ display: 'block', fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>BARRIO SELECCIONADO</span>
-                      <span id="map-barrio-name" style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedBarrioStats.barrio}</span>
+          <div>
+            <button id="btn-map-toggle-barrios" className="ms-label" aria-expanded={barriosOpen} onClick={() => setBarriosOpen(!barriosOpen)} style={accordionBtn}>
+              <span>Barrios críticos</span>
+              {chev(barriosOpen)}
+            </button>
+            {barriosOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {hotBarrios.map((b, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 10, background: 'var(--card)', border: '1px solid var(--border)' }}>
+                    <span style={{ width: 5, height: 24, borderRadius: 3, background: b.color, flexShrink: 0 }}></span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span title={b.name} style={{ display: 'block', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-title)' }}>{b.name}</span>
+                      <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.municipio} · riesgo {b.failPct >= 34 ? 'alto' : b.failPct >= 22 ? 'medio' : 'bajo'}</span>
                     </span>
-                    <button id="btn-map-close-barrio" onClick={() => { setFBarrio('ALL'); setFMuni('ALL'); }} title="Cerrar detalle" style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: b.color }}>{b.failPct}%</span>
                   </div>
-                  <div style={{ padding: '12px 13px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'inherit' }}>
-                      <div style={{ display: 'flex', gap: 8, fontSize: 11.5 }}>
-                        <span style={{ color: 'var(--text-muted)', width: 62, flexShrink: 0 }}>Municipio</span>
-                        <span style={{ color: 'var(--text-body)', fontWeight: 500, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedBarrioStats.municipio || '—'}</span>
-                      </div>
-                      {barrioLoading && <div style={{ fontSize: 10, color: 'var(--warn)', marginTop: 2 }}>Cargando todas las órdenes del barrio…</div>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ok)', letterSpacing: '0.08em' }}>EFECTIVIDAD</div>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--ok)', marginTop: 2 }}>{selectedBarrioStats.efectividadPct}%</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.efectivas} / {selectedBarrioStats.total}</div>
-                      </div>
-                      <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--err)', letterSpacing: '0.08em' }}>FALLIDO</div>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--err)', marginTop: 2 }}>{selectedBarrioStats.fallidoPct}%</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{selectedBarrioStats.fallido} (fall.+perd.)</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, textAlign: 'center' }}>
-                      {[
-                        { lbl: 'TOTAL', val: selectedBarrioStats.total, col: 'var(--text-title)' },
-                        { lbl: 'EFECTIVAS', val: selectedBarrioStats.efectivas, col: 'var(--ok)' },
-                        { lbl: 'FALLIDAS (CON PAGO)', val: selectedBarrioStats.fallidas, col: 'var(--warn)' },
-                        { lbl: 'PERDIDAS (SIN PAGO)', val: selectedBarrioStats.perdidas, col: 'var(--err)' },
-                      ].map((s, i) => (
-                        <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 2px' }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: s.col, marginTop: 1 }}>{s.val ?? 0}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>PRINCIPALES MOTIVOS DE FALLO</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {Object.entries(selectedBarrioStats.motivos || {})
-                          .sort((a: any, b: any) => b[1] - a[1])
-                          .slice(0, 5)
-                          .map(([mot, cant]: any, i) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit' }}>
-                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8 }}>{mot}</span>
-                              <span style={{ fontWeight: 700, color: 'var(--text-title)' }}>{cant}</span>
-                            </div>
-                          ))}
-                        {Object.keys(selectedBarrioStats.motivos || {}).length === 0 && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No hay fallas registradas</div>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>TÉCNICOS ({selectedBarrioStats.tecnicos.length})</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
-                        {selectedBarrioStats.tecnicos.map((t: any, i: number) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontFamily: 'inherit' }}>
-                            <span style={{ flex: 1, minWidth: 0, color: 'var(--text-body)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-                            <span title="Efectivas" style={{ color: 'var(--ok)', fontWeight: 700, width: 28, textAlign: 'right' }}>{t.efectivas}</span>
-                            <span title="Fallido (fallidas + perdidas)" style={{ color: 'var(--err)', fontWeight: 700, width: 28, textAlign: 'right' }}>{t.fallido}</span>
-                            <span title="Total" style={{ color: 'var(--text-muted)', width: 34, textAlign: 'right' }}>{t.total}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>ÓRDENES ({selectedBarrioStats.total})</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 260, overflowY: 'auto' }}>
-                        {selectedBarrioStats.ordenes.slice(0, 500).map((o: any, i: number) => {
-                          const col = o.es === 'Efectiva' ? 'var(--ok)' : (o.es === 'Fallida' || o.es === 'Perdida') ? 'var(--err)' : 'var(--brand-secondary)';
-                          return (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 8px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10.5, fontFamily: 'inherit' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }}></span>
-                              <span style={{ color: 'var(--text-body)', fontWeight: 600, width: 60, flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nic ?? 's/NIC'}</span>
-                              <span style={{ flex: 1, minWidth: 0, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.te || 'Sin técnico'}</span>
-                              <span style={{ color: col, flexShrink: 0 }}>{o.es}</span>
-                              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{o.fe}</span>
-                            </div>
-                          );
-                        })}
-                        {selectedBarrioStats.ordenes.length > 500 && (
-                          <div style={{ fontSize: 10, color: 'var(--warn)', textAlign: 'center', padding: '4px 0' }}>Mostrando 500 de {selectedBarrioStats.ordenes.length} (KPIs calculados sobre el total)</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-             {selectedNic && (
-               <div id="map-nic-card" ref={nicCardRef} style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--card)', overflow: 'hidden' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', background: 'var(--panel)' }}>
-                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                   <span style={{ flex: 1, minWidth: 0, fontFamily: 'inherit' }}>
-                     <span style={{ display: 'block', fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)' }}>NIC SELECCIONADO</span>
-                     <span id="map-nic-name" style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: 'var(--text-title)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedNic.nic ?? 'Sin NIC'}</span>
-                   </span>
-                   <button id="btn-map-close-nic" onClick={() => setSelectedNic(null)} title="Cerrar detalle" style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
-                 </div>
-                 <div style={{ padding: '12px 13px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'inherit' }}>
-                     <div style={{ display: 'flex', gap: 8, fontSize: 11.5 }}>
-                       <span style={{ color: 'var(--text-muted)', width: 62, flexShrink: 0 }}>Municipio</span>
-                       <span style={{ color: 'var(--text-body)', fontWeight: 500, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedNic.mu || 'Sin dato'}</span>
-                     </div>
-                     <div style={{ display: 'flex', gap: 8, fontSize: 11.5 }}>
-                       <span style={{ color: 'var(--text-muted)', width: 62, flexShrink: 0 }}>Barrio</span>
-                       <span style={{ color: 'var(--text-body)', fontWeight: 500, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedNic.ba || 'Sin dato'}</span>
-                     </div>
-                     {selectedNic.isNoGps && (
-                       <div style={{ fontSize: 10, color: 'var(--brand-secondary)', marginTop: 2 }}>Ubicado por centroide de barrio (sin GPS)</div>
-                     )}
-                   </div>
-                   <div style={{ display: 'flex', gap: 5, textAlign: 'center' }}>
-                     {[
-                       { lbl: 'TOTAL', val: selectedNic.total, col: 'var(--text-title)' },
-                       { lbl: 'EFECTIVAS', val: selectedNic.efectivas, col: 'var(--ok)' },
-                       { lbl: 'FALLIDAS (CON PAGO)', val: selectedNic.fallidas, col: 'var(--warn)' },
-                       { lbl: 'PERDIDAS (SIN PAGO)', val: selectedNic.perdidas, col: 'var(--err)' },
-                     ].map((s, i) => (
-                       <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 2px' }}>
-                         <div style={{ fontSize: 10, fontWeight: 700, color: s.col, opacity: 0.75, letterSpacing: '0.04em' }}>{s.lbl}</div>
-                         <div style={{ fontSize: 15, fontWeight: 700, color: s.col, marginTop: 1 }}>{s.val ?? 0}</div>
-                       </div>
-                     ))}
-                   </div>
-                   <div>
-                     <div style={{ fontSize: 10, letterSpacing: '0.14em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'inherit' }}>OBSERVACIONES</div>
-                     {nicObs === null ? (
-                       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit' }}>Cargando observaciones…</div>
-                     ) : nicObs.length === 0 ? (
-                       <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'inherit' }}>Sin observaciones registradas.</div>
-                     ) : (
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 230, overflowY: 'auto' }}>
-                         {nicObs.map((o, i) => {
-                           const col = o.es === 'Efectiva' ? 'var(--ok)' : o.es === 'Fallida' ? 'var(--warn)' : 'var(--err)';
-                           return (
-                             <details key={i} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 9px', fontFamily: 'inherit' }}>
-                               <summary style={{ cursor: 'pointer', fontSize: 11, color: col, fontWeight: 600 }}>{o.fe} · {o.su || o.es}</summary>
-                               <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.4 }}>{`"${o.ob || 'Sin observación'}"`}</div>
-                             </details>
-                           );
-                         })}
-                       </div>
-                     )}
-                   </div>
-                 </div>
-               </div>
-             )}
+                ))}
+              </div>
+            )}
           </div>
         </div>
+      }
+    >
+      <div ref={mapBoxRef} style={{ position: 'relative', flex: '1 1 auto', minHeight: 320 }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          {loading ? <div style={{ padding: 20, color: 'var(--text-muted)' }}>Cargando coordenadas...</div> : <MapComponent points={filtered} mes={localMes} geoMuni={geoMuni} geoBarrios={geoBarrios} geoZonas={geoZonas} statsBarrios={mapStatsBarrios} selectedBarrio={fBarrio} selectedMuni={fMuni} selectedZona={fZona} isMassive={isMassive}
+            onSelectNic={setSelectedNic}
+            onSelectBarrio={(mu, ba) => {
+              setSelectedNic(null);
+              setFBarrio(prev => {
+                if (prev === ba) {
+                  setFMuni('ALL');
+                  return 'ALL';
+                }
+                setFMuni(mu || 'ALL');
+                return ba || 'ALL';
+              });
+            }}
+            onReset={() => { setFBarrio('ALL'); setFMuni('ALL'); setSelectedNic(null); }} />}
+        </div>
+
+        {!loading && (
+          <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 1000, background: 'rgba(11, 15, 22, 0.85)', backdropFilter: 'blur(8px)', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto', color: '#F2F7FF', fontFamily: 'inherit', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ fontSize: 10.5, letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>EFECTIVIDAD DE BARRIO</div>
+            {[
+              { color: 'var(--ok)', label: '≥ 85%', title: 'Verde fuerte: Efectividad ≥ 85% (Rendimiento muy bueno).' },
+              { color: 'var(--ef-70)', label: '≥ 70%', title: 'Verde lima: Efectividad ≥ 70% (Rendimiento bueno).' },
+              { color: 'var(--ef-50)', label: '≥ 50%', title: 'Amarillo: Efectividad ≥ 50% (Rendimiento regular).' },
+              { color: 'var(--ef-30)', label: '≥ 30%', title: 'Naranja: Efectividad ≥ 30% (Riesgo medio).' },
+              { color: 'var(--err)', label: '< 30%', title: 'Rojo: Efectividad < 30% (Riesgo alto / muy baja efectividad).' },
+              { color: 'var(--ef-nan)', label: '0%', title: 'Gris: Sin órdenes registradas.' }
+            ].map((leg, i) => (
+              <div key={i} title={leg.title} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'help' }}>
+                <span style={{ width: 14, height: 14, borderRadius: 3, background: leg.color }}></span>
+                <span style={{ fontSize: 12, fontWeight: 500 }}>{leg.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

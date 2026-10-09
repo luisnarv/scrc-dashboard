@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
 import { filtRaw } from '../components/utils/filters';
 import { fmtN, fmtCOP, num } from '../components/utils/formatters';
+import ModalShell, { RailSegmented, RailSearch, RailToggle, type RailKpi } from '../components/ModalShell';
+import { descargarCsv } from '../components/utils/exportFile';
 
 /* Paleta del dashboard */
 const TEAL = 'var(--sip)';
@@ -150,14 +152,12 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     { key: 'promEfec', label: 'EFECTIVAS', prom: true },
   ], [metaLabel]);
 
-  /* cerrar con Escape + bloquear scroll del fondo */
+  /* Esc y el cierre los maneja ModalShell; aquí solo se bloquea el scroll del fondo */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [onClose]);
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   /* ------- agregación: Tipo -> Zona -> Técnico ------- */
   const { brigadas, total, periodo } = useMemo(() => {
@@ -323,9 +323,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
 
   const exportCSV = () => {
     if (!raw) return;
-    const rows = [];
-    rows.push(['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'Meta de facturación', '% Cumplimiento', 'PROM vis', 'Prom efec'].join(';'));
-    
+    const rows: (string | number)[][] = [];
+    const columnas = ['Mes', 'Zona', 'Tipo de Brigada', 'Categoría Brigada', 'Técnico / Brigada', 'Efectivas', 'Fallidas (con pago)', 'Perdidas', 'Total visitas', 'Producción valorizada', 'Meta de facturación', '% Cumplimiento', 'PROM vis', 'Prom efec'];
+
     const rowsF = filtRaw(raw.raw, filters);
     
     // Agrupar por Mes -> Tipo -> Zona -> Técnico
@@ -379,9 +379,9 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
             rows.push([
               month,
               zoneKey,
-              typeKey.replace(/;/g, ''),
+              typeKey,
               categoria,
-              tech.techName.replace(/;/g, ''),
+              tech.techName,
               tech.efec,
               tech.fall,
               tech.perd,
@@ -391,20 +391,13 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
               `${cumpPct.toFixed(1)}%`,
               promVis.toFixed(2),
               promEfec.toFixed(2)
-            ].join(';'));
+            ]);
           }
         }
       }
     }
     
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Detalle_Brigadas.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    descargarCsv('Detalle_Brigadas.csv', columnas, rows);
   };
 
   /* --------------------------------- estilos --------------------------------- */
@@ -458,152 +451,71 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
     );
   });
 
-  return (
-    <div
-      className="bdm-overlay"
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(20,27,45,.55)', backdropFilter: 'blur(2px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 'clamp(6px, 2vw, 20px)',
-      }}
-    >
-      <div
-        className="bdm-dialog"
-        onClick={e => e.stopPropagation()}
-        role="dialog" aria-modal="true" aria-label="Detalle por brigadas"
-        style={{
-          background: 'var(--bg)', borderRadius: 16, width: 'min(1180px, 98vw)', maxHeight: '94dvh',
-          display: 'flex', flexDirection: 'column', overflow: 'auto', boxShadow: '0 24px 60px rgba(20,30,60,.28)',
-        }}
-      >
-        {/* Fila 1: Título y Cerrar */}
-        <div className="bdm-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', gap: 12 }}>
-          <div>
-            <div className="bdm-title" style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1.2, color: INK }}>DETALLE OPERATIVO POR BRIGADAS</div>
-            <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
-              Tipo de Brigada › Zona › Técnico · Periodo <b style={{ color: INK }}>{periodo}</b>
-            </div>
-          </div>
-          <button
-            className="bdm-close"
-            onClick={onClose} aria-label="Cerrar"
-            style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-          >×</button>
-        </div>
+  const colorCumpl = (v: number) => (v >= 100 ? OK : v >= 85 ? 'var(--warn)' : ERR);
+  const resumen: RailKpi[] | undefined = total ? [
+    { label: 'Efectivas', value: fmtN(total.efec), color: OK },
+    { label: 'Total visitas', value: fmtN(total.totVis), color: INK },
+    { label: 'Valorizada', value: fmtCOP(total.ingreso), color: 'var(--otc)' },
+    { label: '% Cumplimiento', value: `${promValue(total, 'cump', categoriaFiltro).toFixed(1)}%`, color: colorCumpl(promValue(total, 'cump', categoriaFiltro)) },
+  ] : undefined;
 
-        {/* Fila 2: Franja de resumen del periodo */}
+  const filtros = (
+    <>
+      <RailSegmented
+        label="Categoría"
+        value={categoriaFiltro}
+        onChange={v => setCategoriaFiltro(v as 'ALL' | 'OPERATIVA' | 'DISPONIBLE')}
+        options={[
+          { value: 'ALL', label: <span style={{ display: 'block', lineHeight: 1.25 }}>Todas<br />({brigadas.length})</span> },
+          { value: 'OPERATIVA', label: <span style={{ display: 'block', lineHeight: 1.25 }}>Operativas<br />({brigadas.filter(b => !isDisponibleType(b.label)).length})</span> },
+          { value: 'DISPONIBLE', label: <span style={{ display: 'block', lineHeight: 1.25 }}>Disponibles<br />({brigadas.filter(b => isDisponibleType(b.label)).length})</span> },
+        ]}
+      />
+      <RailSearch label="Buscar" placeholder="Buscar tipo, zona o técnico" value={q} onChange={setQ} />
+      <RailToggle checked={allExpanded} onChange={toggleAll} label="Desplegar todo" />
+    </>
+  );
+
+  const kpiMini = (label: string, value: string, color: string) => (
+    <div key={label}>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <ModalShell
+      title="DETALLE OPERATIVO POR BRIGADAS"
+      subtitle={<>Tipo de Brigada › Zona › Técnico · Periodo <b style={{ color: INK }}>{periodo}</b></>}
+      onClose={onClose}
+      hideViewToggle
+      filtros={filtros}
+      resumen={resumen}
+      exportes={[{ label: 'Exportar CSV', onClick: exportCSV, primary: true }]}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 }}>
+        {/* Resto de indicadores del periodo (los 4 principales viven en el panel) */}
         {total && (
-          <div className="bdm-summary" style={{ padding: '0 20px 12px' }}>
+          <div className="bdm-summary" style={{ flexShrink: 0, paddingBottom: 10 }}>
             <div style={{
-              background: 'var(--hover-bg)',
-              borderRadius: 10,
-              padding: '12px 14px',
-              borderLeft: `3px solid ${TEAL}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 16,
+              background: 'var(--hover-bg)', borderRadius: 10, padding: '10px 14px', borderLeft: `3px solid ${TEAL}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
             }}>
               <div className="bdm-summary-kpis" style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>EFECTIVAS</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: OK }}>{fmtN(total.efec)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TOTAL VISITAS</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.totVis)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>PERDIDAS</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ERR }}>{fmtN(total.perd)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>VALORIZADA</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--otc)' }}>{fmtCOP(total.ingreso)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>{metaLabel}</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtCOP(total.costo)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>% CUMPLIMIENTO</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: getPctColor(promValue(total, 'cump', categoriaFiltro)) }}>{promValue(total, 'cump', categoriaFiltro).toFixed(1)}%</div>
-                </div>
+                {kpiMini('PERDIDAS', fmtN(total.perd), ERR)}
+                {kpiMini(metaLabel, fmtCOP(total.costo), INK)}
+                {kpiMini('TÉCNICO-DÍAS', fmtN(total.dias), INK)}
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, color: MUT }}>TÉCNICO-DÍAS</div>
-                <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: INK }}>{fmtN(total.dias)}</div>
-              </div>
+              <span style={{ fontSize: 11.5, color: MUT }}>
+                {brigadasSort.length} agrupaciones · {fmtN(totalMostrado.dias)} técnico-días
+              </span>
             </div>
           </div>
         )}
 
-        {/* Fila 3: Barra de herramientas */}
-        <div className="bdm-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 14px', flexWrap: 'wrap' }}>
-          {/* Segmentado de categoría */}
-          <div className="bdm-seg" style={{ display: 'flex', gap: 4, background: 'var(--panel)', padding: 3, borderRadius: 8, border: `1px solid ${LINE}` }}>
-            <button
-              onClick={() => setCategoriaFiltro('ALL')}
-              style={{
-                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
-                background: categoriaFiltro === 'ALL' ? TEAL : 'transparent',
-                color: categoriaFiltro === 'ALL' ? '#fff' : MUT,
-              }}
-            >
-              Todas ({brigadas.length})
-            </button>
-            <button
-              onClick={() => setCategoriaFiltro('OPERATIVA')}
-              style={{
-                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
-                background: categoriaFiltro === 'OPERATIVA' ? TEAL : 'transparent',
-                color: categoriaFiltro === 'OPERATIVA' ? '#fff' : MUT,
-              }}
-            >
-              Operativas ({brigadas.filter(b => !isDisponibleType(b.label)).length})
-            </button>
-            <button
-              onClick={() => setCategoriaFiltro('DISPONIBLE')}
-              style={{
-                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
-                background: categoriaFiltro === 'DISPONIBLE' ? TEAL : 'transparent',
-                color: categoriaFiltro === 'DISPONIBLE' ? '#fff' : MUT,
-              }}
-            >
-              Disponibles ({brigadas.filter(b => isDisponibleType(b.label)).length})
-            </button>
-          </div>
-
-          <input
-            className="bdm-search"
-            value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar tipo, zona o técnico"
-            style={{ padding: '6px 12px', border: `1px solid ${LINE}`, borderRadius: 8, fontSize: 12.5, width: 220, outline: 'none', background: 'var(--card)', color: INK }}
-          />
-
-          <button
-            onClick={toggleAll}
-            style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--card)', color: INK, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-          >
-            {allExpanded ? 'Contraer todo' : 'Desplegar todo'}
-          </button>
-
-          <div className="bdm-toolbar-right" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 11.5, color: MUT }}>
-              {brigadasSort.length} agrupaciones · {fmtN(totalMostrado.dias)} técnico-días
-            </span>
-            <button
-              onClick={exportCSV}
-              style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${TEAL}`, background: 'transparent', color: TEAL, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
-            >
-              Exportar CSV
-            </button>
-          </div>
-        </div>
-
         {/* Tabla jerárquica con encabezado de 2 niveles y celdas fijas */}
         <div className="mobile-scroll-tip" style={{ padding: '0 16px 6px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
-        <div className="table-responsive-container" style={{ overflow: 'auto', WebkitOverflowScrolling: 'touch', flex: 1 }}>
+        <div className="table-responsive-container" style={{ overflow: 'auto', WebkitOverflowScrolling: 'touch', flex: '1 1 0', minHeight: 0, border: `1px solid ${LINE}`, borderRadius: 8, background: 'var(--card)' }}>
           <table className="bdm-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 980 }}>
             <thead>
               {/* Nivel 1 de encabezado: Grupos */}
@@ -765,14 +677,15 @@ export default function BrigadasDetalleModal({ onClose }: { onClose: () => void 
         </div>
 
         {/* Pie informativo */}
-        <div className="bdm-footnote" style={{ padding: '10px 20px', borderTop: `1px solid ${LINE}`, fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="bdm-footnote" style={{ flexShrink: 0, padding: '8px 4px 0', fontSize: 11, color: MUT, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Clic en una fila para desplegar zonas y técnicos · clic en un encabezado para ordenar</span>
           <span>% Cumplimiento = (producción ÷ meta) × 100</span>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
+
 
 /* ------- Fila recursiva con riel de color y columna fija ------- */
 function RowRecursive({

@@ -72,7 +72,8 @@ const OPEN_SRC = `async (label) => {
   let close = null;
   if (cb) {
     const r = cb.getBoundingClientRect();
-    const inView = r.left >= -1 && r.right <= vw + 1 && r.top >= -1 && r.bottom <= vh + 1;
+    const vwA = document.documentElement.clientWidth; // tras abrir el modal (puede bloquear el scroll y cambiar el ancho útil)
+    const inView = r.left >= -1 && r.right <= vwA + 1 && r.top >= -1 && r.bottom <= vh + 1;
     let covered = false;
     if (inView) {
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -143,7 +144,7 @@ const OPEN_SRC = `async (label) => {
   });
 
   return {
-    found: true, title: describe(panel), vw, vh, rect, close,
+    found: true, title: describe(panel), vw: document.documentElement.clientWidth, vh, rect, close,
     hOver: top(hOver).map((o) => ({ d: describe(o.el), right: o.right, left: o.left })),
     vCut: top(vCut).map((o) => ({ d: describe(o.el), bottom: o.bottom })),
     small24: targets.filter((t) => t.min < 24).length, small32: targets.filter((t) => t.min < 32).length, targetsTotal: targets.length,

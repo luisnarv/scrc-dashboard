@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 
 import type { RawData, RawRecord, CostoRecord, Filters } from './utils/types';
-import { normProy, normZonaDet } from './utils/filters';
+import { normProy, normZonaDet, enrichGeo } from './utils/filters';
 import { dashboardRepo } from '../lib/cache/repository';
 import { MapaCache } from '../lib/cache/mapaCache';
 import type { MonthPayload, MonthsMeta } from '../lib/cache/types';
@@ -88,6 +88,9 @@ function normalizeMonth(p: MonthPayload): MonthPayload {
     rec._Zona = z || proj || undefined;
     rec._ZonaDet = rec._Zona;
   });
+  // Pérdidas (causales de no efectividad): sin _Proyecto/_Zona el filtro de proyecto/zona
+  // de la página las descartaba todas. Tolera cachés viejos sin el campo.
+  p.perdidas = (p.perdidas || []).map(enrichGeo);
   return p;
 }
 
@@ -239,7 +242,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       raw: meses.flatMap(m => m.rawRecords),
       costos: meses.flatMap(m => m.costos),
       emps: meses.flatMap(m => m.emps),
-      det: [],
+      perdidas: meses.flatMap(m => m.perdidas || []),
       mes: meses.flatMap(m => m.mesRecords),
       disp: meses.flatMap(m => m.dispDiaria),
       evolutivo,

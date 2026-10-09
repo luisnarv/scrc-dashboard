@@ -125,7 +125,7 @@ class CDP {
   }
 }
 
-async function launchBrowser() {
+export async function launchBrowser() {
   const port = 9400 + Math.floor(Math.random() * 400);
   const userDir = mkdtempSync(join(tmpdir(), 'resp-bot-'));
   const child = spawn(findBrowser(), [
@@ -166,7 +166,7 @@ async function launchBrowser() {
   return { cdp, close };
 }
 
-async function loadPage(cdp, url, vp) {
+export async function loadPage(cdp, url, vp) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   const s = (method, params) => cdp.send(method, params, sessionId);

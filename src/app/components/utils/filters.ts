@@ -1,4 +1,4 @@
-import type { RawRecord, CostoRecord, MesRecord, HorarioRecord, Filters } from './types';
+import type { RawRecord, CostoRecord, MesRecord, HorarioRecord, PerdidaRecord, Filters } from './types';
 
 const mesDe = (fecha: unknown) => String(fecha || '').slice(0, 7);
 
@@ -23,7 +23,7 @@ export function filtRaw(rows: RawRecord[], F: Filters): RawRecord[] {
   const fFilter = F.fecha;
   const isAllFecha = fFilter === 'ALL';
   const fSet = (!isAllFecha && fFilter && fFilter.includes(','))
-    ? new Set(fFilter.split(',').filter(Boolean))
+    ? new Set<string>(fFilter.split(',').filter(Boolean))
     : null;
 
   return rows.filter(r => {
@@ -45,7 +45,7 @@ export function filtHorario(rows: HorarioRecord[], F: Filters): HorarioRecord[] 
   const fFilter = F.fecha;
   const isAllFecha = fFilter === 'ALL';
   const fSet = (!isAllFecha && fFilter && fFilter.includes(','))
-    ? new Set(fFilter.split(',').filter(Boolean))
+    ? new Set<string>(fFilter.split(',').filter(Boolean))
     : null;
 
   return rows.filter(r => {
@@ -125,4 +125,42 @@ export function ventanaPrevia(sel: string[], mesList: string[]): string[] {
   const startIdx = mesList.indexOf([...sel].sort()[0]);
   if (startIdx <= 0) return [];
   return mesList.slice(Math.max(0, startIdx - n), startIdx);
+}
+/**
+ * Pérdidas (raw.perdidas) -- base del gráfico "Causales de No Efectividad".
+ * Aplica las MISMAS dimensiones que filtRaw (proyecto, zona, mes, fecha y proceso) para que el
+ * gráfico cuadre con los KPIs de la página. Requiere _Proyecto/_Zona/_ZonaDet (ver enrichGeo).
+ */
+export function filtPerdidas(rows: PerdidaRecord[], F: Filters): PerdidaRecord[] {
+  const fFilter = F.fecha;
+  const isAllFecha = fFilter === 'ALL';
+  const fSet = (!isAllFecha && fFilter && fFilter.includes(','))
+    ? new Set<string>(fFilter.split(',').filter(Boolean))
+    : null;
+
+  return rows.filter(r => {
+    if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
+    if (F.zona !== 'ALL' && r._Zona !== F.zona && r._ZonaDet !== F.zona) return false;
+    if (!mesOK(mesDe(r.Fecha), F)) return false;
+    if (!isAllFecha) {
+      if (!fFilter) return false;
+      const fOnly = String(r.Fecha || '').trim().slice(0, 10);
+      if (!fechaMatches(fOnly, fFilter, fSet)) return false;
+    }
+    if (!procesoOK(r.Brigada, F)) return false;
+    return true;
+  });
+}
+
+/**
+ * Agrega _Proyecto/_Zona/_ZonaDet a un registro que trae la zona cruda de historico_mo
+ * (p. ej. 'ATLANTICO CENTRO'). Misma lógica que usa DashboardProvider con raw.horario.
+ */
+export function enrichGeo<T extends { Zona?: string; _Proyecto?: string; _Zona?: string; _ZonaDet?: string }>(rec: T): T {
+  const proj = normProy(rec.Zona);
+  const z = normZonaDet(rec.Zona);
+  if (proj) rec._Proyecto = proj;
+  rec._Zona = z || proj || undefined;
+  rec._ZonaDet = rec._Zona;
+  return rec;
 }

@@ -23,6 +23,7 @@ export const RemoteSource = {
       dispDiaria: data.dispDiaria || [],
       horario: data.horario || [],
       horarioTec: data.horarioTec || [],
+      perdidas: data.perdidas || [],
     };
   },
 };

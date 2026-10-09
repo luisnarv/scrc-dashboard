@@ -2,8 +2,11 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw, filtMes, filtDisp, filtHorario } from '../components/utils/filters';
+import { filtRaw, filtMes, filtDisp, filtHorario, filtPerdidas } from '../components/utils/filters';
+import { CHART_FIXED } from '../components/utils/chartTheme';
+import { buildCausales, OTRAS_CAUSALES, ESTADOS_CAUSAL, tituloEstado, type EstadoCausal } from '../components/utils/causales';
 import { fmtPct, fmtN, num as n, fmtRangoMeses } from '../components/utils/formatters';
+import { RailSegmented, type RailKpi } from '../components/ModalShell';
 import BrigadasDetalleModal from './BrigadasDetalleModal';
 import DisponibilidadSection from './DisponibilidadSection';
 import ChartCard from '../components/ChartCard';
@@ -169,6 +172,7 @@ export default function OperativoPage() {
   const [brigTiposOpen, setBrigTiposOpen] = useState(false);
   const [filtroEvolutivo, setFiltroEvolutivo] = useState<string | null>(null);
   const [vistaEvolutivo, setVistaEvolutivo] = useState<'mes' | 'dia' | 'hora'>('mes');
+  const [estadoCausales, setEstadoCausales] = useState<EstadoCausal>('TODAS');
   const [subVistaBrigadas, setSubVistaBrigadas] = useState<'cuadrilla' | 'tipo'>('cuadrilla');
   const [selectedTipoBrigada, setSelectedTipoBrigada] = useState<string>('');
 
@@ -249,6 +253,7 @@ export default function OperativoPage() {
       return HOMOLOGACION_BRIGADA[val.toUpperCase()] || val;
     };
     const rawF = filtRaw(raw.raw, F);
+      const perdidasF = filtPerdidas(raw.perdidas || [], F);
 
     const efect = rawF.reduce((s, r) => s + n(r.Efectivas), 0);
     const fallidas = rawF.reduce((s, r) => s + n(r.Fallida_Con_Pago), 0);
@@ -800,15 +805,15 @@ export default function OperativoPage() {
             type: 'line' as const,
             label: 'Meta',
             data: mesesArr.map(m => metaByMonth[m] || 0),
-            borderColor: '#F57C00',
-            backgroundColor: '#F57C00',
+            borderColor: CHART_FIXED.META,
+            backgroundColor: CHART_FIXED.META,
             borderWidth: 2.5,
             borderDash: [5, 4],
             pointStyle: 'rectRot',
             pointRadius: 4,
             pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
             pointBorderWidth: 2,
-            pointBorderColor: '#F57C00',
+            pointBorderColor: CHART_FIXED.META,
             fill: false,
             stack: 'metaStack',
           },
@@ -848,15 +853,15 @@ export default function OperativoPage() {
             type: 'line' as const,
             label: 'Meta esperada',
             data: dataMeta,
-            borderColor: '#F57C00',
-            backgroundColor: '#F57C00',
+            borderColor: CHART_FIXED.META,
+            backgroundColor: CHART_FIXED.META,
             borderWidth: 2.5,
             borderDash: [5, 4],
             pointStyle: 'rectRot',
             pointRadius: 4,
             pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
             pointBorderWidth: 2,
-            pointBorderColor: '#F57C00',
+            pointBorderColor: CHART_FIXED.META,
             fill: false,
             stack: 'metaStack',
           },
@@ -870,15 +875,15 @@ export default function OperativoPage() {
             type: 'line' as const,
             label: 'Meta',
             data: dias.map(d => metaByDay[d] || 0),
-            borderColor: '#F57C00',
-            backgroundColor: '#F57C00',
+            borderColor: CHART_FIXED.META,
+            backgroundColor: CHART_FIXED.META,
             borderWidth: 2.5,
             borderDash: [5, 4],
             pointStyle: 'rectRot',
             pointRadius: 4,
             pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
             pointBorderWidth: 2,
-            pointBorderColor: '#F57C00',
+            pointBorderColor: CHART_FIXED.META,
             fill: false,
             stack: 'metaStack',
           },
@@ -937,6 +942,46 @@ export default function OperativoPage() {
         }
       }
     };
+
+    // Versión del modal: barras apiladas Efectivas/Fallidas/Perdidas con colores de tema (tokens var(--x))
+    // y la línea de Meta punteada [6,4]. ModalChart resuelve los tokens y recrea el gráfico al cambiar el tema.
+    const chartOrdModal = {
+      ...chartOrd,
+      data: {
+        ...chartOrd.data,
+        datasets: chartOrdDatasets.map((ds: any) => {
+          if (ds.type === 'line') {
+            return { ...ds, borderColor: CHART_FIXED.META, backgroundColor: CHART_FIXED.META, borderDash: [6, 4], pointBackgroundColor: 'var(--card)', pointBorderColor: CHART_FIXED.META };
+          }
+          const tokenPorSerie: Record<string, string> = { Efectivas: 'var(--ok)', Fallidas: 'var(--warn)', Perdidas: 'var(--err)' };
+          return { ...ds, backgroundColor: tokenPorSerie[ds.label] || ds.backgroundColor };
+        }),
+      },
+    };
+    const resumenOrd: RailKpi[] = (() => {
+      if (vistaEvolutivo === 'mes') {
+        const mConDato = mesesArr.filter(m => totByMonth[m] !== undefined);
+        const metaTot = mesesArr.reduce((s2, m) => s2 + (metaByMonth[m] || 0), 0);
+        const metaConDato = mConDato.reduce((s2, m) => s2 + (metaByMonth[m] || 0), 0);
+        const totConDato = mConDato.reduce((s2, m) => s2 + (totByMonth[m] || 0), 0);
+        const cump = metaConDato > 0 ? (totConDato / metaConDato) * 100 : 0;
+        const bajo = mConDato.filter(m => (totByMonth[m] || 0) < (metaByMonth[m] || 0)).length;
+        let picoM = '—', picoV = -1;
+        mesesArr.forEach(m => { const v = efecByMonth[m] || 0; if (v > picoV) { picoV = v; picoM = `${m} (${fmtN(v)} ord)`; } });
+        return [
+          { label: 'Meta total', value: fmtN(metaTot) },
+          { label: 'Mes pico', value: picoM },
+          { label: 'Cump. meta', value: `${cump.toFixed(0)}%`, color: cump >= 90 ? 'var(--ok)' : 'var(--warn)' },
+          { label: 'Bajo meta', value: `${bajo} ${bajo === 1 ? 'mes' : 'meses'}`, color: bajo > 0 ? 'var(--warn)' : 'var(--ok)' },
+        ];
+      }
+      return [
+        { label: esHora ? 'Meta total día' : 'Meta total mes', value: fmtN(metaTotalOrdenes) },
+        { label: esHora ? 'Hora pico' : 'Día pico', value: picoLabel },
+        { label: 'Cump. meta', value: `${cumpMetaVal.toFixed(0)}%`, color: cumpMetaVal >= 90 ? 'var(--ok)' : 'var(--warn)' },
+        { label: esHora ? 'Horas bajo meta' : 'Días bajo meta', value: `${bajoMetaCount} ${esHora ? 'hrs' : 'días'}`, color: bajoMetaCount > 0 ? 'var(--warn)' : 'var(--ok)' },
+      ];
+    })();
 
     // Gráfico 2: Evolutivo de Órdenes por Brigadas (Cuadrilla Top vs Por Tipo)
     const tiposArr = Object.keys(byTypeDay);
@@ -1096,8 +1141,8 @@ export default function OperativoPage() {
           type: 'line' as const,
           label: 'Promedio Brigadas',
           data: promedioBrigadaSerie,
-          borderColor: '#78909C',
-          backgroundColor: '#78909C',
+          borderColor: CHART_FIXED.PROMEDIO,
+          backgroundColor: CHART_FIXED.PROMEDIO,
           borderWidth: 2,
           borderDash: [5, 4],
           pointRadius: 0,
@@ -1140,8 +1185,8 @@ export default function OperativoPage() {
             type: 'line' as const,
             label: 'Promedio General',
             data: promedioBrigadaSerie,
-            borderColor: '#78909C',
-            backgroundColor: '#78909C',
+            borderColor: CHART_FIXED.PROMEDIO,
+            backgroundColor: CHART_FIXED.PROMEDIO,
             borderWidth: 2,
             borderDash: [5, 4],
             pointRadius: 0,
@@ -1224,7 +1269,7 @@ export default function OperativoPage() {
       card2TotalLbl = `${fmtN(allTechsSorted.length)} brigadas`;
 
       card2LegendItems.push({ label: 'Top Cuadrillas', color: '#00897B' });
-      card2LegendItems.push({ label: 'Promedio Brigadas', color: '#78909C', dash: true });
+      card2LegendItems.push({ label: 'Promedio Brigadas', color: CHART_FIXED.PROMEDIO, dash: true });
     } else {
       const t = activeTipoBrigada;
       const tOrd = totalOrdByTipo[t] || 0;
@@ -1254,7 +1299,7 @@ export default function OperativoPage() {
 
       const col = COLOR_BRIGADA[String(t).trim().toUpperCase()] || '#1976D2';
       card2LegendItems.push({ label: t, color: col });
-      card2LegendItems.push({ label: 'Promedio General', color: '#78909C', dash: true });
+      card2LegendItems.push({ label: 'Promedio General', color: CHART_FIXED.PROMEDIO, dash: true });
     }
 
     // Modal de op-brig (solo hora/día): una línea por tipo — "cuáles están trabajando".
@@ -2108,8 +2153,8 @@ export default function OperativoPage() {
         {
           label: `${activeType} (${labelPeriodoAnterior})`,
           data: evMeses.map(m => evValPrev(m, activeType)),
-          borderColor: '#78909C',
-          backgroundColor: '#78909C',
+          borderColor: CHART_FIXED.PROMEDIO,
+          backgroundColor: CHART_FIXED.PROMEDIO,
           borderWidth: 2.2,
           borderDash: [4, 4],
           borderJoinStyle: 'round' as const,
@@ -2118,7 +2163,7 @@ export default function OperativoPage() {
           pointRadius: 4,
           pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
           pointBorderWidth: 2,
-          pointBorderColor: '#78909C',
+          pointBorderColor: CHART_FIXED.PROMEDIO,
           tension: 0.1,
           spanGaps: false,
           fill: false,
@@ -2126,8 +2171,8 @@ export default function OperativoPage() {
         {
           label: `Meta (${activeType})`,
           data: evMeses.map(m => evValMeta(m, activeType)),
-          borderColor: '#F57C00',
-          backgroundColor: '#F57C00',
+          borderColor: CHART_FIXED.META,
+          backgroundColor: CHART_FIXED.META,
           borderWidth: 2.5,
           borderDash: [6, 4],
           borderJoinStyle: 'round' as const,
@@ -2136,7 +2181,7 @@ export default function OperativoPage() {
           pointRadius: 4,
           pointBackgroundColor: theme === 'dark' ? '#0F2744' : '#fff',
           pointBorderWidth: 2,
-          pointBorderColor: '#F57C00',
+          pointBorderColor: CHART_FIXED.META,
           tension: 0.1,
           spanGaps: false,
           fill: false,
@@ -2222,6 +2267,26 @@ export default function OperativoPage() {
     };
     const chartEvolutivo = evLineChart(tiposConColor);
     const chartEvolutivoFull = evLineChart(tiposConColor);
+    // Modal "Órdenes por Tipo de Brigada": área apilada con UNA serie por tipo de brigada (misma escala de
+    // periodos que la tarjeta). El modal apila lo que llegue; la tarjeta sigue mostrando solo la brigada activa.
+    const chartEvolutivoTipos = {
+      ...chartEvolutivoFull,
+      data: {
+        ...chartEvolutivoFull.data,
+        datasets: tiposConColor.map(x => ({
+          label: x.t,
+          data: evMeses.map(m => (isFuturePeriod(m) ? null : evValReal(m, x.t))),
+          borderColor: x.color,
+          backgroundColor: x.color,
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 2,
+          spanGaps: false,
+          fill: true,
+          stack: 'tipos',
+        })),
+      },
+    };
 
       // Detalle por brigada (vista "Ambos"): total, participacion (%) y variacion
       // mes-a-mes (ultimo vs anterior). El grafico muestra el top-5; la tabla, todas.
@@ -2340,6 +2405,107 @@ export default function OperativoPage() {
     const critico = disponibilidad < 0.30 || efectividad < 0.55 || perdRate > 0.15;
     const nivel: 'ok' | 'amber' | 'red' = alertas.length === 0 ? 'ok' : critico ? 'red' : 'amber';
 
+    
+      // --- Evolutivo de Causales de No Efectividad (Pérdidas) ---
+      // La lógica vive en utils/causales.ts (validada por scripts/bot-causales-*.mjs).
+      const visitasPorPeriodo: Record<string, number> = {};
+      if (esHora) {
+        filtHorario(raw.horario || [], F).forEach(r => {
+          const per = r.Hora || '00:00';
+          visitasPorPeriodo[per] = (visitasPorPeriodo[per] || 0) + n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas);
+        });
+      } else {
+        rawF.forEach(r => {
+          const per = vistaEvolutivo === 'mes' ? String(r.Fecha || '').slice(0, 7) : String(r.Fecha || '').slice(0, 10);
+          if (per) visitasPorPeriodo[per] = (visitasPorPeriodo[per] || 0) + n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas);
+        });
+      }
+      // Se arma una versión por cada Estado (Todas / Fallidas / Pérdidas) para que el filtro del gráfico
+      // cambie al instante sin recalcular toda la página.
+      // Eje igual al de los demás evolutivos de la página: horas 07:00 → 23:00 (etiquetas "07:00"), con las franjas
+      // de Almuerzo / Fuera de jornada, y días con el mismo formato de eje.
+      const ejeBase = esHora ? HORAS_VISIBLES : vistaEvolutivo === 'mes' ? mesesArr : dias;
+      // Colores de las causales: la paleta de series del tema (la misma de las demás gráficas de la página);
+      // "Otras causales" va en el gris del tema.
+      const colorCausal = (label: string, i: number) =>
+        label === OTRAS_CAUSALES ? colors.mut : colors.series[i % colors.series.length];
+      const armarCausales = (estado: EstadoCausal) => {
+        const causales = buildCausales(perdidasF, vistaEvolutivo, ejeBase, visitasPorPeriodo, estado);
+        const chart: any = {
+          type: 'line',
+          data: {
+            labels: vistaEvolutivo === 'dia' ? causales.labels.map(d => fmtDiaAxis(d)) : causales.labels,
+            datasets: causales.series.map((s, i) => {
+              const color = colorCausal(s.label, i);
+              return { label: s.label, data: s.data, borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 };
+            }),
+          },
+          plugins: isHoraOrDia ? [bandsPluginBands] : [],
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx: any) {
+                    const val = ctx.raw;
+                    const per = causales.labels[ctx.dataIndex];
+                    const serie = causales.series[ctx.datasetIndex];
+                    const totPerd = causales.perdidasPorPeriodo[per] || 0;
+                    const part = totPerd > 0 ? (val / totPerd * 100).toFixed(1) : '0.0';
+                    const vis = causales.visitasPorPeriodo[per] || 0;
+                    const peso = vis > 0 ? (val / vis * 100).toFixed(1) + '%' : (esHora ? 'N/A' : '0.0%');
+                    const desglose = estado === 'TODAS' && serie
+                      ? ` [${serie.fallidas[ctx.dataIndex]} fallidas · ${serie.perdidas[ctx.dataIndex]} pérdidas]`
+                      : '';
+                    return ctx.dataset.label + ': ' + val + ' ' + (estado === 'Fallida' ? 'fallidas' : estado === 'Perdida' ? 'pérdidas' : 'no efectivas')
+                      + desglose + ' (' + part + '% part. | ' + peso + ' sobre visitas)';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { autoSkip: causales.labels.length > 14, maxRotation: 0 } },
+              y: { beginAtZero: true, grid: { color: theme === 'dark' ? '#333' : '#eee' } }
+            }
+          }
+        };
+        if (isHoraOrDia) chart.options.plugins.bandsPluginBands = { fecha: filters.fecha, zona: zonaOrProy, esHora, dias: causales.labels };
+        // Modal: líneas (puntos más grandes), mismos colores y tooltip que la tarjeta.
+        const chartModal = {
+          type: 'line',
+          plugins: chart.plugins,
+          data: {
+            labels: chart.data.labels,
+            datasets: causales.series.map((s, i) => {
+              const color = colorCausal(s.label, i);
+              return { label: s.label, data: s.data, borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6 };
+            }),
+          },
+          options: {
+            ...chart.options,
+            scales: {
+              x: { grid: { display: false }, ticks: { autoSkip: causales.labels.length > 14, maxRotation: 0 } },
+              y: { beginAtZero: true },
+            },
+          },
+        };
+        const resumen: RailKpi[] = [
+          { label: 'Total', value: fmtN(causales.total) },
+          { label: 'Fallidas', value: fmtN(causales.totalFallidas), color: 'var(--warn)' },
+          { label: 'Pérdidas', value: fmtN(causales.totalPerdidas), color: 'var(--err)' },
+          { label: 'Causal líder', value: causales.topCausales[0]?.split(' / ')[0] || '—' },
+        ];
+        return { chart, chartModal, resumen, tabla: causales.tableData, top: causales.topCausales, total: causales.total, fallidas: causales.totalFallidas, perdidas: causales.totalPerdidas };
+      };
+      const causalesPorEstado = {
+        TODAS: armarCausales('TODAS'),
+        Fallida: armarCausales('Fallida'),
+        Perdida: armarCausales('Perdida'),
+      };
+      // --- FIN Causales ---
+
     const winLbl = fmtRangoMeses(selWin);
 
     return {
@@ -2347,9 +2513,9 @@ export default function OperativoPage() {
       metaTotalOrdenes, pctCumplimientoMeta, pctEfectivasTotal, pctFallidasTotal, pctPerdidasTotal,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
       periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, modoDelta, narrativa,
-      chartOrd, chartBrig, chartBrigTipos, brigTiposModal, chartTipos, chartTiposModal, chartEvolutivo, evSubtitle, chartEvolutivoFull, evSubtitleFull,
+      chartOrd, chartOrdModal, resumenOrd, chartBrig, chartBrigTipos, brigTiposModal, chartTipos, chartTiposModal, chartEvolutivo, evSubtitle, chartEvolutivoFull, chartEvolutivoTipos, evSubtitleFull,
       brigadaDetalle, varHeader, tecnicoDetalle,
-      tableDataOrd, tableDataBrig, tableDataBrigTipos, tableDataTipos, tableDataEvolutivo,
+      tableDataOrd, tableDataBrig, tableDataBrigTipos, tableDataTipos, tableDataEvolutivo, causalesPorEstado,
       evolutivo: raw.evolutivo, evTop, tiposConColor, brigadaActiva,
       mesesArr,
       picoLabel, cumpMetaVal, bajoMetaCount, maxActivasVal, ocupacionPicoVal, isHoraOrDia,
@@ -2504,6 +2670,9 @@ export default function OperativoPage() {
             title={vistaEvolutivo === 'mes' ? "Evolutivo Mensual de Órdenes" : vistaEvolutivo === 'hora' ? "Evolutivo Horario de Órdenes" : "Evolutivo Diario de Órdenes"}
             subtitle={vistaEvolutivo === 'hora' ? `Ejecución acumulada por franja horaria vs meta esperada (${fmtN(d.metaTotalOrdenes)} efectivas total día).` : vistaEvolutivo === 'dia' ? `Ejecución acumulada por día vs meta esperada (${fmtN(d.metaTotalOrdenes)} efectivas total mes).` : undefined}
             config={d.chartOrd as never}
+            modalConfig={d.chartOrdModal as never}
+            detailResumen={d.resumenOrd}
+            detailChartLabel="BARRAS APILADAS · órdenes"
             height="short"
             hasDetail
             detailTableData={d.tableDataOrd as any}
@@ -2529,7 +2698,7 @@ export default function OperativoPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 12, fontSize: 11, color: MUT }}>
-                <span><b style={{ color: '#F57C00' }}>--</b> {vistaEvolutivo === 'hora' ? 'Meta horaria' : 'Meta diaria'}</span>
+                <span><b style={{ color: CHART_FIXED.META }}>--</b> {vistaEvolutivo === 'hora' ? 'Meta horaria' : 'Meta diaria'}</span>
                 <span><b style={{ color: OK }}>■</b> Efectivas</span>
                 <span><b style={{ color: WARN }}>■</b> Fallidas</span>
                 <span><b style={{ color: ERR }}>■</b> Perdidas</span>
@@ -2635,6 +2804,13 @@ export default function OperativoPage() {
             subtitle={vistaEvolutivo === 'hora' ? "Porcentaje de efectividad por franja horaria. Clic en Expandir para ver el detalle por cada tipo de brigada." : vistaEvolutivo === 'dia' ? "Porcentaje de efectividad por día. Clic en Expandir para ver el detalle por cada tipo de brigada." : "Porcentaje de efectividad por mes. Clic en Expandir para ver el detalle por cada tipo de brigada."}
             config={d.chartTipos as never}
             modalConfig={d.chartTiposModal as never}
+            detailChartLabel="ÁREA + LÍNEAS · efectividad %"
+            detailResumen={[
+              { label: 'Total efectivas', value: fmtN(d.granTotalEfectivas) },
+              { label: 'Pico', value: d.picoFormatted },
+              { label: 'Tipo líder', value: d.tipoLider.t },
+              { label: 'Días laborables', value: `${d.workingPeriodsCount} / ${d.totalPeriodsCount}` },
+            ]}
             singleCategorySelect
             defaultSelectedCategory={d.tipoLider?.t || d.tiposTotales[0]?.t}
             height="short"
@@ -2669,7 +2845,43 @@ export default function OperativoPage() {
               </div>
             )}
           />
-        </div>
+        
+            {/* Causales de no efectividad (fallidas y pérdidas): top 6 + "Otras causales" */}
+            {(() => {
+              const cz = d.causalesPorEstado[estadoCausales];
+              const filtroEstado = (compacto: boolean) => (
+                <SegmentedControl
+                  size={compacto ? 'sm' : undefined}
+                  options={ESTADOS_CAUSAL.map(o => ({ value: o.value, label: o.label }))}
+                  value={estadoCausales}
+                  onChange={(val) => setEstadoCausales(val as EstadoCausal)}
+                />
+              );
+              return (
+                <ChartCard
+                  id="op-causales"
+                  title={vistaEvolutivo === 'hora' ? 'Horario Causales de no efectividad' : vistaEvolutivo === 'mes' ? 'Causales mensual de no efectividad' : 'Causales diario de no efectividad'}
+                  subtitle={`${d.periodoLabel} · ${tituloEstado(estadoCausales)} | Top ${cz.top.length} causales | ${fmtN(cz.total)} órdenes: ${fmtN(cz.fallidas)} fallidas · ${fmtN(cz.perdidas)} pérdidas | Cantidad y participación porcentual`}
+                  config={cz.chart as never}
+                  height="short"
+                  hasDetail
+                  detailTableData={cz.tabla as any}
+                  headerExtra={<div style={{ marginLeft: 'auto' }} title="Filtra por tipo de no efectividad">{filtroEstado(false)}</div>}
+                  modalConfig={cz.chartModal as never}
+                  modalHeaderExtra={
+                    <RailSegmented
+                      label="Estado"
+                      options={ESTADOS_CAUSAL.map(o => ({ value: o.value, label: o.label }))}
+                      value={estadoCausales}
+                      onChange={(val) => setEstadoCausales(val as EstadoCausal)}
+                    />
+                  }
+                  detailResumen={cz.resumen}
+                  detailChartLabel="LÍNEAS · órdenes no efectivas"
+                />
+              );
+            })()}
+</div>
       </div>
 
       {/* Evolutivo Mensual por Tipo de Brigada */}
@@ -2817,7 +3029,7 @@ export default function OperativoPage() {
           onClose={() => setBrigadaModalOpen(false)}
           title="Órdenes Mensuales por Tipo de Brigada"
           subtitle={d.evSubtitleFull}
-          config={d.chartEvolutivoFull as never}
+          config={d.chartEvolutivoTipos as never}
           brigadaDetalle={d.brigadaDetalle as never}
           tecnicoDetalle={d.tecnicoDetalle as never}
           varHeader={d.varHeader}

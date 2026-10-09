@@ -1,9 +1,11 @@
 'use client';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, type ReactNode } from 'react';
 import type { ChartConfiguration } from 'chart.js';
-import Papa from 'papaparse';
-import { SegmentedControl } from '../components/Buttons';
+import ModalShell, { RailField, RailSearch, RailToggle, type RailSerie } from '../components/ModalShell';
+import ModalChart from '../components/ModalChart';
 import { useDashboard } from '../components/DashboardProvider';
+import { cloneConfig, cssVar, withAlpha } from '../components/utils/chartTheme';
+import { descargarCsv, descargarPngDeCanvas } from '../components/utils/exportFile';
 
 export interface BrigadaRow { brigada: string; total: number; partPct: number; varPct: number | null; color: string; }
 export interface TecnicoRow {
@@ -31,60 +33,106 @@ const BROWN = 'var(--warn)';
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const fmtMes = (m: string) => { const [y, mm] = String(m).split('-'); return `${MESES_C[Number(mm) - 1] || mm} ${y}`; };
 
+type Dataset = Record<string, unknown> & { label?: string; borderColor?: unknown; borderDash?: unknown };
+
+/** Series de referencia (período anterior, meta, promedio): líneas punteadas que NO se apilan. */
+const esReferencia = (ds: Dataset) =>
+  (Array.isArray(ds.borderDash) && ds.borderDash.length > 0) || /^(meta|promedio)/i.test(String(ds.label || ''));
+
+/** Color con transparencia: tokens 'var(--x)' → 'var(--x|a)'; hex/rgb → rgba. */
+const conAlfa = (color: string, a: number) => {
+  const t = color.match(/^var\((--[\w-]+)\)$/);
+  return t ? `var(${t[1]}|${a})` : withAlpha(color, a);
+};
+
+const colorDe = (ds: Dataset) => (typeof ds.borderColor === 'string' && ds.borderColor ? ds.borderColor : 'var(--brand-primary)');
+
+/**
+ * Convierte la configuración de la página en un ÁREA APILADA: cada serie de tipo de brigada va rellena y
+ * apilada; las series de referencia (anterior / meta / promedio) quedan como líneas punteadas sin apilar.
+ * Los colores de las series se conservan tal cual vienen en `config`.
+ */
+function aAreaApilada(config: ChartConfiguration, ocultas: string[]): ChartConfiguration {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base = cloneConfig(config) as unknown as { data: { datasets: Dataset[] }; options?: Record<string, any> };
+  const dss = (base.data?.datasets ?? []).filter(ds => !ocultas.includes(String(ds.label ?? '')));
+  let prevArea = -1;
+  let nAreas = 0;
+  base.data.datasets = dss.map((ds, i) => {
+    if (esReferencia(ds)) {
+      return { ...ds, type: 'line', fill: false, stack: `ref-${i}`, pointBackgroundColor: 'var(--card)' };
+    }
+    const out = {
+      ...ds,
+      type: 'line',
+      fill: prevArea < 0 ? 'origin' : { target: prevArea },
+      stack: 'tipos',
+      backgroundColor: conAlfa(colorDe(ds), 0.3),
+      pointBackgroundColor: 'var(--card)',
+    };
+    prevArea = i;
+    nAreas++;
+    return out;
+  });
+  const options = (base.options = base.options || {});
+  const scales = (options.scales = options.scales || {});
+  scales.x = { ...(scales.x || {}), stacked: true, ticks: { ...(scales.x?.ticks || {}), color: 'var(--text-muted)' } };
+  scales.y = { ...(scales.y || {}), stacked: true, grid: { ...(scales.y?.grid || {}), color: 'var(--border)' } };
+  // El máximo de la página se calculó para una sola serie; apilado debe ajustarse solo.
+  if (nAreas > 1) delete scales.y.max;
+  return base as unknown as ChartConfiguration;
+}
+
+/** Filtro de selección múltiple que se despliega en línea dentro del panel (un popup quedaría recortado por el scroll del panel). */
+function RailMulti({ label, resumen, open, onToggle, children }: { label: string; resumen: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <RailField label={label}>
+      <button
+        type="button"
+        className="ms-select"
+        aria-expanded={open}
+        onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, textAlign: 'left', cursor: 'pointer' }}
+      >
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumen}</span>
+        <span aria-hidden style={{ fontSize: 10, flexShrink: 0 }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--card)', padding: 4, maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {children}
+        </div>
+      )}
+    </RailField>
+  );
+}
+
 export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, config, brigadaDetalle, tecnicoDetalle, varHeader }: Props) {
   const [viewMode, setViewMode] = useState<'chart' | 'split' | 'table'>('split');
   const [search, setSearch] = useState('');
   const [onlyAlert, setOnlyAlert] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<import('chart.js').Chart | null>(null);
+  const [ocultas, setOcultas] = useState<string[]>([]);   // etiquetas de series ocultas
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pngPendiente = useRef(false);
 
   // Filtros globales editables desde el modal (mes/día). Al cambiarlos, el gráfico y la
   // tabla se recalculan en la página y llegan como nuevos props (config/brigadaDetalle).
   const { filters, setFilters, mesList, fechaList } = useDashboard();
   const [mesOpen, setMesOpen] = useState(false);
-  const mesRef = useRef<HTMLDivElement>(null);
   const [diaOpen, setDiaOpen] = useState(false);
-  const diaRef = useRef<HTMLDivElement>(null);
 
-  // Cerrar con Esc
-  useEffect(() => {
-    if (!open) return;
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [open, onClose]);
+  // Gráfico: área apilada por tipo de brigada
+  const cfg = useMemo(() => (config ? aAreaApilada(config, ocultas) : null), [config, ocultas]);
 
-  // Cerrar los dropdowns al hacer click afuera
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (mesRef.current && !mesRef.current.contains(e.target as Node)) setMesOpen(false);
-      if (diaRef.current && !diaRef.current.contains(e.target as Node)) setDiaOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-
-  // Render del grafico (Gráfico / Ambos)
-  useEffect(() => {
-    if (!open || viewMode === 'table' || !config || !canvasRef.current) return;
-    let mounted = true;
-    import('chart.js').then(({ Chart, registerables }) => {
-      if (!mounted || !canvasRef.current) return;
-      Chart.register(...registerables);
-      const cs = getComputedStyle(document.body);
-      const gv = (v: string) => cs.getPropertyValue(v).trim();
-      Chart.defaults.color = gv('--text-muted');
-      Chart.defaults.font.family = cs.fontFamily;
-      Chart.defaults.borderColor = gv('--border');
-      Chart.defaults.elements.line.borderWidth = 3;
-      Chart.defaults.elements.point.radius = 4;
-      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-      const cfg = { ...config, options: { ...(config?.options || {}), maintainAspectRatio: false } } as any;
-      chartRef.current = new Chart(canvasRef.current, cfg as ChartConfiguration);
-    });
-    return () => { mounted = false; if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, viewMode, config]);
+  const series: RailSerie[] = useMemo(
+    () => ((config?.data?.datasets ?? []) as unknown as Dataset[]).map(ds => ({
+      key: String(ds.label ?? ''),
+      label: String(ds.label ?? ''),
+      color: colorDe(ds),
+      active: !ocultas.includes(String(ds.label ?? '')),
+    })),
+    [config, ocultas],
+  );
+  const toggleSerie = (k: string) => setOcultas(prev => (prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]));
 
   const alertCount = useMemo(() => tecnicoDetalle.filter(t => t.alerta).length, [tecnicoDetalle]);
   const maxProm = useMemo(() => Math.max(1, ...tecnicoDetalle.map(t => t.promDia)), [tecnicoDetalle]);
@@ -103,27 +151,31 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     return { ...a, promDia: a.diasLab > 0 ? a.ejecutadas / a.diasLab : 0 };
   }, [tecFiltered]);
 
+  // RESUMEN: total de órdenes, tipo líder, técnicos y variación del líder (último vs. anterior período)
+  const lider = useMemo(() => brigadaDetalle.reduce<BrigadaRow | null>((m, b) => (!m || b.total > m.total ? b : m), null), [brigadaDetalle]);
+  const totalOrdenes = useMemo(() => brigadaDetalle.reduce((s, b) => s + (Number(b.total) || 0), 0), [brigadaDetalle]);
+
+  const descargarPng = () => descargarPngDeCanvas(canvasRef.current, 'evolutivo-brigada', cssVar('--card'));
   const exportPng = () => {
-    if (!chartRef.current) return;
-    const a = document.createElement('a');
-    a.href = chartRef.current.toBase64Image();
-    a.download = 'evolutivo-brigada.png';
-    a.click();
+    if (descargarPng()) return;
+    // Vista "Tabla": el lienzo no existe. Se pasa a "Ambos" y se exporta cuando el gráfico esté creado.
+    pngPendiente.current = true;
+    setViewMode('split');
+  };
+  const alCrearGrafico = () => {
+    if (!pngPendiente.current) return;
+    pngPendiente.current = false;
+    setTimeout(descargarPng, 900);   // espera a que termine la animación de entrada
   };
   const exportCsv = () => {
-    const rows = tecFiltered.map(t => ({
-      'Tipo de Brigada': t.tipoBrigada, 'Técnico': t.tecnico,
-      'Cuentas': t.cuentas, 'Ejecutadas': t.ejecutadas,
-      'Suspensión': t.suspension, 'Se Mantiene': t.mantiene, 'Reconexión': t.reconexion, 'Pagos': t.pagos,
-      'Imposibilidades': t.imposibilidades, 'Resistencias': t.resistencias,
-      'Días Lab.': t.diasLab, 'Prom./Día': Number(t.promDia.toFixed(1)), 'Eficacia %': Math.round(t.eficacia * 100),
-    }));
-    const csv = Papa.unparse(rows);
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'detallado-por-tecnico.csv';
-    a.click();
+    descargarCsv(
+      'detallado-por-tecnico',
+      ['Tipo de Brigada', 'Técnico', 'Cuentas', 'Ejecutadas', 'Suspensión', 'Se Mantiene', 'Reconexión', 'Pagos', 'Imposibilidades', 'Resistencias', 'Días Lab.', 'Prom./Día', 'Eficacia %'],
+      tecFiltered.map(t => [
+        t.tipoBrigada, t.tecnico, t.cuentas, t.ejecutadas, t.suspension, t.mantiene, t.reconexion, t.pagos,
+        t.imposibilidades, t.resistencias, t.diasLab, Number(t.promDia.toFixed(1)), Math.round(t.eficacia * 100),
+      ]),
+    );
   };
 
   if (!open) return null;
@@ -175,30 +227,68 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     return `${selectedDays.size} días`;
   })();
 
-  const fBtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
-  const fRow = (on: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer', background: on ? 'var(--hover-bg)' : 'transparent', color: 'var(--text-body)' });
+  const fRow = (on: boolean): React.CSSProperties => ({ padding: '4px 6px', borderRadius: 6, background: on ? 'var(--hover-bg)' : 'transparent' });
+  const miniBtn = (on: boolean): React.CSSProperties => ({ flex: 1, padding: '4px 6px', borderRadius: 5, border: '1px solid var(--border)', background: on ? 'var(--ok-bg)' : 'transparent', color: on ? 'var(--ok)' : 'var(--text-body)', fontSize: 11, fontWeight: 700, cursor: 'pointer' });
 
-  // Panel "Detalle por brigada" (vista Ambos y cabecera)
-  const brigadaTable = (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      <div style={{ fontSize: 11, letterSpacing: 1, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', padding: '4px 4px 10px' }}>Detalle por brigada</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+  const filtros = (
+    <>
+      <RailMulti label="Mes" resumen={mesLabel} open={mesOpen} onToggle={() => { setMesOpen(o => !o); setDiaOpen(false); }}>
+        <label className="ms-check" style={fRow(filters.mes.length === 0)}>
+          <input type="checkbox" checked={filters.mes.length === 0} onChange={() => setFilters({ mes: [], fecha: 'ALL' })} /> Todos
+        </label>
+        {mesList.map(m => {
+          const on = filters.mes.includes(m);
+          return (
+            <label key={m} className="ms-check" style={fRow(on)}>
+              <input type="checkbox" checked={on} onChange={() => toggleMes(m)} /> {fmtMes(m)}
+            </label>
+          );
+        })}
+      </RailMulti>
+
+      <RailMulti label="Día" resumen={diaLabel} open={diaOpen} onToggle={() => { setDiaOpen(o => !o); setMesOpen(false); }}>
+        <div style={{ display: 'flex', gap: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+          <button type="button" onClick={() => setFilters({ fecha: 'ALL' })} style={miniBtn(isTodosDias)}>✓ Todos</button>
+          <button type="button" onClick={() => setFilters({ fecha: '' })} style={{ ...miniBtn(false), flex: '0 0 auto', color: 'var(--text-muted)', fontWeight: 600 }}>Limpiar</button>
+        </div>
+        {uniqueDays.map(d => {
+          const on = isDiaChecked(d);
+          return (
+            <label key={d} className="ms-check" style={fRow(on)}>
+              <input type="checkbox" checked={on} onChange={() => toggleDia(d)} /> Día {d}
+            </label>
+          );
+        })}
+      </RailMulti>
+
+      <RailSearch label="Técnico" value={search} onChange={setSearch} placeholder="Buscar técnico" />
+      <RailToggle checked={onlyAlert} onChange={setOnlyAlert} label={`⚠ Solo con alerta (${alertCount})`} />
+      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Mes y día cambian el gráfico y la tabla en vivo.</div>
+    </>
+  );
+
+  const detalleBrigada = (
+    <div data-brigada-detalle>
+      <div className="ms-label" style={{ marginBottom: 6 }}>Detalle por brigada</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr>
-            <th style={{ ...th, textAlign: 'left' }}>Brigada</th>
-            <th style={{ ...th, textAlign: 'right' }}>Total</th>
-            <th style={{ ...th, textAlign: 'right' }}>Part.</th>
+            <th style={{ ...th, position: 'static', background: 'transparent', padding: '4px 4px', fontSize: 10, textAlign: 'left' }}>Brigada</th>
+            <th style={{ ...th, position: 'static', background: 'transparent', padding: '4px 4px', fontSize: 10, textAlign: 'right' }}>Total</th>
+            <th style={{ ...th, position: 'static', background: 'transparent', padding: '4px 4px', fontSize: 10, textAlign: 'right' }}>Part.</th>
           </tr>
         </thead>
         <tbody>
           {brigadaDetalle.map((b, i) => (
             <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
-              <td style={{ ...td, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 4, height: 16, borderRadius: 2, background: b.color, flexShrink: 0 }} />
-                <span style={{ color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.brigada}</span>
+              <td style={{ padding: '5px 4px', maxWidth: 110 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ width: 4, height: 14, borderRadius: 2, background: b.color, flexShrink: 0 }} />
+                  <span title={b.brigada} style={{ color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.brigada}</span>
+                </span>
               </td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--text-title)' }}>{nf(b.total)}</td>
-              <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{b.partPct}%</td>
+              <td style={{ padding: '5px 4px', textAlign: 'right', fontWeight: 700, color: 'var(--text-title)' }}>{nf(b.total)}</td>
+              <td style={{ padding: '5px 4px', textAlign: 'right', color: 'var(--text-muted)' }}>{b.partPct}%</td>
             </tr>
           ))}
         </tbody>
@@ -206,196 +296,107 @@ export default function BrigadaEvolutivoModal({ open, onClose, title, subtitle, 
     </div>
   );
 
+  const varPct = lider?.varPct;
+  const varTxt = varPct === null || varPct === undefined ? '—' : `${varPct > 0 ? '+' : ''}${varPct}%`;
+  const varColor = varPct === null || varPct === undefined ? 'var(--text-muted)' : varPct >= 0 ? 'var(--ok)' : 'var(--err)';
+
   return (
-    <div className="modal-back open" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 9999 }}>
-      <div className="modal-box analysis-modal" style={{ width: '95vw', maxWidth: '1600px', height: '94dvh', maxHeight: '94dvh', display: 'flex', flexDirection: 'column' }}>
-        {/* Encabezado */}
-        <div className="modal-head" style={{ flexShrink: 0, paddingBottom: 12, display: 'flex', alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.4, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Evolutivo Mensual</div>
-            <h3 style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 4px', color: 'var(--text-title)' }}>{title}</h3>
-            {subtitle && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{subtitle}</div>}
+    <ModalShell
+      title={title}
+      subtitle={subtitle ? `Evolutivo Mensual · ${subtitle}` : 'Evolutivo Mensual'}
+      onClose={onClose}
+      viewMode={viewMode}
+      onViewModeChange={setViewMode}
+      filtros={filtros}
+      series={series}
+      seriesTitle="Series"
+      onToggleSerie={toggleSerie}
+      onResetSeries={() => setOcultas([])}
+      resumen={[
+        { label: 'Total órdenes', value: nf(totalOrdenes) },
+        { label: 'Tipo líder', value: lider ? lider.brigada : '—' },
+        { label: 'Técnicos', value: nf(tecFiltered.length) },
+        { label: `Var. líder ${varHeader}`, value: varTxt, color: varColor },
+      ]}
+      railExtra={detalleBrigada}
+      exportes={[
+        { label: 'PNG ⬇', onClick: exportPng, title: 'Descarga el gráfico como imagen' },
+        { label: 'CSV ↓', onClick: exportCsv, primary: true, title: 'Exporta la tabla de técnicos (CSV, compatible con Excel)' },
+      ]}
+      chartLabel="ÁREA APILADA · órdenes"
+      chart={<ModalChart config={cfg} canvasRef={canvasRef} onChart={alCrearGrafico} ariaLabel="Área apilada de órdenes por tipo de brigada" />}
+      table={
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-title)' }}>Detallado por técnico</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tecFiltered.length} técnicos · todas las brigadas</span>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <SegmentedControl
-              options={[
-                { value: 'chart', label: '📈 Gráfico' },
-                { value: 'split', label: '📁 Ambos' },
-                { value: 'table', label: '📋 Tabla' }
-              ]}
-              value={viewMode}
-              onChange={(val: string) => setViewMode(val as 'chart' | 'split' | 'table')}
-            />
-            <button onClick={exportPng} style={{ background: 'var(--panel)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>PNG ⬇</button>
-            <button onClick={exportCsv} title="Exporta la tabla de técnicos (CSV, compatible con Excel)" style={{ background: 'var(--brand-primary)', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'var(--brand-grad-text)', fontSize: 12, fontWeight: 700 }}>XLSX ⬇</button>
-            <button className="modal-close" onClick={onClose} title="Cerrar (Esc)">✕</button>
-          </div>
-        </div>
-
-        {/* Filtros de fecha y día — editables desde el modal (afectan gráfico + tabla en vivo) */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '2px 0 12px', marginBottom: 4, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, color: 'var(--text-muted)' }}>Filtros</span>
-          {/* Mes (multi-select) */}
-          <div ref={mesRef} style={{ position: 'relative' }}>
-            <button onClick={() => setMesOpen(o => !o)} style={fBtn}>Mes: {mesLabel} ▾</button>
-            {mesOpen && (
-              <div style={{ position: 'absolute', top: '112%', left: 0, zIndex: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, minWidth: 170, maxHeight: 300, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,.18)' }}>
-                <label style={fRow(filters.mes.length === 0)}>
-                  <input type="checkbox" checked={filters.mes.length === 0} onChange={() => setFilters({ mes: [], fecha: 'ALL' })} /> Todos
-                </label>
-                {mesList.map(m => {
-                  const on = filters.mes.includes(m);
-                  return (
-                    <label key={m} style={fRow(on)}>
-                      <input type="checkbox" checked={on} onChange={() => toggleMes(m)} /> {fmtMes(m)}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          {/* Día (multi-select con casillas) */}
-          <div ref={diaRef} style={{ position: 'relative' }}>
-            <button onClick={() => { setDiaOpen(o => !o); setMesOpen(false); }} style={fBtn}>
-              Día: {diaLabel} ▾
-            </button>
-            {diaOpen && (
-              <div style={{ position: 'absolute', top: '112%', left: 0, zIndex: 20, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, minWidth: 190, maxHeight: 300, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ display: 'flex', gap: 4, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
-                  <button type="button" onClick={() => setFilters({ fecha: 'ALL' })} style={{ flex: 1, padding: '4px 6px', borderRadius: 5, border: '1px solid var(--border)', background: isTodosDias ? 'rgba(0, 137, 123, 0.12)' : 'transparent', color: isTodosDias ? '#00897B' : 'var(--text-body)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                    ✓ Todos
-                  </button>
-                  <button type="button" onClick={() => setFilters({ fecha: '' })} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                    Limpiar
-                  </button>
-                </div>
-                <label style={fRow(isTodosDias)}>
-                  <input
-                    type="checkbox"
-                    checked={isTodosDias}
-                    onChange={() => {
-                      if (isTodosDias) setFilters({ fecha: '' });
-                      else setFilters({ fecha: 'ALL' });
-                    }}
-                  />
-                  Todos los días ({uniqueDays.length})
-                </label>
-                <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
-                {uniqueDays.map(d => {
-                  const on = isDiaChecked(d);
-                  return (
-                    <label key={d} style={fRow(on)}>
-                      <input type="checkbox" checked={on} onChange={() => toggleDia(d)} /> Día {d}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Cambian el mes/día del gráfico y la tabla en vivo</span>
-        </div>
-
-        {/* Cuerpo */}
-        <div className="analysis-content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          
-          {/* Fila Superior (Gráfico + Resumen) para Chart o Split */}
-          {(viewMode === 'chart' || viewMode === 'split') && (
-            <div className="analysis-chart" style={{ flex: viewMode === 'chart' ? 1 : '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                <canvas ref={canvasRef} />
-              </div>
-              {viewMode === 'split' && (
-                <div style={{ width: 380, maxWidth: '100%', flex: '1 1 280px', borderLeft: '1px solid var(--border)', paddingLeft: 16, minHeight: 0 }}>
-                  {brigadaTable}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Fila Inferior (Tabla Detallada) para Table o Split */}
-          {(viewMode === 'table' || viewMode === 'split') && (
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              {/* Controles */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 12, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-title)' }}>Detallado por técnico</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tecFiltered.length} técnicos · todas las brigadas</div>
-                <div style={{ flex: 1 }} />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Buscar técnico" style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text-body)', fontSize: 13, width: 220 }} />
-                <button onClick={() => setOnlyAlert(v => !v)} style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${onlyAlert ? 'var(--err)' : 'var(--border)'}`, background: onlyAlert ? 'var(--err-bg)' : 'var(--panel)', color: onlyAlert ? 'var(--err)' : 'var(--text-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                  ⚠ Solo con alerta ( {alertCount} )
-                </button>
-              </div>
-              {/* Tabla */}
-              <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las métricas &rarr;</div>
-              <div className="analysis-table table-responsive-container" style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border)', borderRadius: 10 }}>
-                <table style={{ width: '100%', minWidth: 1120, borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...grp, textAlign: 'left', left: 0, zIndex: 3 }} rowSpan={2}>Tipo de Brigada</th>
-                      <th style={{ ...grp, textAlign: 'left' }} rowSpan={2}>Técnico</th>
-                      <th style={grp} colSpan={2}>Carga</th>
-                      <th style={grp} colSpan={4}>Acciones Ejecutadas</th>
-                      <th style={grp} colSpan={2}>No Ejecutadas</th>
-                      <th style={grp} colSpan={3}>Rendimiento</th>
-                    </tr>
-                    <tr>
-                      {['Cuentas', 'Ejecutadas', 'Suspensión', 'Se Mantiene', 'Reconexión', 'Pagos', 'Imposibilidades', 'Resistencias', 'Días Lab.', 'Prom./Día', 'Eficacia'].map((c, i) => (
-                        <th key={i} style={{ ...th, top: 32, textAlign: 'right' }}>{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tecFiltered.map((t, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
-                        <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--card)', display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <span style={{ width: 4, height: 16, borderRadius: 2, background: t.color, flexShrink: 0 }} />
-                          <span style={{ color: 'var(--text-body)' }}>{t.tipoBrigada}</span>
-                        </td>
-                        <td style={{ ...td, color: 'var(--text-title)', fontWeight: 600, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.tecnico}>{t.tecnico}</td>
-                        <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{nf(t.cuentas)}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--text-title)' }}>{nf(t.ejecutadas)}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>{nf(t.suspension)}</td>
-                        <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{t.mantiene || '—'}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>{nf(t.reconexion)}</td>
-                        <td style={{ ...td, textAlign: 'right' }}>{nf(t.pagos)}</td>
-                        <td style={{ ...td, textAlign: 'right', color: 'var(--warn)' }}>{nf(t.imposibilidades)}</td>
-                        <td style={{ ...td, textAlign: 'right', color: 'var(--err)' }}>{nf(t.resistencias)}</td>
-                        <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{nf(t.diasLab)}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{df(t.promDia)}</td>
-                        <td style={{ ...td, minWidth: 120 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--hover-bg)', overflow: 'hidden' }}>
-                              <span style={{ display: 'block', height: '100%', width: `${Math.min(100, Math.max(6, t.promDia / maxProm * 100))}%`, background: t.alerta ? BROWN : 'var(--ok)', borderRadius: 3 }} />
-                            </span>
-                            <span style={{ width: 34, textAlign: 'right', fontWeight: 700, color: t.alerta ? BROWN : 'var(--ok)' }}>{Math.round(t.eficacia * 100)}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--border)', position: 'sticky', bottom: 0, background: 'var(--panel)' }}>
-                      <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--panel)', fontWeight: 800, color: 'var(--text-title)' }}>TOTAL</td>
-                      <td style={{ ...td, color: 'var(--text-muted)' }}>{tecFiltered.length} técnicos</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.cuentas)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{nf(tot.ejecutadas)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.suspension)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.mantiene)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.reconexion)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.pagos)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--warn)' }}>{nf(tot.imposibilidades)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--err)' }}>{nf(tot.resistencias)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.diasLab)}</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{df(tot.promDia)}</td>
-                      <td style={td} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+          <div className="mobile-scroll-tip">Desliza horizontalmente para ver todas las métricas &rarr;</div>
+          <table style={{ width: '100%', minWidth: 1120, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ ...grp, textAlign: 'left', left: 0, zIndex: 3 }} rowSpan={2}>Tipo de Brigada</th>
+                <th style={{ ...grp, textAlign: 'left' }} rowSpan={2}>Técnico</th>
+                <th style={grp} colSpan={2}>Carga</th>
+                <th style={grp} colSpan={4}>Acciones Ejecutadas</th>
+                <th style={grp} colSpan={2}>No Ejecutadas</th>
+                <th style={grp} colSpan={3}>Rendimiento</th>
+              </tr>
+              <tr>
+                {['Cuentas', 'Ejecutadas', 'Suspensión', 'Se Mantiene', 'Reconexión', 'Pagos', 'Imposibilidades', 'Resistencias', 'Días Lab.', 'Prom./Día', 'Eficacia'].map((c, i) => (
+                  <th key={i} style={{ ...th, top: 32, textAlign: 'right' }}>{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tecFiltered.map((t, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--card)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 4, height: 16, borderRadius: 2, background: t.color, flexShrink: 0 }} />
+                    <span style={{ color: 'var(--text-body)' }}>{t.tipoBrigada}</span>
+                  </td>
+                  <td style={{ ...td, color: 'var(--text-title)', fontWeight: 600, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.tecnico}>{t.tecnico}</td>
+                  <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{nf(t.cuentas)}</td>
+                  <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--text-title)' }}>{nf(t.ejecutadas)}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{nf(t.suspension)}</td>
+                  <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{t.mantiene || '—'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{nf(t.reconexion)}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{nf(t.pagos)}</td>
+                  <td style={{ ...td, textAlign: 'right', color: 'var(--warn)' }}>{nf(t.imposibilidades)}</td>
+                  <td style={{ ...td, textAlign: 'right', color: 'var(--err)' }}>{nf(t.resistencias)}</td>
+                  <td style={{ ...td, textAlign: 'right', color: 'var(--text-muted)' }}>{nf(t.diasLab)}</td>
+                  <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{df(t.promDia)}</td>
+                  <td style={{ ...td, minWidth: 120 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--hover-bg)', overflow: 'hidden' }}>
+                        <span style={{ display: 'block', height: '100%', width: `${Math.min(100, Math.max(6, t.promDia / maxProm * 100))}%`, background: t.alerta ? BROWN : 'var(--ok)', borderRadius: 3 }} />
+                      </span>
+                      <span style={{ width: 34, textAlign: 'right', fontWeight: 700, color: t.alerta ? BROWN : 'var(--ok)' }}>{Math.round(t.eficacia * 100)}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '2px solid var(--border)', position: 'sticky', bottom: 0, background: 'var(--panel)' }}>
+                <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--panel)', fontWeight: 800, color: 'var(--text-title)' }}>TOTAL</td>
+                <td style={{ ...td, color: 'var(--text-muted)' }}>{tecFiltered.length} técnicos</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.cuentas)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{nf(tot.ejecutadas)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.suspension)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.mantiene)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.reconexion)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.pagos)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--warn)' }}>{nf(tot.imposibilidades)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: 'var(--err)' }}>{nf(tot.resistencias)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{nf(tot.diasLab)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{df(tot.promDia)}</td>
+                <td style={td} />
+              </tr>
+            </tfoot>
+          </table>
+        </>
+      }
+    />
   );
 }

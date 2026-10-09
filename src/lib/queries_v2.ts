@@ -144,7 +144,8 @@ export async function getDashboardDataV2(mes?: string) {
       emps: [],
       mesRecords: [],
       dispDiaria: [],
-      horario: [],
+        horario: [],
+        perdidas: [],
     };
   }
 
@@ -474,6 +475,26 @@ export async function getDashboardDataV2(mes?: string) {
         ORDER BY mo.fecha_cierre, "Hora"
       `, params);
 
+    
+    // No efectividad = Fallida + Perdida. Se agrega en SQL (una fila por fecha/hora/zona/brigada/causal/estado
+    // con su Cantidad): enviar cada orden multiplicaba el payload por mes sin aportar al gráfico.
+    // La clave del payload sigue llamándose "perdidas" por compatibilidad con la caché.
+    const perdidasRes = await query(`
+      SELECT
+        mo.fecha_cierre::text as "Fecha",
+        (LPAD(LEAST(22, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00') as "Hora",
+        mo.zona as "Zona",
+        CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 'Sur' ELSE 'Norte-Centro' END as "Proyecto",
+        mo.brigada_homologada as "Brigada",
+        mo.accion as "Accion",
+        mo.subaccion_homologada as "Subaccion",
+        mo.estado_norm as "Estado",
+        COUNT(*)::int as "Cantidad"
+      FROM dbanalitica.historico_mo mo
+      ${fechaCond} AND mo.estado_norm IN ('Fallida', 'Perdida')
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    `, params);
+
     return {
       mes: mes || 'ALL',
       rawRecords,
@@ -483,6 +504,7 @@ export async function getDashboardDataV2(mes?: string) {
       dispDiaria: dispRes.rows,
       horario: horarioRes.rows,
       horarioTec: horarioTecRes.rows,
+      perdidas: perdidasRes.rows,
     };
   } catch (error) {
     console.error('Error al procesar datos');
@@ -589,7 +611,7 @@ export async function getMonthsDataV2() {
     const monthsRes = await query(`
       SELECT to_char(fecha_cierre, 'YYYY-MM') as "mes",
              COUNT(*)::int as "count",
-             MAX(fecha_carga)::text as "version"
+             MAX(fecha_carga)::text || '-v3' as "version"
       FROM dbanalitica.historico_mo
       WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND tiene_vs
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')

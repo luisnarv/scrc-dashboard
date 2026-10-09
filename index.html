@@ -1,0 +1,87 @@
+
+<html>
+<head>
+<title>Page Title</title>
+</head>
+<body>
+
+
+<label class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+  <div class="flex items-center gap-3">
+    <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+    <span class="text-sm text-gray-700">Electrónica</span>
+  </div>
+  <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">128</span>
+</label>
+
+<label class="relative cursor-pointer">
+  <input type="checkbox" class="peer sr-only">
+  <span class="px-4 py-1.5 rounded-full text-sm font-medium border border-gray-200 text-gray-600 bg-white 
+               peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600 
+               transition-colors shadow-sm inline-block">
+    Envío gratis
+  </span>
+</label>
+
+<label class="relative flex flex-col items-center p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-gray-300 peer-checked:border-blue-600">
+  <input type="checkbox" class="absolute top-3 right-3 w-4 h-4 rounded text-blue-600">
+  <div class="text-2xl mb-1">💻</div>
+  <span class="text-sm font-semibold text-gray-800">Laptops</span>
+  <span class="text-xs text-gray-500">Desde $299</span>
+</label>
+
+<label class="relative inline-flex items-center justify-center cursor-pointer">
+  <input type="checkbox" class="peer sr-only">
+  <span class="w-7 h-7 rounded-full bg-red-500 ring-2 ring-transparent peer-checked:ring-offset-2 peer-checked:ring-red-500 flex items-center justify-center transition-all">
+    <svg class="w-4 h-4 text-white opacity-0 peer-checked:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+    </svg>
+  </span>
+</label>
+
+<details class="group border-b border-gray-200 py-3">
+  <summary class="flex justify-between items-center font-medium cursor-pointer list-none text-sm text-gray-900">
+    <span>Marcas</span>
+    <span class="flex items-center gap-2">
+      <span class="text-xs bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full">2</span>
+      <span class="transition group-open:rotate-180">▼</span>
+    </span>
+  </summary>
+  <div class="mt-3 space-y-2 pl-1">
+    <!-- Lista de checkboxes regulares aquí -->
+  </div>
+</details>
+
+<label class="cursor-pointer">
+  <input type="checkbox" class="peer sr-only">
+  <span class="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-md text-sm font-semibold text-gray-700 
+               peer-checked:bg-black peer-checked:text-white peer-checked:border-black transition-all">
+    M
+  </span>
+</label>
+
+<label class="flex items-center gap-3 py-1 cursor-pointer hover:opacity-80">
+  <input type="checkbox" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-400">
+  <div class="flex text-amber-400 text-sm">★★★★☆</div>
+  <span class="text-xs text-gray-600">4 estrellas o más</span>
+</label>
+
+<div class="border border-gray-200 rounded-lg p-3 w-64">
+  <input type="search" placeholder="Buscar marca..." class="w-full text-xs p-2 mb-2 border rounded-md">
+  <div class="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+      <input type="checkbox" class="rounded text-blue-600"> Apple
+    </label>
+    <!-- Más elementos -->
+  </div>
+</div>
+
+<label class="flex items-center justify-between cursor-pointer py-2">
+  <span class="text-sm font-medium text-gray-800">Solo ofertas</span>
+  <div class="relative">
+    <input type="checkbox" class="peer sr-only">
+    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+  </div>
+</label>
+</body>
+</html>

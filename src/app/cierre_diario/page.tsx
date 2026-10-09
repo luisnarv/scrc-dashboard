@@ -1493,6 +1493,7 @@ export default function AsignacionOperativaPage() {
     import('chart.js').then(({ Chart, registerables }) => {
       if (isCancelled || !canvasRef.current) return;
       Chart.register(...registerables);
+      (window as unknown as { Chart?: unknown }).Chart = Chart; // lo usan los bots de validación (scripts/e2e)
 
       // El canvas de Chart.js no resuelve custom properties de CSS: los tokens que no están
       // ya disponibles como hex en `colors` (ThemeProvider) se leen aquí vía getComputedStyle,

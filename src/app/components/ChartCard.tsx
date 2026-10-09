@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChartConfiguration } from 'chart.js';
 import AnalysisModal from './AnalysisModal';
+import type { RailKpi } from './ModalShell';
 import { ButtonGhost } from './Buttons';
 
 interface ChartCardProps {
@@ -12,6 +13,12 @@ interface ChartCardProps {
   modalConfig?: ChartConfiguration | null;
   height?: 'normal' | 'tall' | 'short';
   headerExtra?: React.ReactNode;
+  /** Controles extra para el encabezado del modal de detalle (p. ej. un filtro que también cambia el gráfico). */
+  modalHeaderExtra?: React.ReactNode;
+  /** KPIs de la sección RESUMEN del panel lateral del modal de detalle (máx. 4). */
+  detailResumen?: RailKpi[];
+  /** Etiqueta sobre el gráfico del modal: "TIPO DE GRÁFICO · unidad". */
+  detailChartLabel?: string;
   hasDetail?: boolean;
   detailTableData?: {
     columns: string[];
@@ -27,7 +34,7 @@ interface ChartCardProps {
   customLayout?: (canvas: React.ReactNode) => React.ReactNode;
 }
 
-export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, hasDetail, detailTableData, detailActiveFilters, singleCategorySelect, defaultSelectedCategory, onExpand, customBody, customLayout }: ChartCardProps) {
+export default function ChartCard({ id, title, subtitle, config, modalConfig, height = 'normal', headerExtra, modalHeaderExtra, detailResumen, detailChartLabel, hasDetail, detailTableData, detailActiveFilters, singleCategorySelect, defaultSelectedCategory, onExpand, customBody, customLayout }: ChartCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<import('chart.js').Chart | null>(null);
@@ -38,6 +45,7 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
     import('chart.js').then(({ Chart, registerables }) => {
       if (!isMounted || !canvasRef.current) return;
       Chart.register(...registerables);
+      (window as unknown as { Chart?: unknown }).Chart = Chart; // lo usan los bots de validación (scripts/e2e)
 
       const computed = getComputedStyle(document.body);
       const getVar = (v: string) => computed.getPropertyValue(v).trim();
@@ -107,6 +115,9 @@ export default function ChartCard({ id, title, subtitle, config, modalConfig, he
           modalConfig={modalConfig}
           tableData={detailTableData as any}
           activeFilters={detailActiveFilters}
+          headerExtra={modalHeaderExtra}
+          resumen={detailResumen}
+          chartLabel={detailChartLabel}
           singleCategorySelect={singleCategorySelect}
           defaultSelectedCategory={defaultSelectedCategory}
         />

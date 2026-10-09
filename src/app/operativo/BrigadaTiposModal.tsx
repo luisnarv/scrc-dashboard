@@ -3,9 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChartConfiguration } from 'chart.js';
 import { esFestivo } from '../components/utils/holidays';
 import { getMinutosTrabajoHora } from '../components/utils/metasBrigadas';
-import { fmtN, fmtPct } from '../components/utils/formatters';
-import { SegmentedControl } from '../components/Buttons';
+import { fmtN } from '../components/utils/formatters';
 import { useTheme } from '../components/ThemeProvider';
+import ModalShell, { RailSegmented, RailSelect, RailSearch, type RailSerie, type RailKpi, type ViewMode } from '../components/ModalShell';
+import ModalChart from '../components/ModalChart';
+import { CHART_FIXED, cssVar, withAlpha } from '../components/utils/chartTheme';
+import { descargarCsv, descargarPngDeCanvas, nombreArchivo } from '../components/utils/exportFile';
 
 /* Bandas de franja no laborable (almuerzo / fuera de jornada / domingo / festivo). */
 const bandsPlugin = {
@@ -19,6 +22,11 @@ const bandsPlugin = {
     const zona = options?.zona || '';
     const esHora = options?.esHora;
     const ticks = x.ticks || [];
+    // Color de la franja según el tema (el canvas no entiende var()).
+    const base = cssVar('--text-muted') || '#8c9382';
+    const cFondo = withAlpha(base, 0.10);
+    const cTrama = withAlpha(base, 0.22);
+    const cTexto = withAlpha(base, 0.9);
     ticks.forEach((tick: any, index: number) => {
       const label = x.getLabelForValue ? x.getLabelForValue(tick.value) : tick.label;
       if (typeof label !== 'string') return;
@@ -50,17 +58,17 @@ const bandsPlugin = {
       const slotHeight = bottom - top;
       if (slotWidth <= 0) return;
       ctx.save();
-      ctx.fillStyle = 'rgba(140,147,130,.10)';
+      ctx.fillStyle = cFondo;
       ctx.fillRect(slotLeft, top, slotWidth, slotHeight);
       ctx.save();
       ctx.beginPath(); ctx.rect(slotLeft, top, slotWidth, slotHeight); ctx.clip();
-      ctx.strokeStyle = 'rgba(140,147,130,.22)'; ctx.lineWidth = 1.4; ctx.beginPath();
+      ctx.strokeStyle = cTrama; ctx.lineWidth = 1.4; ctx.beginPath();
       for (let xLine = slotLeft - slotHeight; xLine < slotRight + slotHeight; xLine += 8) {
         ctx.moveTo(xLine, bottom); ctx.lineTo(xLine + slotHeight, top);
       }
       ctx.stroke(); ctx.restore();
       if (text) {
-        ctx.font = '600 10px sans-serif'; ctx.fillStyle = 'rgba(120,127,110,.9)';
+        ctx.font = '600 10px sans-serif'; ctx.fillStyle = cTexto;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.save(); ctx.translate(xPos, top + slotHeight / 2); ctx.rotate(-Math.PI / 2);
         ctx.fillText(text, 0, 0); ctx.restore();
@@ -131,13 +139,10 @@ export interface BrigTiposData {
 }
 
 const OK = 'var(--ok)';
-const ERR = 'var(--err)';
-const WARN = '#8A6D00';
 const INK = 'var(--text-title)';
 const MUT = 'var(--text-muted)';
 const LINE = 'var(--border)';
 const TEAL = 'var(--sip)';
-const constColor = (c: string) => (c === 'Alta' ? OK : c === 'Media' ? WARN : ERR);
 
 export default function BrigadaTiposModal({
   data,
@@ -160,9 +165,10 @@ export default function BrigadaTiposModal({
     initialBrigada || (subVista === 'tipo' && data.tipos.length > 0 ? data.tipos[0].label : 'ALL')
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [view, setView] = useState<'chart' | 'split' | 'table'>('split');
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<import('chart.js').Chart | null>(null);
+  const [view, setView] = useState<ViewMode>('split');
+  // Series ocultas desde la lista SERIES del panel (clave de serie → oculta).
+  const [ocultas, setOcultas] = useState<Set<string>>(() => new Set());
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (initialBrigada) {
@@ -170,16 +176,12 @@ export default function BrigadaTiposModal({
     }
   }, [initialBrigada]);
 
+  // Esc y el cierre los maneja ModalShell; aquí solo se bloquea el scroll del fondo.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   // Lista de tipos de brigada disponibles para el selector
   const listaTiposBrigada = useMemo(() => {
@@ -214,91 +216,72 @@ export default function BrigadaTiposModal({
     return data.labelsDia;
   }, [vista, data.labelsMes, data.labelsHora, data.labelsDia]);
 
-  // Configuración de Chart.js
-  const config = useMemo<ChartConfiguration>(() => {
-    const datasets: any[] = [];
+  const esBarras = subVista === 'tipo';
+  const promSerie = vista === 'mes' ? data.promedioSerieMes : vista === 'hora' ? data.promedioSerieHora : data.promedioSerieDia;
+
+  // Todas las series posibles del gráfico (según `nivel`); el panel decide cuáles se pintan.
+  const todasSeries = useMemo(() => {
+    const items: { key: string; color: string; ds: Record<string, unknown> }[] = [];
+    const puntos = labels.length > 14 ? 0 : 3.5;
+
+    const dsDe = (label: string, color: string, serie: (number | null)[], extra: Record<string, unknown> = {}) =>
+      esBarras
+        ? {
+            label, data: serie, backgroundColor: withAlpha(color, 0.85), borderColor: color,
+            borderWidth: 1, borderRadius: 3, ...extra,
+          }
+        : {
+            label, data: serie, borderColor: color, backgroundColor: withAlpha(color, 0.12),
+            fill: false, spanGaps: false, borderWidth: 2.8, tension: 0.32,
+            pointRadius: puntos, pointBackgroundColor: 'var(--card)', pointBorderColor: color, pointBorderWidth: 2,
+            ...extra,
+          };
 
     if (nivel === 'brigadas') {
       tiposFiltrados.forEach(t => {
         const serie = vista === 'mes' ? t.serieMes : vista === 'hora' ? t.serieHora : t.serieDia;
-        datasets.push({
-          label: t.label,
-          data: serie,
-          borderColor: t.color,
-          backgroundColor: t.color + '1F',
-          fill: false,
-          spanGaps: false,
-          borderWidth: 2.8,
-          tension: 0.32,
-          pointRadius: labels.length > 14 ? 0 : 3.5,
-          pointBackgroundColor: '#fff',
-          pointBorderColor: t.color,
-          pointBorderWidth: 2,
-        });
+        items.push({ key: `t:${t.label}`, color: t.color, ds: dsDe(t.label, t.color, serie) });
       });
-
-      // Si seleccionó una sola brigada, agregar la línea de promedio como contraste
-      if (brigadaFiltro !== 'ALL') {
-        const promSerie = vista === 'mes' ? data.promedioSerieMes : vista === 'hora' ? data.promedioSerieHora : data.promedioSerieDia;
-        if (promSerie) {
-          datasets.push({
-            label: 'Promedio Brigadas',
-            data: promSerie,
-            borderColor: '#78909C',
-            backgroundColor: '#78909C',
-            borderWidth: 2,
-            borderDash: [5, 4],
-            pointRadius: 0,
-            fill: false,
-            tension: 0.25,
-          });
-        }
-      }
     } else {
-      // nivel === 'tecnicos'
-      // Graficar los Top 7 técnicos de la selección
-      const topTechs = tecnicosFiltrados.slice(0, 7);
-      topTechs.forEach((tech, idx) => {
+      // nivel === 'tecnicos': Top 7 técnicos de la selección
+      tecnicosFiltrados.slice(0, 7).forEach((tech, idx) => {
         const col = colors.series[idx % colors.series.length];
         const shortNom = tech.nom.split(' ').filter(Boolean).slice(0, 2).join(' ') || tech.ced;
         const serie = vista === 'mes' ? tech.byMonth : vista === 'hora' ? tech.byHour : tech.byDay;
-        datasets.push({
-          label: shortNom,
-          techFullName: tech.nom,
-          techTipo: tech.tipo,
-          data: serie,
-          borderColor: col,
-          backgroundColor: col + '1F',
-          fill: false,
-          spanGaps: false,
-          borderWidth: 2.8,
-          tension: 0.32,
-          pointRadius: labels.length > 14 ? 0 : 3.5,
-          pointBackgroundColor: '#fff',
-          pointBorderColor: col,
-          pointBorderWidth: 2,
+        items.push({
+          key: `k:${tech.ced}`, color: col,
+          ds: dsDe(shortNom, col, serie, { techFullName: tech.nom, techTipo: tech.tipo }),
         });
       });
-
-      // Línea de promedio para contrastar técnicos
-      const promSerie = vista === 'mes' ? data.promedioSerieMes : vista === 'hora' ? data.promedioSerieHora : data.promedioSerieDia;
-      if (promSerie) {
-        datasets.push({
-          label: 'Promedio Brigadas',
-          data: promSerie,
-          borderColor: '#78909C',
-          backgroundColor: '#78909C',
-          borderWidth: 2,
-          borderDash: [5, 4],
-          pointRadius: 0,
-          fill: false,
-          tension: 0.25,
-        });
-      }
     }
 
+    // Línea de promedio como contraste: con todos los técnicos, o con una sola brigada seleccionada.
+    if (promSerie && (nivel === 'tecnicos' || brigadaFiltro !== 'ALL')) {
+      items.push({
+        key: 'prom', color: CHART_FIXED.PROMEDIO,
+        ds: {
+          type: 'line', label: 'Promedio Brigadas', data: promSerie,
+          borderColor: CHART_FIXED.PROMEDIO, backgroundColor: CHART_FIXED.PROMEDIO,
+          borderWidth: 2, borderDash: [6, 4], pointRadius: 0, fill: false, tension: 0.25, order: 0,
+        },
+      });
+    }
+    return items;
+  }, [nivel, tiposFiltrados, tecnicosFiltrados, vista, labels, brigadaFiltro, promSerie, esBarras, colors]);
+
+  const seriesPanel = useMemo<RailSerie[]>(
+    () => todasSeries.map(s => ({ key: s.key, label: String(s.ds.label), color: s.color, active: !ocultas.has(s.key) })),
+    [todasSeries, ocultas],
+  );
+  const toggleSerie = (key: string) =>
+    setOcultas(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+
+  // Configuración de Chart.js (colores con tokens var(--x); ModalChart los resuelve)
+  const config = useMemo<ChartConfiguration>(() => {
+    const datasets = todasSeries.filter(s => !ocultas.has(s.key)).map(s => s.ds);
+
     return {
-      type: 'line',
+      type: esBarras ? 'bar' : 'line',
       data: {
         labels,
         datasets,
@@ -309,7 +292,6 @@ export default function BrigadaTiposModal({
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: true, position: 'top' as const, labels: { boxWidth: 12, font: { size: 10.5 } } },
           tooltip: {
             callbacks: {
               title: (items: any[]) => {
@@ -332,74 +314,32 @@ export default function BrigadaTiposModal({
           y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Órdenes Registradas' } },
         },
       },
-    } as ChartConfiguration;
-  }, [nivel, tiposFiltrados, tecnicosFiltrados, vista, labels, brigadaFiltro, data, colors]);
-
-  // Montar Chart.js en el canvas
-  useEffect(() => {
-    if (view === 'table' || !canvasRef.current) return;
-    let mounted = true;
-    import('chart.js').then(({ Chart, registerables }) => {
-      if (!mounted || !canvasRef.current) return;
-      Chart.register(...registerables);
-      const cs = getComputedStyle(document.body);
-      Chart.defaults.color = cs.getPropertyValue('--text-muted').trim();
-      Chart.defaults.borderColor = cs.getPropertyValue('--border').trim();
-      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-      chartRef.current = new Chart(canvasRef.current, config);
-    });
-    return () => {
-      mounted = false;
-      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-    };
-  }, [config, view]);
+    } as unknown as ChartConfiguration;
+  }, [todasSeries, ocultas, esBarras, labels, vista, data]);
 
   // Exportar a CSV según la vista activa
   const exportCSV = () => {
     if (nivel === 'brigadas') {
-      const rows = [['Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', 'Pico', 'Promedio', 'Constancia'].join(';')];
-      tiposFiltrados.forEach(t => {
-        rows.push([
-          t.label.replace(/;/g, ''),
-          t.total,
-          t.efec,
-          t.fall,
-          t.perd,
-          t.pico,
-          t.promedio.toFixed(1),
-          t.constancia
-        ].join(';'));
-      });
-      const uri = encodeURI('data:text/csv;charset=utf-8,\uFEFF' + rows.join('\n'));
-      const a = document.createElement('a');
-      a.href = uri;
-      a.download = `Digitacion_por_brigadas_${vista}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      descargarCsv(
+        `Digitacion_por_brigadas_${vista}.csv`,
+        ['Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', 'Pico', 'Promedio', 'Constancia'],
+        tiposFiltrados.map(t => [t.label, t.total, t.efec, t.fall, t.perd, t.pico, t.promedio.toFixed(1), t.constancia]),
+      );
     } else {
-      const rows = [['Cédula', 'Técnico', 'Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', 'Pico (Máx)', 'Promedio/Día'].join(';')];
-      tecnicosFiltrados.forEach(tech => {
-        rows.push([
-          tech.ced,
-          tech.nom.replace(/;/g, ''),
-          tech.tipo.replace(/;/g, ''),
-          tech.total,
-          tech.efec,
-          tech.fall,
-          tech.perd,
-          tech.pico,
-          tech.promedio.toFixed(1)
-        ].join(';'));
-      });
-      const uri = encodeURI('data:text/csv;charset=utf-8,\uFEFF' + rows.join('\n'));
-      const a = document.createElement('a');
-      a.href = uri;
-      a.download = `Digitacion_tecnicos_${brigadaFiltro}_${vista}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      descargarCsv(
+        `Digitacion_tecnicos_${nombreArchivo(brigadaFiltro)}_${vista}.csv`,
+        ['Cédula', 'Técnico', 'Tipo de Brigada', 'Total Órdenes', 'Efectivas', 'Fallidas', 'Perdidas', 'Pico (Máx)', 'Promedio/Día'],
+        tecnicosFiltrados.map(tech => [tech.ced, tech.nom, tech.tipo, tech.total, tech.efec, tech.fall, tech.perd, tech.pico, tech.promedio.toFixed(1)]),
+      );
     }
+  };
+
+  // Exportar el gráfico a PNG. Si el gráfico no está en pantalla (modo Tabla), se muestra y se reintenta.
+  const exportPNG = () => {
+    const nombre = `evolutivo_${vista}_${nivel}`;
+    if (descargarPngDeCanvas(canvasRef.current, nombre, cssVar('--card'))) return;
+    setView('split');
+    setTimeout(() => descargarPngDeCanvas(canvasRef.current, nombre, cssVar('--card')), 900);
   };
 
   // Stats para la barra superior
@@ -448,286 +388,181 @@ export default function BrigadaTiposModal({
     fontVariantNumeric: 'tabular-nums'
   };
 
+  const resumen: RailKpi[] = [
+    { label: 'Total', value: `${fmtN(stats.totalOrd)} ord`, color: INK },
+    { label: 'Líder', value: stats.liderLbl, color: OK },
+    { label: 'Registros', value: stats.conteo, color: INK },
+    { label: 'Promedio', value: `${stats.promedio} ord`, color: INK },
+  ];
+
+  const filtros = (
+    <>
+      <RailSegmented
+        label="Nivel"
+        value={nivel}
+        onChange={v => setNivel(v as 'brigadas' | 'tecnicos')}
+        options={[
+          { value: 'brigadas', label: '🏷️ Por Brigadas' },
+          { value: 'tecnicos', label: '👤 Por Técnicos' },
+        ]}
+      />
+      <RailSegmented
+        label="Vista"
+        value={vista}
+        onChange={v => onToggleVista(v as 'hora' | 'dia' | 'mes')}
+        options={[
+          { value: 'hora', label: 'Horario' },
+          { value: 'dia', label: 'Diario' },
+          { value: 'mes', label: 'Mensual' },
+        ]}
+      />
+      <RailSelect
+        label="Brigada"
+        value={brigadaFiltro}
+        onChange={setBrigadaFiltro}
+        options={[
+          { value: 'ALL', label: `Todas las brigadas (${data.tipos.length})` },
+          ...listaTiposBrigada.map(t => ({ value: t, label: t })),
+        ]}
+      />
+      {nivel === 'tecnicos' && (
+        <RailSearch label="Buscar técnico" placeholder="Nombre o cédula…" value={searchTerm} onChange={setSearchTerm} />
+      )}
+    </>
+  );
+
+  const tabla = (
+    <>
+    <div className="mobile-scroll-tip" style={{ padding: '4px 12px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
+    {nivel === 'brigadas' ? (
+      <table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ ...th, textAlign: 'left' }}>Tipo de Brigada</th>
+            <th style={th}>Total Órdenes</th>
+            <th style={th}>Efectivas</th>
+            <th style={th}>Fallidas</th>
+            <th style={th}>Perdidas</th>
+            <th style={th}>Pico</th>
+            <th style={th}>Promedio</th>
+            <th style={th}>% Part.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tiposFiltrados.map(t => {
+            const pctPart = stats.totalOrd > 0 ? (t.total / stats.totalOrd) * 100 : 0;
+            return (
+              <tr key={t.label} style={{ borderBottom: `1px solid ${LINE}` }}>
+                <td style={{ ...td, textAlign: 'left', color: t.color, fontWeight: 700 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.color, display: 'inline-block', marginRight: 8 }} />
+                  {t.label}
+                </td>
+                <td style={{ ...td, fontWeight: 700 }}>{fmtN(t.total)}</td>
+                <td style={td}>{fmtN(t.efec)}</td>
+                <td style={td}>{fmtN(t.fall)}</td>
+                <td style={td}>{fmtN(t.perd)}</td>
+                <td style={td}>{fmtN(t.pico)}</td>
+                <td style={td}>{t.promedio.toFixed(1)}</td>
+                <td style={td}>{pctPart.toFixed(1)}%</td>
+              </tr>
+            );
+          })}
+          {tiposFiltrados.length === 0 && (
+            <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: MUT, padding: 24 }}>No hay brigadas con datos para este filtro.</td></tr>
+          )}
+        </tbody>
+        {tiposFiltrados.length > 0 && (
+          <tfoot>
+            <tr style={{ borderTop: `2px solid ${TEAL}`, background: 'var(--panel)' }}>
+              <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>TOTAL</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(stats.totalOrd)}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.efec, 0))}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.fall, 0))}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.perd, 0))}</td>
+              <td style={td} />
+              <td style={td} />
+              <td style={{ ...td, fontWeight: 800 }}>100%</td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    ) : (
+      <table style={{ width: '100%', minWidth: 880, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ ...th, textAlign: 'left' }}>#</th>
+            <th style={{ ...th, textAlign: 'left' }}>Cédula</th>
+            <th style={{ ...th, textAlign: 'left' }}>Técnico</th>
+            <th style={{ ...th, textAlign: 'left' }}>Tipo de Brigada</th>
+            <th style={th}>Total Órdenes</th>
+            <th style={th}>Efectivas</th>
+            <th style={th}>Fallidas</th>
+            <th style={th}>Perdidas</th>
+            <th style={th}>Pico (Máx)</th>
+            <th style={th}>Promedio/Día</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tecnicosFiltrados.map((tech, idx) => (
+            <tr key={tech.ced} style={{ borderBottom: `1px solid ${LINE}` }}>
+              <td style={{ ...td, textAlign: 'left', color: MUT, width: 30 }}>{idx + 1}</td>
+              <td style={{ ...td, textAlign: 'left', color: MUT, fontFamily: 'monospace' }}>{tech.ced}</td>
+              <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{tech.nom}</td>
+              <td style={{ ...td, textAlign: 'left', color: MUT }}>{tech.tipo}</td>
+              <td style={{ ...td, fontWeight: 700 }}>{fmtN(tech.total)}</td>
+              <td style={td}>{fmtN(tech.efec)}</td>
+              <td style={td}>{fmtN(tech.fall)}</td>
+              <td style={td}>{fmtN(tech.perd)}</td>
+              <td style={td}>{fmtN(tech.pico)}</td>
+              <td style={td}>{tech.promedio.toFixed(1)}</td>
+            </tr>
+          ))}
+          {tecnicosFiltrados.length === 0 && (
+            <tr><td colSpan={10} style={{ ...td, textAlign: 'center', color: MUT, padding: 24 }}>No se encontraron técnicos para los filtros seleccionados.</td></tr>
+          )}
+        </tbody>
+        {tecnicosFiltrados.length > 0 && (
+          <tfoot>
+            <tr style={{ borderTop: `2px solid ${TEAL}`, background: 'var(--panel)' }}>
+              <td colSpan={4} style={{ ...td, textAlign: 'left', fontWeight: 800 }}>TOTAL ({tecnicosFiltrados.length} técnicos)</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(stats.totalOrd)}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.efec, 0))}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.fall, 0))}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.perd, 0))}</td>
+              <td style={td} />
+              <td style={td} />
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    )}
+    </>
+  );
+
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(20,27,45,.55)',
-        backdropFilter: 'blur(2px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: 'clamp(6px, 2vw, 20px)'
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Detalle de digitación por brigadas y técnicos"
-        style={{
-          background: 'var(--bg)',
-          borderRadius: 16,
-          width: 'min(1520px, 98vw)',
-          maxHeight: '94dvh',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'auto',
-          boxShadow: '0 24px 60px rgba(20,30,60,.28)'
-        }}
-      >
-        {/* Encabezado */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', borderBottom: `1px solid ${LINE}`, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 240px', minWidth: 0 }}>
-            <span style={{ background: TEAL, color: '#fff', fontWeight: 800, fontSize: 12, borderRadius: 8, padding: '4px 8px' }}>2ª</span>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>
-                Evolutivo {vista === 'hora' ? 'Horario' : vista === 'dia' ? 'Diario' : 'Mensual'} de Digitación
-              </div>
-              <div style={{ fontSize: 12, color: MUT, marginTop: 2 }}>
-                {nivel === 'brigadas'
-                  ? 'Órdenes registradas por especialidad/tipo de brigada'
-                  : `Órdenes registradas por técnicos ${brigadaFiltro !== 'ALL' ? `de la brigada "${shortBrig(brigadaFiltro)}"` : 'de todas las brigadas'}`}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Selector de Nivel: Por Brigadas vs Por Técnicos */}
-            <SegmentedControl
-              options={[
-                { value: 'brigadas', label: '🏷️ Por Brigadas' },
-                { value: 'tecnicos', label: '👤 Por Técnicos' },
-              ]}
-              value={nivel}
-              onChange={v => setNivel(v as 'brigadas' | 'tecnicos')}
-            />
-
-            {/* Selector de Vista Temporal */}
-            <SegmentedControl
-              options={[
-                { value: 'hora', label: 'Horario' },
-                { value: 'dia', label: 'Diario' },
-                { value: 'mes', label: 'Mensual' },
-              ]}
-              value={vista}
-              onChange={v => onToggleVista(v as 'hora' | 'dia' | 'mes')}
-            />
-
-            {/* Selector de Modo Gráfico / Tabla */}
-            <SegmentedControl
-              options={[
-                { value: 'chart', label: '📈 Gráfico' },
-                { value: 'split', label: '🗂 Ambos' },
-                { value: 'table', label: '📋 Tabla' },
-              ]}
-              value={view}
-              onChange={v => setView(v as any)}
-            />
-
-            <button
-              onClick={exportCSV}
-              style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: TEAL, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
-            >
-              CSV ↓
-            </button>
-            <button
-              onClick={onClose}
-              aria-label="Cerrar"
-              style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${LINE}`, background: 'var(--panel)', color: MUT, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        {/* Barra de Filtros secundarios: Selector de Brigada y Buscador */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 20px', borderBottom: `1px solid ${LINE}`, flexWrap: 'wrap', background: 'var(--panel)' }}>
-          {/* Dropdown de Brigadas */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: MUT, textTransform: 'uppercase', letterSpacing: 0.5 }}>Brigada:</span>
-            <select
-              value={brigadaFiltro}
-              onChange={e => setBrigadaFiltro(e.target.value)}
-              style={{
-                padding: '5px 10px',
-                borderRadius: 7,
-                border: `1px solid ${LINE}`,
-                background: 'var(--card)',
-                color: INK,
-                fontSize: 12.5,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="ALL">Todas las brigadas ({data.tipos.length})</option>
-              {listaTiposBrigada.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Buscador de Técnicos (visible si está en nivel técnicos) */}
-          {nivel === 'tecnicos' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: MUT, textTransform: 'uppercase', letterSpacing: 0.5 }}>Buscar técnico:</span>
-              <input
-                type="text"
-                placeholder="Nombre o cédula…"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: 7,
-                  border: `1px solid ${LINE}`,
-                  background: 'var(--card)',
-                  color: INK,
-                  fontSize: 12.5,
-                  outline: 'none',
-                  minWidth: 0, flex: '1 1 160px'
-                }}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: MUT, fontSize: 14 }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Stats resumidos */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', alignItems: 'center', marginLeft: 'auto', fontSize: 12 }}>
-            <span><b style={{ color: MUT, marginRight: 4 }}>TOTAL:</b><strong style={{ color: INK }}>{fmtN(stats.totalOrd)} ord</strong></span>
-            <span><b style={{ color: MUT, marginRight: 4 }}>LÍDER:</b><strong style={{ color: OK }}>{stats.liderLbl}</strong></span>
-            <span><b style={{ color: MUT, marginRight: 4 }}>REGISTROS:</b><strong style={{ color: INK }}>{stats.conteo}</strong></span>
-            <span><b style={{ color: MUT, marginRight: 4 }}>PROMEDIO:</b><strong style={{ color: INK }}>{stats.promedio} ord</strong></span>
-          </div>
-        </div>
-
-        {/* Contenido: Gráfico y/o Tabla */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {(view === 'chart' || view === 'split') && (
-            <div style={{ flex: view === 'chart' ? '1 1 auto' : '1 1 54%', minHeight: 200, position: 'relative', padding: '10px 16px' }}>
-              <canvas ref={canvasRef} />
-            </div>
-          )}
-
-          {(view === 'table' || view === 'split') && (
-            <div className="table-responsive-container" style={{ flex: view === 'table' ? '1 1 auto' : '1 1 46%', minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <div className="mobile-scroll-tip" style={{ padding: '4px 12px' }}>Desliza horizontalmente para ver todas las métricas &rarr;</div>
-              {nivel === 'brigadas' ? (
-                <table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...th, textAlign: 'left' }}>Tipo de Brigada</th>
-                      <th style={th}>Total Órdenes</th>
-                      <th style={th}>Efectivas</th>
-                      <th style={th}>Fallidas</th>
-                      <th style={th}>Perdidas</th>
-                      <th style={th}>Pico</th>
-                      <th style={th}>Promedio</th>
-                      <th style={th}>% Part.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tiposFiltrados.map(t => {
-                      const pctPart = stats.totalOrd > 0 ? (t.total / stats.totalOrd) * 100 : 0;
-                      return (
-                        <tr key={t.label} style={{ borderBottom: `1px solid ${LINE}` }}>
-                          <td style={{ ...td, textAlign: 'left', color: t.color, fontWeight: 700 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.color, display: 'inline-block', marginRight: 8 }} />
-                            {t.label}
-                          </td>
-                          <td style={{ ...td, fontWeight: 700 }}>{fmtN(t.total)}</td>
-                          <td style={td}>{fmtN(t.efec)}</td>
-                          <td style={td}>{fmtN(t.fall)}</td>
-                          <td style={td}>{fmtN(t.perd)}</td>
-                          <td style={td}>{fmtN(t.pico)}</td>
-                          <td style={td}>{t.promedio.toFixed(1)}</td>
-                          <td style={td}>{pctPart.toFixed(1)}%</td>
-                        </tr>
-                      );
-                    })}
-                    {tiposFiltrados.length === 0 && (
-                      <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: MUT, padding: 24 }}>No hay brigadas con datos para este filtro.</td></tr>
-                    )}
-                  </tbody>
-                  {tiposFiltrados.length > 0 && (
-                    <tfoot>
-                      <tr style={{ borderTop: `2px solid ${TEAL}`, background: 'var(--panel)' }}>
-                        <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>TOTAL</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(stats.totalOrd)}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.efec, 0))}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.fall, 0))}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tiposFiltrados.reduce((s, t) => s + t.perd, 0))}</td>
-                        <td style={td} />
-                        <td style={td} />
-                        <td style={{ ...td, fontWeight: 800 }}>100%</td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              ) : (
-                <table style={{ width: '100%', minWidth: 880, borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...th, textAlign: 'left' }}>#</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Cédula</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Técnico</th>
-                      <th style={{ ...th, textAlign: 'left' }}>Tipo de Brigada</th>
-                      <th style={th}>Total Órdenes</th>
-                      <th style={th}>Efectivas</th>
-                      <th style={th}>Fallidas</th>
-                      <th style={th}>Perdidas</th>
-                      <th style={th}>Pico (Máx)</th>
-                      <th style={th}>Promedio/Día</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tecnicosFiltrados.map((tech, idx) => (
-                      <tr key={tech.ced} style={{ borderBottom: `1px solid ${LINE}` }}>
-                        <td style={{ ...td, textAlign: 'left', color: MUT, width: 30 }}>{idx + 1}</td>
-                        <td style={{ ...td, textAlign: 'left', color: MUT, fontFamily: 'monospace' }}>{tech.ced}</td>
-                        <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{tech.nom}</td>
-                        <td style={{ ...td, textAlign: 'left', color: MUT }}>{tech.tipo}</td>
-                        <td style={{ ...td, fontWeight: 700 }}>{fmtN(tech.total)}</td>
-                        <td style={td}>{fmtN(tech.efec)}</td>
-                        <td style={td}>{fmtN(tech.fall)}</td>
-                        <td style={td}>{fmtN(tech.perd)}</td>
-                        <td style={td}>{fmtN(tech.pico)}</td>
-                        <td style={td}>{tech.promedio.toFixed(1)}</td>
-                      </tr>
-                    ))}
-                    {tecnicosFiltrados.length === 0 && (
-                      <tr><td colSpan={10} style={{ ...td, textAlign: 'center', color: MUT, padding: 24 }}>No se encontraron técnicos para los filtros seleccionados.</td></tr>
-                    )}
-                  </tbody>
-                  {tecnicosFiltrados.length > 0 && (
-                    <tfoot>
-                      <tr style={{ borderTop: `2px solid ${TEAL}`, background: 'var(--panel)' }}>
-                        <td colSpan={4} style={{ ...td, textAlign: 'left', fontWeight: 800 }}>TOTAL ({tecnicosFiltrados.length} técnicos)</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(stats.totalOrd)}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.efec, 0))}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.fall, 0))}</td>
-                        <td style={{ ...td, fontWeight: 800 }}>{fmtN(tecnicosFiltrados.reduce((s, t) => s + t.perd, 0))}</td>
-                        <td style={td} />
-                        <td style={td} />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <ModalShell
+      title={`Evolutivo ${vista === 'hora' ? 'Horario' : vista === 'dia' ? 'Diario' : 'Mensual'} de Digitación`}
+      subtitle={
+        nivel === 'brigadas'
+          ? 'Órdenes registradas por especialidad/tipo de brigada'
+          : `Órdenes registradas por técnicos ${brigadaFiltro !== 'ALL' ? `de la brigada "${shortBrig(brigadaFiltro)}"` : 'de todas las brigadas'}`
+      }
+      badge="2ª"
+      onClose={onClose}
+      viewMode={view}
+      onViewModeChange={setView}
+      filtros={filtros}
+      series={seriesPanel}
+      onToggleSerie={toggleSerie}
+      onResetSeries={() => setOcultas(new Set())}
+      resumen={resumen}
+      exportes={[
+        { label: 'PNG ⬇', onClick: exportPNG },
+        { label: 'CSV ↓', onClick: exportCSV, primary: true },
+      ]}
+      chartLabel={`${esBarras ? 'BARRAS AGRUPADAS' : 'LÍNEAS'} · órdenes registradas`}
+      chart={<ModalChart config={config} canvasRef={canvasRef} ariaLabel="Evolutivo de digitación" />}
+      table={tabla}
+    />
   );
 }
