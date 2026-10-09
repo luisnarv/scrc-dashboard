@@ -2430,14 +2430,18 @@ export default function OperativoPage() {
       const colorCausal = (label: string, i: number) =>
         label === OTRAS_CAUSALES ? colors.mut : colors.series[i % colors.series.length];
       const armarCausales = (estado: EstadoCausal) => {
-        const causales = buildCausales(perdidasF, vistaEvolutivo, ejeBase, visitasPorPeriodo, estado);
+        // Vista horaria = ACUMULADO por franja (igual que "Evolutivo Horario de Órdenes"): cada punto suma todo lo
+        // ocurrido desde las 07:00 hasta esa hora. Mensual/diario siguen siendo por periodo.
+        const causales = buildCausales(perdidasF, vistaEvolutivo, ejeBase, visitasPorPeriodo, estado, 6, esHora);
+        // Horas futuras (si se mira el día de hoy) sin dato, como en los demás gráficos horarios
+        const puntos = (s: { data: number[] }) => s.data.map((v, i) => (esHora && isFuturePeriod(causales.labels[i]) ? null : v));
         const chart: any = {
           type: 'line',
           data: {
             labels: vistaEvolutivo === 'dia' ? causales.labels.map(d => fmtDiaAxis(d)) : causales.labels,
             datasets: causales.series.map((s, i) => {
               const color = colorCausal(s.label, i);
-              return { label: s.label, data: s.data, borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 };
+              return { label: s.label, data: puntos(s), borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 };
             }),
           },
           plugins: isHoraOrDia ? [bandsPluginBands] : [],
@@ -2459,8 +2463,10 @@ export default function OperativoPage() {
                     const desglose = estado === 'TODAS' && serie
                       ? ` [${serie.fallidas[ctx.dataIndex]} fallidas · ${serie.perdidas[ctx.dataIndex]} pérdidas]`
                       : '';
-                    return ctx.dataset.label + ': ' + val + ' ' + (estado === 'Fallida' ? 'fallidas' : estado === 'Perdida' ? 'pérdidas' : 'no efectivas')
-                      + desglose + ' (' + part + '% part. | ' + peso + ' sobre visitas)';
+                    const unidad = (estado === 'Fallida' ? 'fallidas' : estado === 'Perdida' ? 'pérdidas' : 'no efectivas') + (causales.acumulado ? ' acumuladas' : '');
+                    const nueva = causales.acumulado && serie ? ` · +${serie.periodo[ctx.dataIndex]} en la franja` : '';
+                    return ctx.dataset.label + ': ' + val + ' ' + unidad + nueva
+                      + desglose + ' (' + part + '% part. | ' + peso + ' sobre visitas' + (causales.acumulado ? ' acumuladas' : '') + ')';
                   }
                 }
               }
@@ -2480,7 +2486,7 @@ export default function OperativoPage() {
             labels: chart.data.labels,
             datasets: causales.series.map((s, i) => {
               const color = colorCausal(s.label, i);
-              return { label: s.label, data: s.data, borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6 };
+              return { label: s.label, data: puntos(s), borderColor: color, backgroundColor: color, tension: 0.3, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6 };
             }),
           },
           options: {
@@ -2861,7 +2867,7 @@ export default function OperativoPage() {
                 <ChartCard
                   id="op-causales"
                   title={vistaEvolutivo === 'hora' ? 'Horario Causales de no efectividad' : vistaEvolutivo === 'mes' ? 'Causales mensual de no efectividad' : 'Causales diario de no efectividad'}
-                  subtitle={`${d.periodoLabel} · ${tituloEstado(estadoCausales)} | Top ${cz.top.length} causales | ${fmtN(cz.total)} órdenes: ${fmtN(cz.fallidas)} fallidas · ${fmtN(cz.perdidas)} pérdidas | Cantidad y participación porcentual`}
+                  subtitle={`${d.periodoLabel} · ${tituloEstado(estadoCausales)}${vistaEvolutivo === 'hora' ? ' · acumulado por franja horaria' : ''} | Top ${cz.top.length} causales | ${fmtN(cz.total)} órdenes: ${fmtN(cz.fallidas)} fallidas · ${fmtN(cz.perdidas)} pérdidas | Cantidad y participación porcentual`}
                   config={cz.chart as never}
                   height="short"
                   hasDetail
@@ -2877,7 +2883,7 @@ export default function OperativoPage() {
                     />
                   }
                   detailResumen={cz.resumen}
-                  detailChartLabel="LÍNEAS · órdenes no efectivas"
+                  detailChartLabel={vistaEvolutivo === 'hora' ? 'LÍNEAS ACUMULADAS · órdenes no efectivas' : 'LÍNEAS · órdenes no efectivas'}
                 />
               );
             })()}

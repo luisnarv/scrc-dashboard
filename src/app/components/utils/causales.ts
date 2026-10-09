@@ -25,6 +25,8 @@ export interface CausalesSerie {
   /** Desglose por estado de cada punto (suman `data`): para identificar fallida vs pérdida en el tooltip. */
   fallidas: number[];
   perdidas: number[];
+  /** Órdenes de cada periodo SIN acumular (con `acumulado` falso es igual a `data`). Alimenta la tabla. */
+  periodo: number[];
 }
 
 export interface CausalesTabla {
@@ -50,8 +52,12 @@ export interface CausalesResultado {
   total: number;
   totalFallidas: number;
   totalPerdidas: number;
+  /** Total de no efectivas por periodo (acumulado hasta ese periodo si `acumulado`). */
   perdidasPorPeriodo: Record<string, number>;
+  /** Visitas por periodo (acumuladas hasta ese periodo si `acumulado`). */
   visitasPorPeriodo: Record<string, number>;
+  /** true = cada punto es el acumulado desde el primer periodo (evolutivo horario). */
+  acumulado: boolean;
   tableData: CausalesTabla;
 }
 
@@ -96,6 +102,7 @@ export function buildCausales(
   visitasPorPeriodo: Record<string, number>,
   estado: EstadoCausal = 'TODAS',
   topN = 6,
+  acumulado = false,
 ): CausalesResultado {
   const perdidas = filtEstado(registros, estado);
   const conteo: Record<string, number> = {};
@@ -125,11 +132,24 @@ export function buildCausales(
 
   const grupos = [...topCausales];
   if (perdidas.some(p => !enTop.has(causalKey(p)))) grupos.push(OTRAS_CAUSALES);
+  // Acumulado (evolutivo horario): cada punto suma todo lo ocurrido desde el primer periodo hasta ese periodo.
+  const acum = (a: number[]) => { let s = 0; return a.map(v => (s += v)); };
+  const acumRec = (rec: Record<string, number>) => {
+    let s = 0;
+    const o: Record<string, number> = {};
+    labels.forEach(l => { s += rec[l] || 0; o[l] = s; });
+    return o;
+  };
   const series: CausalesSerie[] = grupos.map(g => {
     const f = labels.map(per => porPeriodo[per]?.[g]?.f || 0);
     const pe = labels.map(per => porPeriodo[per]?.[g]?.p || 0);
-    return { label: g, data: f.map((x, i) => x + pe[i]), fallidas: f, perdidas: pe };
+    const periodo = f.map((x, i) => x + pe[i]);
+    return acumulado
+      ? { label: g, data: acum(periodo), fallidas: acum(f), perdidas: acum(pe), periodo }
+      : { label: g, data: periodo, fallidas: f, perdidas: pe, periodo };
   });
+  const perdidasPorPeriodoOut = acumulado ? acumRec(perdidasPorPeriodo) : perdidasPorPeriodo;
+  const visitasPorPeriodoOut = acumulado ? acumRec(visitasPorPeriodo) : visitasPorPeriodo;
 
   const total = sumaCantidad(perdidas);
   const totalFallidas = sumaCantidad(perdidas.filter(esFallida));
@@ -200,7 +220,8 @@ export function buildCausales(
   };
 
   return {
-    topCausales, labels, series, total, totalFallidas, totalPerdidas, perdidasPorPeriodo, visitasPorPeriodo,
+    topCausales, labels, series, total, totalFallidas, totalPerdidas,
+    perdidasPorPeriodo: perdidasPorPeriodoOut, visitasPorPeriodo: visitasPorPeriodoOut, acumulado,
     tableData: { columns, categoryIndex: 0, firstColMinWidth: 300, col, hierarchicalRows, categoryDetail },
   };
 }

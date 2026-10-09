@@ -198,6 +198,38 @@ await R.test('buildCausales: lo graficado suma exactamente lo filtrado (mes, dí
           }
 });
 
+await R.test('Evolutivo horario ACUMULADO: crece, termina en el total y conserva el desglose (todas las combinaciones × estado)', () => {
+  const horas = Array.from({ length: 17 }, (_, i) => String(7 + i).padStart(2, '0') + ':00');
+  for (const proy of ['ALL', 'Sur', 'Norte-Centro'])
+    for (const zona of ['ALL', 'Sur', 'Centro'])
+      for (const proceso of ['ALL', 'GESTOR'])
+        for (const estado of ESTADOS) {
+          const f = F({ proy, zona, proceso });
+          const filtradas = filtPerdidas(perdidas, f);
+          const esperado = perdidas.filter(p => oraculo(p, f, estado)).reduce((s, p) => s + p.Cantidad, 0);
+          const ac = buildCausales(filtradas, 'hora', horas, {}, estado, 6, true);
+          const sn = buildCausales(filtradas, 'hora', horas, {}, estado, 6, false);
+          const et = `acumulado ${estado} ${proy}/${zona}/${proceso}`;
+          assert.equal(ac.acumulado, true, et);
+          assert.deepEqual(ac.labels, sn.labels, `${et}: mismo eje que sin acumular`);
+          ac.series.forEach((s, k) => {
+            // monótono no decreciente y termina en el total de la serie (sin acumular)
+            s.data.forEach((v, i) => { if (i > 0) assert.ok(v >= s.data[i - 1], `${et}: "${s.label}" decrece en ${ac.labels[i]}`); });
+            const totalSerie = sn.series[k].data.reduce((a, b) => a + b, 0);
+            assert.equal(s.data[s.data.length - 1], totalSerie, `${et}: "${s.label}" no termina en su total`);
+            // los incrementos reconstruyen el gráfico y el desglose suma el acumulado
+            assert.deepEqual(s.periodo, sn.series[k].data, `${et}: incrementos de "${s.label}"`);
+            s.data.forEach((v, i) => assert.equal(s.fallidas[i] + s.perdidas[i], v, `${et}: desglose de "${s.label}" en ${ac.labels[i]}`));
+          });
+          const sumaFinal = ac.series.reduce((s, x) => s + x.data[x.data.length - 1], 0);
+          assert.equal(sumaFinal, esperado, et);
+          assert.equal(ac.total, esperado, et);
+          // total acumulado por periodo = Σ series en ese punto, creciente y terminando en el total
+          ac.labels.forEach((l, i) => assert.equal(ac.perdidasPorPeriodo[l], ac.series.reduce((s, x) => s + x.data[i], 0), `${et}: total acumulado en ${l}`));
+          assert.equal(ac.perdidasPorPeriodo[ac.labels[ac.labels.length - 1]], esperado, et);
+        }
+});
+
 await R.test('El top de causales depende del estado elegido (no se mezcla Fallida con Pérdida)', () => {
   const t = (e) => buildCausales(filtPerdidas(perdidas, ALL), 'dia', [], {}, e);
   const fall = t('Fallida'); const perd = t('Perdida');

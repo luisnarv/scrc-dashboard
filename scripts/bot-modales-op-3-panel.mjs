@@ -195,7 +195,10 @@ await conNavegador(async (cdp) => {
             await mo.sleep(1100);
             const dd = mo.dialogo();
             const ch = mo.chartModal();
-            const sumaGraf = ch ? ch.data.datasets.reduce((s, x) => s + (x.data || []).reduce((a, v) => a + (Number(v) || 0), 0), 0) : -1;
+            // vista horaria = evolutivo ACUMULADO: el total de cada serie es su último punto; si no, la suma de sus puntos
+            const acumulado = (dd.querySelector('[data-chart-label]')?.textContent || '').toUpperCase().includes('ACUMULADA');
+            const totalSerie = (x) => { const v = (x.data || []).map((n) => (n === null || n === undefined ? null : Number(n))); return acumulado ? (v.filter((n) => n !== null).pop() || 0) : v.reduce((a, n) => a + (n || 0), 0); };
+            const sumaGraf = ch ? ch.data.datasets.reduce((s, x) => s + totalSerie(x), 0) : -1;
             const filas = [...dd.querySelectorAll('[data-table-area] tbody tr')];
             // filas de primer nivel = las que tienen la flecha ▶ (las de brigada son hijas, solo si están abiertas)
             const principales = filas.filter(r => r.querySelector('td')?.innerText.includes('▶'));
@@ -240,7 +243,9 @@ await conNavegador(async (cdp) => {
           const col = [...dd.querySelectorAll('[data-table-area] thead th')].findIndex(t => /^total$/i.test(t.innerText.trim()));
           const num = (t) => Number(String(t).replace(/[^\\d]/g, '')) || 0;
           const suma = [...dd.querySelectorAll('[data-table-area] tbody tr')].reduce((s, r) => s + num(r.querySelectorAll('td')[col]?.innerText), 0);
-          const graf = ch ? ch.data.datasets.reduce((s, x) => s + (x.data || []).reduce((a, v) => a + (Number(v) || 0), 0), 0) : -1;
+          const acumuladoO = (dd.querySelector('[data-chart-label]')?.textContent || '').toUpperCase().includes('ACUMULADA');
+          const totalSerieO = (x) => { const v = (x.data || []).map((n) => (n === null || n === undefined ? null : Number(n))); return acumuladoO ? (v.filter((n) => n !== null).pop() || 0) : v.reduce((a, n) => a + (n || 0), 0); };
+          const graf = ch ? ch.data.datasets.reduce((s, x) => s + totalSerieO(x), 0) : -1;
           dd.querySelector('.ms-link')?.click();
           await mo.sleep(500);
           return { hay: true, filas, suma, graf, nSeries: ch ? ch.data.datasets.length : 0 };

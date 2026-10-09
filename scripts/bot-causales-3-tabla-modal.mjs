@@ -96,17 +96,20 @@ function validarEstructura(res, estado, etiqueta) {
   assert.equal(t.hierarchicalRows.reduce((s, h) => s + h.row[c.total], 0), res.total, 'Σ causales de la tabla == total');
   t.hierarchicalRows.forEach(h => {
     const serie = res.series.find(s => s.label === h.row[0]);
-    assert.equal(h.row[c.total], serie.data.reduce((a, b) => a + b, 0), `total de "${h.row[0]}"`);
-    res.labels.forEach((_, i) => assert.equal(h.row[c.primerPeriodo + i], serie.data[i], `"${h.row[0]}" periodo #${i}`));
-    if (c.fallidas !== null) assert.equal(h.row[c.fallidas], serie.fallidas.reduce((a, b) => a + b, 0), `fallidas de "${h.row[0]}"`);
-    if (c.perdidas !== null) assert.equal(h.row[c.perdidas], serie.perdidas.reduce((a, b) => a + b, 0), `pérdidas de "${h.row[0]}"`);
+    // la tabla va por periodo (sin acumular); el gráfico, si es acumulado, termina en el total
+    const fin = (arr) => (res.acumulado ? arr[arr.length - 1] : arr.reduce((a, b) => a + b, 0));
+    assert.equal(h.row[c.total], serie.periodo.reduce((a, b) => a + b, 0), `total de "${h.row[0]}"`);
+    assert.equal(h.row[c.total], fin(serie.data), `el último punto del gráfico de "${h.row[0]}" debe ser su total`);
+    res.labels.forEach((_, i) => assert.equal(h.row[c.primerPeriodo + i], serie.periodo[i], `"${h.row[0]}" periodo #${i}`));
+    if (c.fallidas !== null) assert.equal(h.row[c.fallidas], fin(serie.fallidas), `fallidas de "${h.row[0]}"`);
+    if (c.perdidas !== null) assert.equal(h.row[c.perdidas], fin(serie.perdidas), `pérdidas de "${h.row[0]}"`);
     assert.equal(h.children.reduce((s, ch) => s + ch.row[c.total], 0), h.row[c.total], `Σ brigadas == total de "${h.row[0]}"`);
   });
   // detalle de categoría ("Otras causales" -> una fila por cada causal que agrupa)
   Object.entries(t.categoryDetail).forEach(([cat, filas]) => {
     const serie = res.series.find(s => s.label === cat);
     assert.ok(serie, `categoryDetail["${cat}"] no corresponde a ninguna serie`);
-    assert.equal(filas.reduce((s, f) => s + f.row[c.total], 0), serie.data.reduce((a, b) => a + b, 0), `Σ detalle de "${cat}" == total de la serie`);
+    assert.equal(filas.reduce((s, f) => s + f.row[c.total], 0), serie.periodo.reduce((a, b) => a + b, 0), `Σ detalle de "${cat}" == total de la serie`);
     assert.equal(new Set(filas.map(f => f.row[0])).size, filas.length, `causales repetidas en el detalle de "${cat}"`);
     assert.ok(filas.every(f => f.row[0] !== cat), `el detalle de "${cat}" no debe contener la propia fila agrupada`);
     filas.forEach(f => {
@@ -152,6 +155,15 @@ await R.test('Estructura de la tabla (sintético): vistas mes/día/hora × estad
       assert.ok(res.series.some(s => s.label === OTRAS_CAUSALES), 'el dataset debe producir "Otras causales"');
       validarEstructura(res, estado, `${vista}/${estado}`);
     }
+});
+
+await R.test('Estructura de la tabla con el evolutivo HORARIO ACUMULADO (3 estados)', () => {
+  const horas = Array.from({ length: 17 }, (_, i) => String(7 + i).padStart(2, '0') + ':00');
+  for (const estado of ESTADOS) {
+    const res = buildCausales(sintetico, 'hora', horas, {}, estado, 6, true);
+    assert.equal(res.acumulado, true);
+    validarEstructura(res, estado, `hora acumulada/${estado}`);
+  }
 });
 
 await R.test('Estructura con filtros aplicados (proyecto/zona/proceso × estado) incl. resultado vacío', () => {

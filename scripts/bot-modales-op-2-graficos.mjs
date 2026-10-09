@@ -205,10 +205,15 @@ await conNavegador(async (cdp) => {
         const bandasTarjeta = !!(tarjeta && (tarjeta.config.plugins || []).some((p) => p.id === 'bandsPluginBands'));
         const titulo = mo.dialogo().getAttribute('aria-label');
         const card = document.querySelector('#card-op-causales .ch-title')?.innerText || '';
+        const seriesDe = (c) => (c ? c.data.datasets.map((d) => (d.data || []).map((v) => (v === null || v === undefined ? null : Number(v)))) : []);
+        const seriesModal = seriesDe(ch);
+        const seriesTarjeta = seriesDe(tarjeta);
+        const labelGrafico = mo.dialogo().querySelector('[data-chart-label]')?.textContent || '';
+        const subtituloCard = document.querySelector('#card-op-causales .ch-sub')?.textContent || '';
         await mo.asegurarCerrado();
         mo.botonPorTexto(/Por mes/)?.click();
         await mo.sleep(1500);
-        return { hay: true, abre: true, labels, bandas, labelsOrd, labelsTarjeta, bandasTarjeta, titulo, card };
+        return { hay: true, abre: true, labels, bandas, labelsOrd, labelsTarjeta, bandasTarjeta, titulo, card, seriesModal, seriesTarjeta, labelGrafico, subtituloCard };
       }`);
       if (!H.hay) fallas.push('no se encontró el selector "Por hora" de la página');
       else if (!H.abre) fallas.push(`al abrir el modal en vista horaria: ${H.motivo}`);
@@ -221,6 +226,13 @@ await conNavegador(async (cdp) => {
         if (JSON.stringify(H.labelsTarjeta) !== JSON.stringify(esperadas)) fallas.push(`el eje de la tarjeta debe ser 07:00 → 23:00 ("HH:00") y es [${H.labelsTarjeta.join(', ')}]`);
         if (!H.labelsOrd.length) fallas.push('no se pudo leer el eje del gráfico de órdenes (op-ord) para comparar');
         else if (JSON.stringify(H.labels) !== JSON.stringify(H.labelsOrd)) fallas.push(`el eje de causales no coincide con el de "Evolutivo Horario de Órdenes": [${H.labels.join(', ')}] vs [${H.labelsOrd.join(', ')}]`);
+        // evolutivo ACUMULADO: cada serie (tarjeta y modal) es no decreciente
+        const creciente = (series) => series.every((d) => d.every((v, i) => i === 0 || v === null || d[i - 1] === null || v >= d[i - 1]));
+        if (!H.seriesModal.length) fallas.push('el modal no trae series en vista horaria');
+        else if (!creciente(H.seriesModal)) fallas.push('el evolutivo horario del modal debe ser ACUMULADO (series no decrecientes) y alguna serie decrece');
+        if (H.seriesTarjeta.length && !creciente(H.seriesTarjeta)) fallas.push('el evolutivo horario de la tarjeta debe ser ACUMULADO (series no decrecientes) y alguna serie decrece');
+        if (!/acumulad/i.test(H.labelGrafico)) fallas.push(`la etiqueta del gráfico del modal debe indicar que es acumulado ("${H.labelGrafico}")`);
+        if (!/acumulado/i.test(H.subtituloCard)) fallas.push(`el subtítulo de la tarjeta debe indicar que es acumulado ("${H.subtituloCard.slice(0, 70)}")`);
         if (!H.bandas) fallas.push('el modal no trae las franjas de Almuerzo / Fuera de jornada (bandsPluginBands) como los demás gráficos horarios');
         if (!H.bandasTarjeta) fallas.push('la tarjeta no trae las franjas de Almuerzo / Fuera de jornada (bandsPluginBands)');
       }
