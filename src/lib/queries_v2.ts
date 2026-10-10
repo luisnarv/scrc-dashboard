@@ -125,10 +125,10 @@ const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.
 // mismo mes: sin deduplicar, el LEFT JOIN multiplicaría las órdenes de ese técnico. Gana la fila TECNICO,
 // luego la que trae RETIRO y por último la de fecha más reciente.
 const SQL_MAESTRO_MES = `(
-  SELECT DISTINCT ON (ced, mes) ced, mes, supervisor, observacion
+  SELECT DISTINCT ON (ced, mes) ced, mes, supervisor, observacion, tecnico
   FROM (
     SELECT REGEXP_REPLACE(REGEXP_REPLACE(TRIM(cedula), '\\.0+$', ''), '\\D', '', 'g') AS ced,
-           left(fecha, 7) AS mes, supervisor, observacion, rol, fecha
+           left(fecha, 7) AS mes, supervisor, observacion, rol, fecha, tecnico
     FROM dbanalitica.maestro_brigadas
     WHERE cedula IS NOT NULL
   ) m
@@ -178,7 +178,8 @@ export async function getDashboardDataV2(mes?: string) {
       SELECT 
         mo.fecha_cierre::text as "Fecha", 
         ${SQL_CLEAN_MO_ID} as cedula, 
-        MAX(mo.tecnico) as "Nombre", 
+        -- Nombre y tipo de brigada: manda el MAESTRO; el de historico_mo solo si el técnico no está en el maestro
+        COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Nombre", 
         MAX(mo.brigada_homologada) as "Tipo_Brigada_Operaciones",
         MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes",
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym",
@@ -376,7 +377,7 @@ export async function getDashboardDataV2(mes?: string) {
     }));
 
       const mesRes = await query(`
-        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", MAX(mo.tecnico) as "Tecnico", MAX(mb.supervisor) as "Supervisor",
+        SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Tecnico", MAX(mb.supervisor) as "Supervisor",
                MAX(mb.observacion) as "Observacion",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
                mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
@@ -461,7 +462,7 @@ export async function getDashboardDataV2(mes?: string) {
         SELECT mo.fecha_cierre::text as "Fecha",
                (LPAD(LEAST(22, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00') as "Hora",
                ${SQL_CLEAN_MO_ID} as "Cedula",
-               MAX(mo.tecnico) as "Tecnico",
+               COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Tecnico",
                mo.brigada_homologada as "Tipo_Brigada",
                mo.zona as "Zona",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
@@ -469,6 +470,7 @@ export async function getDashboardDataV2(mes?: string) {
                SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
                COUNT(*) as "Ordenes"
         FROM dbanalitica.historico_mo mo
+        LEFT JOIN ${SQL_MAESTRO_MES} mb ON ${SQL_CLEAN_MO_ID} = mb.ced AND to_char(mo.fecha_cierre, 'YYYY-MM') = mb.mes
         ${fechaCond}
           AND mo.hora_fin IS NOT NULL
         GROUP BY mo.fecha_cierre, "Hora", ${SQL_CLEAN_MO_ID}, mo.brigada_homologada, mo.zona
@@ -611,7 +613,7 @@ export async function getMonthsDataV2() {
     const monthsRes = await query(`
       SELECT to_char(fecha_cierre, 'YYYY-MM') as "mes",
              COUNT(*)::int as "count",
-             MAX(fecha_carga)::text || '-v3' as "version"
+             MAX(fecha_carga)::text || '-v4' as "version"
       FROM dbanalitica.historico_mo
       WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND tiene_vs
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
