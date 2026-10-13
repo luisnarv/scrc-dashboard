@@ -124,6 +124,9 @@ const SQL_CLEAN_MO_ID = "REGEXP_REPLACE(REGEXP_REPLACE(TRIM(mo.id_tecnico), '\\.
 // La tabla trae filas TECNICO y AUXILIAR, y puede haber eventos INGRESO/RETIRO sueltos (rol NULL) en el
 // mismo mes: sin deduplicar, el LEFT JOIN multiplicaría las órdenes de ese técnico. Gana la fila TECNICO,
 // luego la que trae RETIRO y por último la de fecha más reciente.
+// Franja horaria (HH:00) del cierre de la orden, recortada al rango 07:00-23:00 de las franjas del gráfico.
+const SQL_HORA_CIERRE = "(LPAD(LEAST(23, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00')";
+
 const SQL_MAESTRO_MES = `(
   SELECT DISTINCT ON (ced, mes) ced, mes, supervisor, observacion, tecnico
   FROM (
@@ -437,19 +440,24 @@ export async function getDashboardDataV2(mes?: string) {
                h.hora as "Hora",
                mo.brigada_homologada as "Tipo_Brigada",
                mo.zona as "Zona",
+               -- Brigadas activas: técnicos con alguna orden en curso durante la franja (solape inicio-fin).
                COUNT(DISTINCT ${SQL_CLEAN_MO_ID}) as "BrigadasActivas",
-               SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
-               SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
-               SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas",
-               COUNT(*) as "Ordenes"
+               -- Órdenes: cada orden cuenta UNA sola vez, en la franja de su hora_fin (momento de cierre/digitación), como
+               -- las cards y el resto de gráficos horarios. Antes se contaba en todas las franjas que tocaba (inflaba el total).
+               -- Mismas definiciones que las cards: Fallida = fallida con pago; Perdida = perdida + fallida sin pago.
+               SUM(CASE WHEN mo.estado_norm = 'Efectiva' AND ${SQL_HORA_CIERRE} = h.hora THEN 1 ELSE 0 END) as "Efectivas",
+               SUM(CASE WHEN mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) > 0 AND ${SQL_HORA_CIERRE} = h.hora THEN 1 ELSE 0 END) as "Fallidas",
+               SUM(CASE WHEN (mo.estado_norm = 'Perdida' OR (mo.estado_norm = 'Fallida' AND COALESCE(mo.valor_orden,0) = 0)) AND ${SQL_HORA_CIERRE} = h.hora THEN 1 ELSE 0 END) as "Perdidas",
+               SUM(CASE WHEN ${SQL_HORA_CIERRE} = h.hora THEN 1 ELSE 0 END) as "Ordenes"
         FROM dbanalitica.historico_mo mo
         CROSS JOIN (
           SELECT unnest(ARRAY['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00']) as hora
         ) h
         ${fechaCond}
           AND mo.hora_inicio IS NOT NULL AND mo.hora_fin IS NOT NULL
-          AND LEAST(mo.hora_inicio, mo.hora_fin) <= (left(h.hora, 2) || ':59:59')::time
-          AND GREATEST(mo.hora_inicio, mo.hora_fin) >= (h.hora || ':00')::time
+          AND ((LEAST(mo.hora_inicio, mo.hora_fin) <= (left(h.hora, 2) || ':59:59')::time
+                AND GREATEST(mo.hora_inicio, mo.hora_fin) >= (h.hora || ':00')::time)
+               OR ${SQL_HORA_CIERRE} = h.hora)
         GROUP BY mo.fecha_cierre, h.hora, mo.brigada_homologada, mo.zona
         ORDER BY mo.fecha_cierre, h.hora, mo.brigada_homologada
       `, params);
@@ -613,7 +621,7 @@ export async function getMonthsDataV2() {
     const monthsRes = await query(`
       SELECT to_char(fecha_cierre, 'YYYY-MM') as "mes",
              COUNT(*)::int as "count",
-             MAX(fecha_carga)::text || '-v4' as "version"
+             MAX(fecha_carga)::text || '-v5' as "version"
       FROM dbanalitica.historico_mo
       WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND tiene_vs
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
