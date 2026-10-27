@@ -624,7 +624,7 @@ export default function TecnicosPage() {
       const efec = n(r.Efectivas) + n(r.Fallida_Con_Pago);
       const ords = n(r.Asignacion) || n(r.Visitas) || (n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas)) || (efec > 0 ? 1 : 0);
       const obs = String(r.Observacion || (r as Record<string, unknown>).observacion || '').toUpperCase();
-      const esRetiro = obs.includes('RETIRO');
+      const esRetiro = obs.includes('RETIRO') && !obs.includes('INGRESO');
 
       if (tipo && tipo !== 'Sin Tipo') tiposSet.add(tipo);
 

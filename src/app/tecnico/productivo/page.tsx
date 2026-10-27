@@ -630,7 +630,7 @@ export default function TecnicoProductivoPage() {
       const ing = n(r.Ingresos);
       const ords = n(r.Asignacion) || n(r.Visitas) || (n(r.Efectivas) + n(r.Fallidas) + n(r.Perdidas)) || (ing > 0 ? 1 : 0);
       const obs = String(r.Observacion || (r as Record<string, unknown>).observacion || '').toUpperCase();
-      const esRetiro = obs.includes('RETIRO');
+      const esRetiro = obs.includes('RETIRO') && !obs.includes('INGRESO');
 
       if (tipo && tipo !== 'Sin Tipo') tiposSet.add(tipo);
 

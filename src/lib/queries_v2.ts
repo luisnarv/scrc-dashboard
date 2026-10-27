@@ -135,7 +135,7 @@ const SQL_MAESTRO_MES = `(
     FROM dbanalitica.maestro_brigadas
     WHERE cedula IS NOT NULL
   ) m
-  ORDER BY ced, mes, (rol = 'TECNICO') DESC NULLS LAST, (observacion ILIKE '%RETIRO%') DESC NULLS LAST, fecha DESC
+  ORDER BY ced, mes, (rol = 'TECNICO') DESC NULLS LAST, fecha DESC, (observacion ILIKE '%INGRESO%') DESC NULLS LAST, (observacion ILIKE '%RETIRO%') ASC
 )`;
 
 export async function getDashboardDataV2(mes?: string) {
