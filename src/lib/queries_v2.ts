@@ -169,12 +169,13 @@ export async function getDashboardDataV2(mes?: string) {
     ? `WHERE mo.fecha_cierre >= ($1 || '-01')::date AND mo.fecha_cierre < ($1 || '-01')::date + interval '1 month' AND ${baseMoCond}`
     : `WHERE ${baseMoCond}`;
   const mesymCond = activo ? 'WHERE mes_ym = $1' : '';
-  // OTC del dashboard = SOLO proyectos SCR ('SCR Sur' / 'SCR Norte - Centro'), que son
-  // exactamente las filas con zona derivada (zona IS NOT NULL). Los demás proyectos del
+  // OTC del dashboard = SOLO la columna `proyecto` con 'SCR Sur' o 'SCR Norte - Centro'. Los demás proyectos del
   // OTC (ELECTROHUILA, AIRE, AFINIA, AGUA…) NO pertenecen a este dashboard y se excluyen.
+  // (La columna `zona` se sigue entregando, pero ya no es el criterio de filtro.)
+  const otcProyectos = "proyecto IN ('SCR Norte - Centro', 'SCR Sur')";
   const otcWhere = activo
-    ? "WHERE mes_ym = $1 AND zona IS NOT NULL"
-    : "WHERE zona IS NOT NULL";
+    ? `WHERE mes_ym = $1 AND ${otcProyectos}`
+    : `WHERE ${otcProyectos}`;
 
   try {
     const rawRes = await query(`

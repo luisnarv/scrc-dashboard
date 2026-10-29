@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import { useDashboard } from '../components/DashboardProvider';
-import { filtRaw, filtCos, ventanaPrevia, matchProyZona } from '../components/utils/filters';
+import { filtRaw, filtCos, ventanaPrevia, matchProyZona, finanzaPorZonaDisponible, ultimoMesContable } from '../components/utils/filters';
 import { otcAgg, otcAggMes, mesAnterior, ingresoElectrica, aggVentana } from '../components/utils/aggregators';
 import { fmtCOP, fmtPct, fmtN, deltaPct, num, fmtRangoMeses } from '../components/utils/formatters';
 import { calcHealth } from '../components/utils/health';
@@ -17,7 +17,7 @@ const baseOpt = {
 };
 
 export default function ResumenPage() {
-  const { raw, filters, setFilters, mesList, loading, error } = useDashboard();
+  const { raw, filters, setFilters, mesList, loading, syncing, error } = useDashboard();
   const { colors } = useTheme();
 
   // Vista estratégica = lectura ACUMULADA: al entrar, fija el filtro de meses en
@@ -36,7 +36,9 @@ export default function ResumenPage() {
   const data = useMemo<any>(() => {
     if (!raw) return null;
     const F = filters;    const rawF = filtRaw(raw.raw, F);
-    const cosF = filtCos(raw.costos, F);
+    // La contabilidad solo distingue Sur y Norte-Centro: con zona Norte o Centro no hay financiero que mostrar.
+    const zonaFinOK = finanzaPorZonaDisponible(F);
+    const cosF = zonaFinOK ? filtCos(raw.costos, F) : [];
     const mActual = F.mes.length ? [...F.mes].sort().at(-1)! : mesList[mesList.length - 1];
     const mAnt = mesAnterior(mActual, mesList);
 
@@ -109,7 +111,7 @@ export default function ResumenPage() {
     const ingElec = ingresoElectrica(cosF);
 
     const rawBase = raw.raw.filter(filtBase);
-    const cosBase = raw.costos.filter(filtBase);
+    const cosBase = zonaFinOK ? raw.costos.filter(filtBase) : [];
 
     // Evolutivos 12m
     const efMes = meses12.map(m => {
@@ -258,11 +260,30 @@ export default function ResumenPage() {
       };
     });
 
+    // Estado real de la contabilidad por mes (para el subtítulo y el aviso): nada queda escrito a mano.
+    const mesesFact = evolutivoOTC.filter(x => x.ing > 0 && !x.isProvisional).map(x => x.mes);
+    const mesesProv = evolutivoOTC.filter(x => x.ing > 0 && x.isProvisional).map(x => x.mes);
+    const mesesSinConta = evolutivoOTC.filter(x => !(x.ing > 0 || x.cost > 0)).map(x => x.mes);
+    const partesSub = [
+      mesesFact.length ? `${fmtRangoMeses(mesesFact)} (Facturación)` : '',
+      mesesProv.length ? `${fmtRangoMeses(mesesProv)} (Facturación provisional)` : '',
+    ].filter(Boolean);
+    const subIngreso = `Facturación contable consolidada${partesSub.length ? ': ' + partesSub.join(' · ') : ''}`;
+    // Mientras se descargan los meses en segundo plano, un mes aún no cargado se vería "sin contabilidad": no se avisa.
+    const avisoFinanzas = !zonaFinOK
+      ? 'La contabilidad solo distingue Sur y Norte-Centro: con la zona Norte o Centro elegida no se muestra el financiero.'
+      : syncing
+        ? null
+        : mesesSinConta.length
+        ? `Sin información contable en: ${mesesSinConta.join(', ')}${ultimoMesContable(raw.costos) ? ` (último mes con contabilidad cargada: ${ultimoMesContable(raw.costos)})` : ''}.`
+        : null;
+
     return {
       meses12, efMes, efMesPorTipo, evolutivoOTC, evolutivoCombustible,
+      subIngreso, avisoFinanzas,
       winA, winB, winIncompleto, selLbl: fmtRangoMeses(selWin), prevLbl: fmtRangoMeses(prevWin)
     };
-  }, [raw, filters, mesList]);
+  }, [raw, filters, mesList, syncing]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /><span>Cargando datos…</span></div>;
   if (error) return <div className="status err">{error}</div>;
@@ -270,6 +291,7 @@ export default function ResumenPage() {
 
   const {
     meses12, efMes, efMesPorTipo, evolutivoOTC, evolutivoCombustible,
+    subIngreso, avisoFinanzas,
     winA, winB, winIncompleto, selLbl, prevLbl
   } = data;
 
@@ -808,12 +830,10 @@ export default function ResumenPage() {
   const eficModalCfg = buildModalConfig('efic', 'pct');
   const cumpProdModalCfg = buildModalConfig('cumpProd', 'pct');
   const ingBrigModalCfg = buildModalConfig('ingXbrig', 'cop');
-  const costBrigModalCfg = buildModalConfig('costXbrig', 'cop');
 
   const eficTable = buildTableData('efic', 'pct');
   const cumpProdTable = buildTableData('cumpProd', 'pct');
   const ingBrigTable = buildTableData('ingXbrig', 'cop');
-  const costBrigTable = buildTableData('costXbrig', 'cop');
 
   const cmp: { lbl: string; a: number; b: number; fmt: (v: number) => string }[] = [
     { lbl: 'Producción Valorizada', a: winA.ing, b: winB.ing, fmt: fmtCOP },
@@ -849,8 +869,9 @@ export default function ResumenPage() {
           <div className="section" style={{ borderTop: `4px solid ${CFG.otc}`, padding: '20px 24px', background: 'var(--card)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <h2 style={{ color: CFG.otc, marginBottom: 16 }}>💰 FINANCIERO</h2>
             <div className="sec-sub" style={{ marginBottom: 16 }}>Datos reales consolidados de contabilidad</div>
+            {avisoFinanzas && <div className="status err" style={{ marginBottom: 12 }}>⚠️ {avisoFinanzas}</div>}
             <div style={{ display: 'grid', gap: 16 }}>
-              <ChartCard id="r-otc-ing" title="Ingreso Real" subtitle="Facturación contable consolidada: Ene-May (Facturación) · Jun-Jul (Facturación provisional)" config={otcIngCfg as never} height="short" />
+              <ChartCard id="r-otc-ing" title="Ingreso Real" subtitle={subIngreso} config={otcIngCfg as never} height="short" />
               <ChartCard id="r-otc-cost" title="Costo Real (%)" subtitle="Ratio de costo sobre ingresos: Costos / Ingresos" config={otcCostCfg as never} height="short" />
               <ChartCard id="r-otc-mar" title="Margen Real (%)" subtitle="Rentabilidad financiera neta: (Ingresos - Costos) / Ingresos" config={otcMargenCfg as never} height="short" />
               <ChartCard

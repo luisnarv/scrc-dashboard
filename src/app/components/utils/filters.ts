@@ -74,6 +74,23 @@ export function filtDisp<T extends { Tipo_Brigada?: string }>(rows: T[], F: Filt
   return rows.filter(r => procesoOK(r.Tipo_Brigada, F));
 }
 
+/**
+ * La contabilidad (historico_otc) solo distingue 'Sur' y 'Norte-Centro': no existe Norte ni Centro por separado.
+ * Con zona Norte o Centro elegida, el financiero no se puede calcular y las vistas deben avisarlo en vez de
+ * mostrar el total de Norte-Centro como si fuera de esa zona.
+ */
+export const finanzaPorZonaDisponible = (F: Filters): boolean => F.zona !== 'Norte' && F.zona !== 'Centro';
+
+/** Último mes (YYYY-MM) que tiene contabilidad con valores entre los costos cargados; null si ninguno. */
+export function ultimoMesContable(rows: CostoRecord[]): string | null {
+  let ult: string | null = null;
+  for (const r of rows) {
+    const m = String(r.Mes || '');
+    if (m && Number(r.Valor) && (ult === null || m > ult)) ult = m;
+  }
+  return ult;
+}
+
 export function filtCos(rows: CostoRecord[], F: Filters): CostoRecord[] {
   return rows.filter(r => {
     if (F.proy !== 'ALL' && r._Proyecto !== F.proy) return false;
