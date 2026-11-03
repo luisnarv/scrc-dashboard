@@ -59,7 +59,7 @@ interface EmpRowV2 {
 //       Pesada  : Lun-Vie $650.000 · Sábado $425.000
 //       Liviana : Lun-Vie $380.000 · Sábado $310.000   (domingo = valor Lun-Vie)
 //   • NORTE/CENTRO:
-//       - Costos mensuales actualizados a partir de Junio 2026 (Liviana $6.683.910, Pesada $16.267.057, etc.)
+//       - Costos mensuales actualizados a partir de Junio 2026 (Liviana $6.183.910,20, Pesada $18.720.000,00, etc.)
 //       - Antes de Septiembre 2026: jornada 46h (8h L-V, 6h Sáb, divisor 184h)
 //       - Desde Septiembre 2026: jornada 44h (8h L-J, 7h Vie, 5h Sáb, divisor 176h)
 //   • Disponibles (MT-AT/Minicanasta/Canasta/Gestor/Pesada Disponible) → Costo/24
@@ -77,8 +77,10 @@ const COSTO_MENSUAL_SQL = `(CASE
       WHEN 'Brigada Liviana'         THEN 6183910.20
       WHEN 'Gestor Integral Multi'   THEN 8576399.37
       WHEN 'Brigada Minicanasta'     THEN 56697622.89
-      WHEN 'Brigada Pesada'          THEN 15267057.00
-      WHEN '(D) Brigada Pesada'      THEN 15267057.00
+      WHEN 'Brigada Pesada'          THEN 18720000.00
+      WHEN 'Brigada Tipo Pesada'     THEN 18720000.00
+      WHEN '(D) Brigada Pesada'      THEN 18720000.00
+      WHEN '(D) Brigada Tipo Pesada' THEN 18720000.00
       WHEN 'Brigada Pesada MT-AT'    THEN 24673468.63
       WHEN 'Pesada Disponible'       THEN 24673468.63
       WHEN 'Scr Pesada Disponibi'    THEN 24673468.63
@@ -104,8 +106,22 @@ const META_DIARIA_SQL = `MAX(CASE
                 (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 175679.27
                       WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 245950.97
                       ELSE 281086.83 END)
-              WHEN 'Brigada Pesada' THEN 780000.00
-              WHEN '(D) Brigada Pesada' THEN 780000.00
+              WHEN 'Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 531818.18
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 744545.45
+                      ELSE 850909.09 END)
+              WHEN 'Brigada Tipo Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 531818.18
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 744545.45
+                      ELSE 850909.09 END)
+              WHEN '(D) Brigada Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 531818.18
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 744545.45
+                      ELSE 850909.09 END)
+              WHEN '(D) Brigada Tipo Pesada' THEN
+                (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 531818.18
+                      WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 744545.45
+                      ELSE 850909.09 END)
               WHEN 'Gestor Integral Multi' THEN 357349.97
               WHEN 'Brigada Minicanasta' THEN 2362400.95
               WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
@@ -116,9 +132,11 @@ const META_DIARIA_SQL = `MAX(CASE
             END
 
           -- ZONA NORTE Y CENTRO: ANTES DE SEPTIEMBRE 2026
-          WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Pesada', '(D) Brigada Pesada') THEN 780000.00
-            WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Liviana')
+          WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Liviana', 'Brigada Tipo Liviana', 'Brigada Pesada', 'Brigada Tipo Pesada', '(D) Brigada Pesada', '(D) Brigada Tipo Pesada')
             THEN (${COSTO_MENSUAL_SQL} / 184.0) * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
+
+
+
           ELSE ${COSTO_MENSUAL_SQL} / 24.0
         END)`;
 
