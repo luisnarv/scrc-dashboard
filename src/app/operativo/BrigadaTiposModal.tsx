@@ -85,7 +85,7 @@ const SHORT_BRIG: Record<string, string> = {
   'BRIGADA MINICANASTA': 'Minicanasta', 'SCR MINI CANASTA': 'Minicanasta', 'BRIGADA TIPO MINICANASTA': 'Minicanasta',
   'BRIGADA PESADA MT-AT': 'Medida esp.', 'SCR MEDIDA ESPECIAL': 'Medida esp.', 'BRIGADA PESADA/ MT AT': 'Medida esp.',
   'BRIGADA CANASTA': 'Canasta', 'CANASTA': 'Canasta', 'BRIGADA TIPO CANASTA': 'Canasta',
-  '(D) BRIGADA PESADA': 'Pesada Disp.', 'PESADA DISPONIBLE': 'Pesada Disp.', '(D) BRIGADA TIPO PESADA': 'Pesada Disp.',
+  '(D) BRIGADA PESADA': 'Pesada Disp.', 'PESADA DISPONIBLE': 'Pesada Disp.', '(D) BRIGADA TIPO PESADA': 'Pesada Disp.', 'SCR PESADA DISPONIBI': 'Pesada Disp.',
 };
 const shortBrig = (t: string) => SHORT_BRIG[String(t).trim().toUpperCase()] || t;
 

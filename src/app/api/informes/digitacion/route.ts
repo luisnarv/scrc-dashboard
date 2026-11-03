@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 //   - Hora: una orden entra si su franja [hora_inicio, hora_fin] se cruza con el rango.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DISP_REGEX = 'canasta|mt-at|mt at|gestor|disponible|multi';
+const DISP_REGEX = 'canasta|mt-at|mt at|gestor|disponib|multi';
 
 const CAT_SQL = `
   CASE

@@ -68,9 +68,16 @@ const META_SUR = {
   liviana: { semana: 380_000, sabado: 310_000 },
 } as const;
 
+// Homologación de brigadas de contingencia o truncadas en la ingesta:
+// 'Scr Pesada Disponibi' (corte a 20 caracteres del texto original) -> 'Pesada Disponible'
+const SQL_BRIGADA_HOMOLOGADA = `(CASE 
+  WHEN UPPER(TRIM(mo.brigada_homologada)) = 'SCR PESADA DISPONIBI' THEN 'Pesada Disponible'
+  ELSE mo.brigada_homologada
+END)`;
+
 const COSTO_MENSUAL_SQL = `(CASE 
   WHEN mo.fecha_cierre >= '2026-06-01' THEN
-    CASE mo.brigada_homologada
+    CASE ${SQL_BRIGADA_HOMOLOGADA}
       WHEN 'Brigada Liviana'         THEN 6183910.20
       WHEN 'Gestor Integral Multi'   THEN 8576399.37
       WHEN 'Brigada Minicanasta'     THEN 56697622.89
@@ -78,6 +85,7 @@ const COSTO_MENSUAL_SQL = `(CASE
       WHEN '(D) Brigada Pesada'      THEN 15267057.00
       WHEN 'Brigada Pesada MT-AT'    THEN 24673468.63
       WHEN 'Pesada Disponible'       THEN 24673468.63
+      WHEN 'Scr Pesada Disponibi'    THEN 24673468.63
       WHEN 'Brigada Canasta'         THEN 72631786.33
       ELSE COALESCE(mm.costo, 0)
     END
@@ -86,16 +94,16 @@ END)`;
 
 const META_DIARIA_SQL = `MAX(CASE
           -- ZONA SUR (Valores fijos Pesada y Liviana; Costo/24 para Disponibles)
-          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Pesada'
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND ${SQL_BRIGADA_HOMOLOGADA} = 'Brigada Pesada'
             THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.pesada.sabado} ELSE ${META_SUR.pesada.semana} END)
-          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND mo.brigada_homologada = 'Brigada Liviana'
+          WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' AND ${SQL_BRIGADA_HOMOLOGADA} = 'Brigada Liviana'
             THEN (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN ${META_SUR.liviana.sabado} ELSE ${META_SUR.liviana.semana} END)
           WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%'
             THEN ${COSTO_MENSUAL_SQL} / 24.0
 
           -- ZONA NORTE Y CENTRO: DESDE SEPTIEMBRE 2026 (Valores exactos con nueva jornada 44h)
           WHEN mo.fecha_cierre >= '2026-09-01' AND UPPER(COALESCE(mo.zona,'')) NOT LIKE '%SUR%' THEN
-            CASE mo.brigada_homologada
+            CASE ${SQL_BRIGADA_HOMOLOGADA}
               WHEN 'Brigada Liviana' THEN
                 (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 175679.27
                       WHEN EXTRACT(DOW FROM mo.fecha_cierre)=5 THEN 245950.97
@@ -106,13 +114,14 @@ const META_DIARIA_SQL = `MAX(CASE
               WHEN 'Brigada Minicanasta' THEN 2362400.95
               WHEN 'Brigada Pesada MT-AT' THEN 1028061.19
               WHEN 'Pesada Disponible' THEN 1028061.19
+              WHEN 'Scr Pesada Disponibi' THEN 1028061.19
               WHEN 'Brigada Canasta' THEN 3026324.43
               ELSE ${COSTO_MENSUAL_SQL} / 24.0
             END
 
           -- ZONA NORTE Y CENTRO: ANTES DE SEPTIEMBRE 2026
-          WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') THEN 780000.00
-            WHEN mo.brigada_homologada IN ('Brigada Liviana')
+          WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Pesada', '(D) Brigada Pesada') THEN 780000.00
+            WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Liviana')
             THEN (${COSTO_MENSUAL_SQL} / 184.0) * (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 6 ELSE 8 END)
           ELSE ${COSTO_MENSUAL_SQL} / 24.0
         END)`;
@@ -184,8 +193,8 @@ export async function getDashboardDataV2(mes?: string) {
         ${SQL_CLEAN_MO_ID} as cedula, 
         -- Nombre y tipo de brigada: manda el MAESTRO; el de historico_mo solo si el técnico no está en el maestro
         COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Nombre", 
-        MAX(mo.brigada_homologada) as "Tipo_Brigada_Operaciones",
-        MAX(mo.brigada_homologada) as "Tipo_Brigada_Mes",
+        MAX(${SQL_BRIGADA_HOMOLOGADA}) as "Tipo_Brigada_Operaciones",
+        MAX(${SQL_BRIGADA_HOMOLOGADA}) as "Tipo_Brigada_Mes",
         MAX(to_char(mo.fecha_cierre, 'YYYY-MM')) as "mes_ym",
         MAX(mo.zona) as "zona",
         MAX(mb.supervisor) as "supervisor",
@@ -204,15 +213,15 @@ export async function getDashboardDataV2(mes?: string) {
         --  · MT-AT / Minicanasta / Canasta -> meta x min(1, Total_Visita / Meta_Visitas_Dia)
         --  · Gestor -> meta x min(1, (Efectivas + Fallida_con_pago) / (18 día | 13 sábado))
         (CASE
-          WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) IN ('Pesada Disponible', 'Scr Pesada Disponibi')
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0)
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Pesada MT-AT'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Pesada MT-AT'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 11.0 ELSE 15.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Minicanasta'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Minicanasta'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 11.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Canasta'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Canasta'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 8.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Gestor Integral Multi'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, (
               SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
               + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
@@ -220,7 +229,7 @@ export async function getDashboardDataV2(mes?: string) {
           ELSE SUM(
             CASE 
               -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
-              WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
+              WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
                 UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%CANASTA%' 
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
@@ -240,15 +249,15 @@ export async function getDashboardDataV2(mes?: string) {
         -- Igual a "Ingresos" pero SIN el ajuste de incremento (×1.1300192) en
         -- Pesada/Liviana/(D)Pesada. Las disponibles (meta×prorrateo) no llevan incremento.
         (CASE
-          WHEN MAX(mo.brigada_homologada) = 'Pesada Disponible'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) IN ('Pesada Disponible', 'Scr Pesada Disponibi')
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0)
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Pesada MT-AT'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Pesada MT-AT'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / (CASE WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 11.0 ELSE 15.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Minicanasta'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Minicanasta'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 11.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Brigada Canasta'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Brigada Canasta'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, SUM(CASE WHEN COALESCE(mo.accion,'') <> 'SIN GESTION' THEN 1 ELSE 0 END)::numeric / MAX(CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 8.0 WHEN EXTRACT(DOW FROM mo.fecha_cierre)=6 THEN 8.0 ELSE 11.0 END))
-          WHEN MAX(mo.brigada_homologada) = 'Gestor Integral Multi'
+          WHEN MAX(${SQL_BRIGADA_HOMOLOGADA}) = 'Gestor Integral Multi'
             THEN MAX(${COSTO_MENSUAL_SQL} / 24.0) * LEAST(1.0, (
               SUM(CASE WHEN mo.estado_norm='Efectiva' THEN 1 ELSE 0 END) 
               + SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%CLIENTE HA CANCELADO%' THEN 1 ELSE 0 END)
@@ -256,7 +265,7 @@ export async function getDashboardDataV2(mes?: string) {
           ELSE SUM(
             CASE 
               -- Penalización por mano de obra errada (subacciones no permitidas en Pesadas - Matriz UTIL / Descuento NC):
-              WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
+              WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
                 UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%CANASTA%' 
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
                 OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
@@ -294,17 +303,18 @@ export async function getDashboardDataV2(mes?: string) {
                   WHEN 'Brigada Pesada/ MT AT'    THEN 'Brigada Pesada MT-AT'
                   WHEN 'Brigada Tipo Minicanasta' THEN 'Brigada Minicanasta'
                   WHEN 'Brigada Tipo Canasta'     THEN 'Brigada Canasta'
+                  WHEN 'Scr Pesada Disponibi'     THEN 'Pesada Disponible'
                   ELSE "Tipo_Brigada" END) AS brig,
                MAX("Costo"::numeric) AS costo
         FROM dbanalitica.maestro_metas
         GROUP BY 1
-      ) mm ON mm.brig = mo.brigada_homologada
+      ) mm ON mm.brig = ${SQL_BRIGADA_HOMOLOGADA}
       ${fechaCond}
       -- Se agrupa TAMBIÉN por brigada_homologada: si un técnico tuvo órdenes de
       -- brigadas distintas el mismo día, cada brigada queda con SUS órdenes (el
       -- conteo "por día y tipo de brigada" cuadra). Los totales y el conteo de
       -- técnicos distintos (Set de Cédula en el front) no cambian.
-      GROUP BY mo.fecha_cierre, ${SQL_CLEAN_MO_ID}, mo.brigada_homologada
+      GROUP BY mo.fecha_cierre, ${SQL_CLEAN_MO_ID}, ${SQL_BRIGADA_HOMOLOGADA}
     `, params);
 
     const cosRes = await query(`
@@ -384,14 +394,14 @@ export async function getDashboardDataV2(mes?: string) {
         SELECT to_char(mo.fecha_cierre, 'YYYY-MM') as "Mes_YM", ${SQL_CLEAN_MO_ID} as "Cedula", COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Tecnico", MAX(mb.supervisor) as "Supervisor",
                MAX(mb.observacion) as "Observacion",
                MAX(mo.contrata) as "Contratista", MAX(mo.vehiculo) as "Vehiculo",
-               mo.brigada_homologada as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
+               ${SQL_BRIGADA_HOMOLOGADA} as "Tipo_Brigada_Mes", COUNT(*) as "Ordenes",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas", 
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas", 
                SUM(CASE WHEN mo.estado_norm = 'Perdida' THEN 1 ELSE 0 END) as "Perdidas", 
                COUNT(*) as "Visitas",
                SUM(
                  CASE 
-                   WHEN mo.brigada_homologada IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
+                   WHEN ${SQL_BRIGADA_HOMOLOGADA} IN ('Brigada Pesada', '(D) Brigada Pesada') AND (
                      UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%CANASTA%' 
                      OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%OTRAS TECNOLOG%'
                      OR UPPER(COALESCE(mo.subaccion_subanomalia,'')) LIKE '%MEDIA TENSI%'
@@ -421,25 +431,25 @@ export async function getDashboardDataV2(mes?: string) {
           ${fechaCond}
         -- Agrupa TAMBIÉN por brigada_homologada: un técnico con 2 brigadas en el mes
         -- aparece en cada una con SUS órdenes (antes MAX escondía la brigada real).
-        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${SQL_CLEAN_MO_ID}, mo.brigada_homologada
+        GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${SQL_CLEAN_MO_ID}, ${SQL_BRIGADA_HOMOLOGADA}
       `, params);
 
     const dispRes = await query(`
         SELECT mo.fecha_cierre::text as "Fecha",
-               mo.brigada_homologada as "Tipo_Brigada",
+               ${SQL_BRIGADA_HOMOLOGADA} as "Tipo_Brigada",
                mo.zona as "Zona",
                COUNT(DISTINCT ${SQL_CLEAN_MO_ID}) as "BrigadasActivas"
         FROM dbanalitica.historico_mo mo
         ${fechaCond}
-        GROUP BY mo.fecha_cierre, mo.brigada_homologada, mo.zona
-        ORDER BY mo.fecha_cierre, mo.brigada_homologada
+        GROUP BY mo.fecha_cierre, ${SQL_BRIGADA_HOMOLOGADA}, mo.zona
+        ORDER BY mo.fecha_cierre, ${SQL_BRIGADA_HOMOLOGADA}
       `, params);
 
     // Evolutivo horario de digitación: cuenta cantidad de brigadas distintas que ejecutaron órdenes en cada hora
     const horarioRes = await query(`
         SELECT mo.fecha_cierre::text as "Fecha",
                h.hora as "Hora",
-               mo.brigada_homologada as "Tipo_Brigada",
+               ${SQL_BRIGADA_HOMOLOGADA} as "Tipo_Brigada",
                mo.zona as "Zona",
                -- Brigadas activas: técnicos con alguna orden en curso durante la franja (solape inicio-fin).
                COUNT(DISTINCT ${SQL_CLEAN_MO_ID}) as "BrigadasActivas",
@@ -459,8 +469,8 @@ export async function getDashboardDataV2(mes?: string) {
           AND ((LEAST(mo.hora_inicio, mo.hora_fin) <= (left(h.hora, 2) || ':59:59')::time
                 AND GREATEST(mo.hora_inicio, mo.hora_fin) >= (h.hora || ':00')::time)
                OR ${SQL_HORA_CIERRE} = h.hora)
-        GROUP BY mo.fecha_cierre, h.hora, mo.brigada_homologada, mo.zona
-        ORDER BY mo.fecha_cierre, h.hora, mo.brigada_homologada
+        GROUP BY mo.fecha_cierre, h.hora, ${SQL_BRIGADA_HOMOLOGADA}, mo.zona
+        ORDER BY mo.fecha_cierre, h.hora, ${SQL_BRIGADA_HOMOLOGADA}
       `, params);
 
     // Digitación horaria POR TÉCNICO (para el ranking "Cuadrilla Top" -- BRIGADA LÍDER /
@@ -472,7 +482,7 @@ export async function getDashboardDataV2(mes?: string) {
                (LPAD(LEAST(22, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00') as "Hora",
                ${SQL_CLEAN_MO_ID} as "Cedula",
                COALESCE(NULLIF(MAX(mb.tecnico), ''), MAX(mo.tecnico)) as "Tecnico",
-               mo.brigada_homologada as "Tipo_Brigada",
+               ${SQL_BRIGADA_HOMOLOGADA} as "Tipo_Brigada",
                mo.zona as "Zona",
                SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Efectivas",
                SUM(CASE WHEN mo.estado_norm = 'Fallida' THEN 1 ELSE 0 END) as "Fallidas",
@@ -482,7 +492,7 @@ export async function getDashboardDataV2(mes?: string) {
         LEFT JOIN ${SQL_MAESTRO_MES} mb ON ${SQL_CLEAN_MO_ID} = mb.ced AND to_char(mo.fecha_cierre, 'YYYY-MM') = mb.mes
         ${fechaCond}
           AND mo.hora_fin IS NOT NULL
-        GROUP BY mo.fecha_cierre, "Hora", ${SQL_CLEAN_MO_ID}, mo.brigada_homologada, mo.zona
+        GROUP BY mo.fecha_cierre, "Hora", ${SQL_CLEAN_MO_ID}, ${SQL_BRIGADA_HOMOLOGADA}, mo.zona
         ORDER BY mo.fecha_cierre, "Hora"
       `, params);
 
@@ -496,7 +506,7 @@ export async function getDashboardDataV2(mes?: string) {
         (LPAD(LEAST(22, GREATEST(7, EXTRACT(HOUR FROM mo.hora_fin::time)::int))::text, 2, '0') || ':00') as "Hora",
         mo.zona as "Zona",
         CASE WHEN UPPER(COALESCE(mo.zona,'')) LIKE '%SUR%' THEN 'Sur' ELSE 'Norte-Centro' END as "Proyecto",
-        mo.brigada_homologada as "Brigada",
+        ${SQL_BRIGADA_HOMOLOGADA} as "Brigada",
         mo.accion as "Accion",
         mo.subaccion_homologada as "Subaccion",
         mo.estado_norm as "Estado",
@@ -632,7 +642,7 @@ export async function getMonthsDataV2() {
     const evolutivoRes = await query(`
       SELECT 
         to_char(fecha_cierre, 'YYYY-MM') as "Mes",
-        mo.brigada_homologada as "TipoBrigada",
+        ${SQL_BRIGADA_HOMOLOGADA} as "TipoBrigada",
         COUNT(DISTINCT nic) as "Cantidad_NIC",
         COUNT(*) as "Total_Ordenes", 
         SUM(CASE WHEN UPPER(mo.subaccion_homologada) LIKE '%SUSPENSI%' AND mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END) as "Total_Suspension",
@@ -645,7 +655,7 @@ export async function getMonthsDataV2() {
         (SUM(CASE WHEN mo.estado_norm = 'Efectiva' THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)) * 100 as "Eficacia"
       FROM dbanalitica.historico_mo mo
       WHERE mo.id_tecnico IS NOT NULL AND mo.tiene_vs AND UPPER(COALESCE(mo.tecnico,'')) NOT LIKE '%PRUEBA%'
-      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), mo.brigada_homologada
+      GROUP BY to_char(mo.fecha_cierre, 'YYYY-MM'), ${SQL_BRIGADA_HOMOLOGADA}
     `);
 
     return {

@@ -82,6 +82,8 @@ export const METAS_NORTE_CENTRO: Record<string, MetaBrigadaConfig> = {
     aliases: [
       'SCR PESADA DISPONIBILIDAD',
       'PESADA DISPONIBLE',
+      'SCR PESADA DISPONIBI',
+      'SCR PESADA DISPONIBLE',
       'SCR DISPONIBLE',
       '(D) BRIGADA PESADA',
       '(D) BRIGADA TIPO PESADA',
@@ -128,6 +130,8 @@ export const METAS_SUR: Record<string, MetaBrigadaConfig> = {
     aliases: [
       'SCR PESADA DISPONIBILIDAD',
       'PESADA DISPONIBLE',
+      'SCR PESADA DISPONIBI',
+      'SCR PESADA DISPONIBLE',
       'SCR DISPONIBLE',
       'DISPONIBILIDAD',
       '(D) BRIGADA PESADA',

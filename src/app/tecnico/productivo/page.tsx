@@ -53,6 +53,7 @@ const isDisponibleType = (tLabel: string) => {
     s.includes('mt at') ||
     s.includes('gestor') ||
     s.includes('disponible') ||
+    s.includes('disponibi') ||
     s.includes('disponibilidad') ||
     s.includes('multi')
   );
