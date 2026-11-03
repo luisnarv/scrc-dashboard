@@ -66,6 +66,8 @@ const COLOR_BRIGADA: Record<string, string> = {
   'BRIGADA PESADA MT-AT': '#8F5A24',  // cafe
   'PESADA DISPONIBLE': '#3E9E56',     // verde
   'SCR PESADA DISPONIBI': '#3E9E56', // verde
+  'Pesada Disponible': '#3E9E56',     // verde
+  'Scr Pesada Disponibi': '#3E9E56', // verde
 };
 
 /* Barra de progreso simple con semáforo */
@@ -244,8 +246,8 @@ export default function OperativoPage() {
       'SCR CANASTA': 'CANASTA',
       '(D) BRIGADA PESADA': 'SCR PESADA DISPONIBILIDAD',
       '(D) BRIGADA TIPO PESADA': 'SCR PESADA DISPONIBILIDAD',
-      'PESADA DISPONIBLE': 'SCR PESADA DISPONIBILIDAD',
-      'SCR PESADA DISPONIBI': 'SCR PESADA DISPONIBILIDAD',
+      'PESADA DISPONIBLE': 'Pesada Disponible',
+      'SCR PESADA DISPONIBI': 'Scr Pesada Disponibi',
     };
 
     const getBrigadaTipo = (r: any): string => {

@@ -43,6 +43,8 @@ const COLOR_BRIGADA: Record<string, string> = {
   'BRIGADA PESADA MT-AT': '#8F5A24',
   'PESADA DISPONIBLE': '#3E9E56',
   'SCR PESADA DISPONIBI': '#3E9E56',
+  'Pesada Disponible': '#3E9E56',
+  'Scr Pesada Disponibi': '#3E9E56',
 };
 
 const HOMOLOGACION_BRIGADA: Record<string, string> = {
@@ -67,8 +69,8 @@ const HOMOLOGACION_BRIGADA: Record<string, string> = {
   'SCR CANASTA': 'CANASTA',
   '(D) BRIGADA PESADA': 'SCR PESADA DISPONIBILIDAD',
   '(D) BRIGADA TIPO PESADA': 'SCR PESADA DISPONIBILIDAD',
-  'PESADA DISPONIBLE': 'SCR PESADA DISPONIBILIDAD',
-  'SCR PESADA DISPONIBI': 'SCR PESADA DISPONIBILIDAD',
+  'PESADA DISPONIBLE': 'Pesada Disponible',
+  'SCR PESADA DISPONIBI': 'Scr Pesada Disponibi',
 };
 
 /* ---------- modelo de fila (jerárquico) ---------- */

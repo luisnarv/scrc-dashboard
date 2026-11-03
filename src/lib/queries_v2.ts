@@ -68,12 +68,8 @@ const META_SUR = {
   liviana: { semana: 380_000, sabado: 310_000 },
 } as const;
 
-// Homologación de brigadas de contingencia o truncadas en la ingesta:
-// 'Scr Pesada Disponibi' (corte a 20 caracteres del texto original) -> 'Pesada Disponible'
-const SQL_BRIGADA_HOMOLOGADA = `(CASE 
-  WHEN UPPER(TRIM(mo.brigada_homologada)) = 'SCR PESADA DISPONIBI' THEN 'Pesada Disponible'
-  ELSE mo.brigada_homologada
-END)`;
+// Columna de brigada de historico_mo (conserva nombres independientes):
+const SQL_BRIGADA_HOMOLOGADA = `mo.brigada_homologada`;
 
 const COSTO_MENSUAL_SQL = `(CASE 
   WHEN mo.fecha_cierre >= '2026-06-01' THEN
@@ -303,12 +299,11 @@ export async function getDashboardDataV2(mes?: string) {
                   WHEN 'Brigada Pesada/ MT AT'    THEN 'Brigada Pesada MT-AT'
                   WHEN 'Brigada Tipo Minicanasta' THEN 'Brigada Minicanasta'
                   WHEN 'Brigada Tipo Canasta'     THEN 'Brigada Canasta'
-                  WHEN 'Scr Pesada Disponibi'     THEN 'Pesada Disponible'
                   ELSE "Tipo_Brigada" END) AS brig,
                MAX("Costo"::numeric) AS costo
         FROM dbanalitica.maestro_metas
         GROUP BY 1
-      ) mm ON mm.brig = ${SQL_BRIGADA_HOMOLOGADA}
+      ) mm ON (mm.brig = ${SQL_BRIGADA_HOMOLOGADA} OR (mm.brig = 'Pesada Disponible' AND ${SQL_BRIGADA_HOMOLOGADA} = 'Scr Pesada Disponibi'))
       ${fechaCond}
       -- Se agrupa TAMBIÉN por brigada_homologada: si un técnico tuvo órdenes de
       -- brigadas distintas el mismo día, cada brigada queda con SUS órdenes (el
