@@ -1,0 +1,21 @@
+# Lo que no debe entrar al contexto de build: secretos, dependencias locales y
+# archivos de trabajo que la app no usa.
+.env*
+.git
+.github
+.next
+node_modules
+*.tsbuildinfo
+scratch
+scripts
+docs
+deploy
+affected_files.json
+index.html
+fix*.js
+update_*.js
+generate-bots.js
+restore-effect.js
+force_cache.js
+Dockerfile
+.dockerignore
