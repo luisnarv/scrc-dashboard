@@ -1,0 +1,116 @@
+name: Imagen Docker del dashboard
+
+# Cuándo corre:
+#  - push a main: valida, construye, publica la imagen y (con aprobación) la promueve a producción.
+#  - pull_request: solo valida y construye; no publica nada.
+#  - workflow_dispatch: botón "Run workflow" para repetirlo a mano.
+# Los cambios que no afectan la app (documentos, scripts de prueba, carpeta deploy) no lo disparan.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "scripts/**"
+      - "deploy/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Si llega un commit nuevo mientras otro construye, se cancela el anterior.
+concurrency:
+  group: imagen-dashboard-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGEN: ghcr.io/${{ github.repository }}
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Etiquetas: el commit completo (para volver atrás) y "latest" solo desde main.
+      - name: Etiquetas de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGEN }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # El build corre `next build`, que también revisa los tipos de TypeScript:
+      # si falla, no hay imagen.
+      - name: Construir la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dashboard:prueba
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Prueba rápida: el contenedor debe arrancar y responder. /api/salud no usa la
+      # base, así que la URL de conexión aquí es de mentira.
+      - name: Probar el contenedor
+        run: |
+          docker run -d --name prueba -p 3000:3000 \
+            -e POSTGRES_URL=postgresql://prueba:prueba@127.0.0.1:5432/prueba \
+            dashboard:prueba
+          for i in $(seq 1 30); do
+            if curl -fs http://127.0.0.1:3000/api/salud; then exit 0; fi
+            sleep 2
+          done
+          docker logs prueba
+          exit 1
+
+      - name: Entrar al registro de imágenes
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Reutiliza la caché del paso anterior: no vuelve a compilar.
+      - name: Publicar la imagen
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+  # El servidor solo mira la etiqueta "produccion". Mover esa etiqueta es lo que
+  # "da la orden": si el entorno `produccion` tiene revisores obligatorios en
+  # GitHub (Settings > Environments), el job espera su aprobación; si no los
+  # tiene, la promoción es automática.
+  promover:
+    needs: construir
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: produccion
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Mover la etiqueta produccion a esta versión
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.IMAGEN }}:produccion \
+            ${{ env.IMAGEN }}:${{ github.sha }}

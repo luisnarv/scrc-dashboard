@@ -1,0 +1,28 @@
+# Archivo para el SERVIDOR (lo mantiene el equipo de la plataforma, no se usa en el build).
+# Copiarlo junto a un archivo `dashboard.env` con una sola línea:
+#   POSTGRES_URL=postgresql://usuario:clave@host:5432/base
+# (la clave con caracteres especiales va codificada en URL; nunca NEXT_PUBLIC_)
+
+services:
+  dashboard:
+    image: ghcr.io/luisnarv/scrc-dashboard:produccion
+    restart: unless-stopped
+    env_file: ./dashboard.env
+    # Solo el proxy inverso del servidor llega al contenedor.
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 768m   # provisional: ajustar con la memoria real medida
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  # Revisa cada 5 minutos si la etiqueta `produccion` apunta a una imagen nueva.
+  # Si sí, la descarga y reinicia SOLO los contenedores marcados con la etiqueta de arriba.
+  # Para el modo "sin Watchtower", borre este servicio y use `docker compose pull && docker compose up -d`.
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    command: --interval 300 --label-enable --cleanup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Credenciales de GHCR creadas con `docker login ghcr.io` (token solo de lectura de paquetes)
+      - ${HOME}/.docker/config.json:/config.json:ro
