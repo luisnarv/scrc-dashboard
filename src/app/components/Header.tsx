@@ -16,6 +16,8 @@ export const ALL_NAV_ROUTES = [
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  // Los botones del menú solo se muestran en las vistas que lista ALL_NAV_ROUTES; en las demás (/, /gerencial, /estrategico…) se ocultan.
+  const mostrarNav = ALL_NAV_ROUTES.some(r => pathname === r.path || pathname?.startsWith(r.path + '/'));
 
   return (
     <>
@@ -54,20 +56,22 @@ export default function Header() {
         </div>
       </header>
 
-      <nav id="main-dash-nav" className="dash-nav" aria-label="Navegación principal del Dashboard">
-        {ALL_NAV_ROUTES.map(item => {
-          const isActive = pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              href={item.path}
-              className={`nav-link ${isActive ? 'active' : ''}`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {mostrarNav && (
+        <nav id="main-dash-nav" className="dash-nav" aria-label="Navegación principal del Dashboard">
+          {ALL_NAV_ROUTES.map(item => {
+            const isActive = pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`nav-link ${isActive ? 'active' : ''}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </>
   );
 }
