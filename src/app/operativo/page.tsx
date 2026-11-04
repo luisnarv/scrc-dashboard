@@ -303,6 +303,9 @@ export default function OperativoPage() {
     };
 
     const totalAsignadoOrds = efect + fallidas + perdidas;
+    // Promedio de órdenes ejecutadas por técnico en un día: total ejecutado / pares (técnico, día) con registro.
+    const tecnicoDias = brigadaDiasVistas.size;
+    const promOrdTecnicoDia = tecnicoDias > 0 ? totalAsignadoOrds / tecnicoDias : null;
     const rawPctCumplimientoMeta = metaTotalOrdenes > 0 ? (totalAsignadoOrds / metaTotalOrdenes) * 100 : null;
     const isOnlyDisponibles = rawF.length > 0 && rawF.every(r => isDisponible(String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || ''), String(r.Fecha || '')));
     const pctCumplimientoMeta = (isOnlyDisponibles && rawPctCumplimientoMeta !== null && rawPctCumplimientoMeta > 100)
@@ -2521,6 +2524,7 @@ export default function OperativoPage() {
 
     return {
       efect, fallidas, perdidas, visitas, asignado, totalAsignadoOrds, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
+      promOrdTecnicoDia, tecnicoDias,
       metaTotalOrdenes, pctCumplimientoMeta, pctEfectivasTotal, pctFallidasTotal, pctPerdidasTotal,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
       periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, modoDelta, narrativa,
@@ -2635,6 +2639,11 @@ export default function OperativoPage() {
           d.pctCumplimientoMeta !== null
             ? `${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`
             : undefined
+        )}
+        {kpi(
+          'Prom. por técnico/día',
+          d.promOrdTecnicoDia !== null ? d.promOrdTecnicoDia.toFixed(1) : '—',
+          d.tecnicoDias ? `órdenes ejecutadas · ${fmtN(d.tecnicoDias)} técnico-días` : undefined
         )}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
         {kpi(
