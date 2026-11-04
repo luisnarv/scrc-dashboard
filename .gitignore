@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# parches/codemods de un solo uso (solo local)
+/_local_parches/
