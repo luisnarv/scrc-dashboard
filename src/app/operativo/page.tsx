@@ -2555,7 +2555,7 @@ export default function OperativoPage() {
     ? { c: WARN, t: 'Atención requerida', s: 'Desviación en:' }
     : { c: ERR, t: 'Alerta crítica operativa', s: 'Acción inmediata en:' };
 
-  const kpi = (lbl: string, val: string, sub?: string, color?: string) => (
+  const kpi = (lbl: string, val: string, sub?: React.ReactNode, color?: string) => (
     <div key={lbl} style={{ ...card, borderLeft: color ? `3.5px solid ${color}` : card.borderLeft }}>
       <div style={kLbl}>{lbl}</div>
       <div style={{ ...kVal, color: color || INK }}>{val}</div>
@@ -2636,14 +2636,10 @@ export default function OperativoPage() {
         {kpi(
           'Total ejecutado',
           fmtN(d.totalAsignadoOrds || d.asignado),
-          d.pctCumplimientoMeta !== null
-            ? `${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`
-            : undefined
-        )}
-        {kpi(
-          'Prom. por técnico/día',
-          d.promOrdTecnicoDia !== null ? d.promOrdTecnicoDia.toFixed(1) : '—',
-          d.tecnicoDias ? `órdenes ejecutadas · ${fmtN(d.tecnicoDias)} técnico-días` : undefined
+          <>
+            {d.pctCumplimientoMeta !== null && <>{`${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`}<br /></>}
+            {d.promOrdTecnicoDia !== null && `Prom. ${d.promOrdTecnicoDia.toFixed(1)} ord/técnico/día`}
+          </>
         )}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
         {kpi(
