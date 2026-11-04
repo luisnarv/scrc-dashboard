@@ -306,6 +306,18 @@ export default function OperativoPage() {
     // Promedio de órdenes ejecutadas por técnico en un día: total ejecutado / pares (técnico, día) con registro.
     const tecnicoDias = brigadaDiasVistas.size;
     const promOrdTecnicoDia = tecnicoDias > 0 ? totalAsignadoOrds / tecnicoDias : null;
+    // Mismo promedio, restringido a las brigadas disponibles (pool).
+    const dispDiasVistas = new Set<string>();
+    let ordsDisp = 0;
+    rawF.forEach(r => {
+      const day = String(r.Fecha || '');
+      const ced = String(r.Cedula || '');
+      if (!day || !ced) return;
+      if (!isDisponible(String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || ''), day)) return;
+      dispDiasVistas.add(`${ced}_${day}`);
+      ordsDisp += n(r.Efectivas) + n(r.Fallida_Con_Pago) + n(r.Fallida_Sin_Pago) + n(r.Perdidas);
+    });
+    const promOrdTecnicoDiaDisp = dispDiasVistas.size > 0 ? ordsDisp / dispDiasVistas.size : null;
     const rawPctCumplimientoMeta = metaTotalOrdenes > 0 ? (totalAsignadoOrds / metaTotalOrdenes) * 100 : null;
     const isOnlyDisponibles = rawF.length > 0 && rawF.every(r => isDisponible(String(r.Tipo_Brigada_Operaciones || r.Tipo_Brigada_Mes || r.Tipo_Cuadrilla || ''), String(r.Fecha || '')));
     const pctCumplimientoMeta = (isOnlyDisponibles && rawPctCumplimientoMeta !== null && rawPctCumplimientoMeta > 100)
@@ -2524,7 +2536,7 @@ export default function OperativoPage() {
 
     return {
       efect, fallidas, perdidas, visitas, asignado, totalAsignadoOrds, brigadasDisp, brigadasDispPool, brigadasOper, diasEjec, diasHabiles,
-      promOrdTecnicoDia, tecnicoDias,
+      promOrdTecnicoDia, promOrdTecnicoDiaDisp,
       metaTotalOrdenes, pctCumplimientoMeta, pctEfectivasTotal, pctFallidasTotal, pctPerdidasTotal,
       cEfect, cDias, cAsignEjec, disponibilidad, efectividad, perdRate, totOrd, alertas, nivel,
       periodoLabel: winLbl, dEfec, dFall, dOper, dDisp, modoDelta, narrativa,
@@ -2631,15 +2643,14 @@ export default function OperativoPage() {
         <span style={dot(TEAL)} /> Resumen operativo
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(148px, 100%), 1fr))', gap: 12 }}>
-        {kpi('Brigadas operativas', fmtN(d.brigadasOper), 'promedio activo/día', TEAL)}
-        {kpi('Brigadas disponibles', fmtN(d.brigadasDispPool), 'plantilla teórica', INDIGO)}
+        {kpi('Brigadas operativas', fmtN(d.brigadasOper), <>promedio activo/día{d.promOrdTecnicoDia !== null && <><br />{`Prom. ${d.promOrdTecnicoDia.toFixed(1)} ord/técnico/día`}</>}</>, TEAL)}
+        {kpi('Brigadas disponibles', fmtN(d.brigadasDispPool), <>plantilla teórica{d.promOrdTecnicoDiaDisp !== null && <><br />{`Prom. ${d.promOrdTecnicoDiaDisp.toFixed(1)} ord/técnico/día`}</>}</>, INDIGO)}
         {kpi(
           'Total ejecutado',
           fmtN(d.totalAsignadoOrds || d.asignado),
-          <>
-            {d.pctCumplimientoMeta !== null && <>{`${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`}<br /></>}
-            {d.promOrdTecnicoDia !== null && `Prom. ${d.promOrdTecnicoDia.toFixed(1)} ord/técnico/día`}
-          </>
+          d.pctCumplimientoMeta !== null
+            ? `${d.pctCumplimientoMeta.toFixed(1)}% cump. meta (${fmtN(d.metaTotalOrdenes)})`
+            : undefined
         )}
         {kpi('Días ejecutados', fmtN(d.diasEjec), `de ${d.diasHabiles} hábiles`)}
         {kpi(
