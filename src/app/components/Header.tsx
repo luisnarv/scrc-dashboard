@@ -11,6 +11,7 @@ export const ALL_NAV_ROUTES = [
   { path: '/tecnico/productivo', label: 'Producción Técnico' },
   { path: '/cierre_diario', label: 'Cierre Diario' },
   { path: '/informes', label: 'Informes' },
+  { path: '/detalle_operativo', label: 'Detalle operativo' },
 ];
 
 export default function Header() {
