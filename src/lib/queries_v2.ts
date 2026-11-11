@@ -69,7 +69,16 @@ const META_SUR = {
 } as const;
 
 // Columna de brigada de historico_mo (conserva nombres independientes):
-const SQL_BRIGADA_HOMOLOGADA = `mo.brigada_homologada`;
+// Excepción: cuando una cuadrilla regular 'SCR PESADA' ejecuta una orden que venía desde OSF
+// con tipo_suspension_solicitada = 'D - DISPONIBLE', el ETL la estampó erróneamente como
+// '(D) Brigada Pesada'. Aquí prevalece la brigada real ('Brigada Pesada') para no partir el día.
+const SQL_BRIGADA_HOMOLOGADA = `(CASE
+  WHEN UPPER(TRIM(COALESCE(mo.brigada_homologada,''))) IN ('(D) BRIGADA PESADA', '(D) BRIGADA TIPO PESADA')
+   AND UPPER(TRIM(COALESCE(mo.tipo_brigada,''))) = 'SCR PESADA'
+   AND UPPER(TRIM(COALESCE(mo.tipo_suspension_solicitada,''))) = 'D - DISPONIBLE'
+    THEN 'Brigada Pesada'
+  ELSE mo.brigada_homologada
+END)`;
 
 const COSTO_MENSUAL_SQL = `(CASE 
   WHEN mo.fecha_cierre >= '2026-06-01' THEN
@@ -645,7 +654,7 @@ export async function getMonthsDataV2() {
     const monthsRes = await query(`
       SELECT to_char(fecha_cierre, 'YYYY-MM') as "mes",
              COUNT(*)::int as "count",
-             MAX(fecha_carga)::text || '-v5' as "version"
+             MAX(fecha_carga)::text || '-v6' as "version"
       FROM dbanalitica.historico_mo
       WHERE fecha_cierre IS NOT NULL AND id_tecnico IS NOT NULL AND tiene_vs
       GROUP BY to_char(fecha_cierre, 'YYYY-MM')
